@@ -101,6 +101,7 @@ void framework::handle_viewport_selection()
 
     draw_scene_grid_overlay();
     // GizmoハンドルがHover/Drag中ならPickingへ入力を渡さない。
+    if (draw_bone_transform_gizmo()) return;
     if (draw_object_transform_gizmo()) return;
 
     // リグを出しているときは、骨のクリックを GameObject の選択より先に見る。

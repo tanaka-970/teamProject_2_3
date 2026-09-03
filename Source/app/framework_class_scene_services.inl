@@ -328,6 +328,7 @@ private:
     void draw_motion_timeline();
     void draw_motion_graph_editor();
     void draw_motion_rig();
+    bool draw_bone_transform_gizmo();
     bool project_world_to_screen(const DirectX::XMMATRIX& view_projection,
         const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
         ImVec2& out) const noexcept;

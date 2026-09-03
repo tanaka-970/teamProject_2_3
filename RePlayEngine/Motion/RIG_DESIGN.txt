@@ -1,0 +1,135 @@
+リグとアニメーション編集の設計メモ
+===============================================================================
+2026-09-03 時点。他の AI が引き継げるように、確かめた事実と判断の理由を残す。
+
+このリポジトリは .gitignore で *.md / *.markdown / /Docs/ を全部除外している。
+だから設計の記録は .txt でコードの隣に置く。.md へ書くと共有されない。
+
+
+1. いまの Motion は After Effects 型で、既に完成している
+-------------------------------------------------------------------------------
+RePlayEngine/Motion/MotionAsset.h
+
+    MotionBinding     component_index / property / relative_path で対象を指す
+    MotionKeyframe    easing / MotionBezierHandles / easing_curve
+    MotionWiggle      amplitude / frequency / seed / octaves
+    MotionExpression  source（式）
+    MotionTrackLoop   Repeat / PingPong / Offset
+    MotionBlendMode   レイヤー合成
+
+つまり「PropertyRegistry のプロパティに時間でキーを打つ」仕組み。
+UI の位置・色・エフェクトの progress はこれで動く。2D はもう出来ている。
+
+足りないのは 3ds Max 側、つまり骨だけ。
+
+
+2. 骨をプロパティとして出す案は却下した
+-------------------------------------------------------------------------------
+一度「骨を bones[LeftArm].rotation のような動的プロパティへ出せば、
+既存の Motion がそのまま 3D アニメーションになる」と考えたが、
+依頼者から渡された参考実装を読んで取り下げた。
+
+参考: Downloads/ブレードクローラーcpp群/RigAnimationData.h
+
+    RigAnimationTransform  scale / rotation(クォータニオン) / translation
+    RigAnimationKey        time + transform
+    RigAnimationTrack      bonePath + 補間 + keys
+    ExternalAnimationClip  modelPath / skeletonHash / duration / frameRate / tracks
+
+プロパティへ割ると負ける理由:
+
+  - 回転がクォータニオン。オイラー角の float 3 本へ割ると補間でジンバルが出て、
+    最短経路も取れない
+  - skeletonHash が要る。骨構成の変わったクリップを弾くため。
+    プロパティ名では表現できない
+  - 骨は bonePath（階層のパス）で指す。名前だけでは足りない
+
+結論: タイムライン・イージング・レイヤーの UI は共有し、データだけ 2 種類にする。
+
+
+3. モデルへの埋め込み（依頼者の要望）
+-------------------------------------------------------------------------------
+参考実装は既に持っている。Scene/AnimationEditorSceneIO.cpp
+
+    ExportCurrentClipToGlb(dest, replaceEditingEmbedded)
+    ModelResource::SetGLBExportEnabled(true) -> ExportGLB()
+    mEditingEmbeddedAnimation   埋め込み済みの何番目を編集中か
+
+保存は 2 系統に分かれている。
+
+    .animemama.json   作業中の外部クリップ（軽い）
+    .glb              モデルへ焼き込み（完成品）
+
+このエンジンには ExportGLB 相当が無い。GLB は読む側しかない。
+埋め込みは最後の工程になるが、データの形は最初からそれを見据えて決めること。
+クォータニオン・bonePath・skeletonHash を持っていれば後から焼ける。
+
+
+4. 今できていること（2026-09-03）
+-------------------------------------------------------------------------------
+  - リグ表示。骨 256 本。線の太さ・関節の大きさ・深さの間引き・名前・色を調整可能
+  - シーンビューで骨をクリックして選択
+  - Motion リグパネルで移動 / 回転 / 拡縮。子の骨も追従する
+  - ポーズは実行中だけ保持。保存しない（依頼者の指示）
+
+置き場所:
+
+    Source/app/framework_class_runtime_scene.inl        rig_* の状態とポーズ
+    Source/app/Runtime/framework_gameobject_scene_rendering_draw.cpp
+                                                       骨の行列とポーズの適用
+    Source/app/Editor/framework_collider_debug.cpp      リグの描画
+    Source/app/Editor/framework_motion_workspace_layers.cpp   Motion リグパネル
+    Source/app/Editor/framework_gizmo.cpp               骨のギズモ
+    Source/app/Editor/framework_scene_document.cpp      骨のクリック選択
+
+
+5. 踏んだ地雷
+-------------------------------------------------------------------------------
+アニメーション未設定だと keyframe が nullptr。
+  骨の取得をアニメーション経路の内側に書くと一度も走らない。
+  バインドポーズは offset_transform（逆バインド行列）の逆行列。
+
+ポーズ適用時のパレットは、触っていない骨でちょうど単位行列になること。
+  offset * posedGlobal がそれ。余計な行列を挟むとモデル全体が歪む。
+
+Model Effect Stack の矩形はポーズを知らない。
+  stack.scissor は GetSkinnedMeshLocalBounds から作られ、骨の姿勢を見ない。
+  骨を伸ばして境界を超えると、超えた部分だけ合成されず白く残る。
+  対策: ポーズが 1 つでもある間は scissor_enabled を落とす。
+  ポーズが無いときの挙動は変わらない。
+
+既存のギズモ（draw_object_transform_gizmo）は 326 行で
+  複数選択・ピボット・スナップを抱えている。骨を通す改造は危険なので、
+  骨用は別関数にした。投影だけは framework::project_world_to_screen で共有し、
+  描画と当たり判定がズレないようにしてある。
+
+エディタの新しい窓は DockBuilderDockWindow を足すだけでは docking されない。
+  保存済みレイアウトが優先されるので、editor_layout_version を上げて
+  作り直させる必要がある。上げないと窓が浮いて他のパネルに被る。
+
+
+6. 次にやること
+-------------------------------------------------------------------------------
+  1. ギズモの仕上げ。参考の Scene/AnimationEditorSceneViewport.cpp を読む
+  2. クリップのデータ構造。RigAnimationTrack の形で、
+     クォータニオン・bonePath・skeletonHash を最初から持つ
+  3. キーを打つ / タイムライン。既存の Motion タイムラインを流用できるか判断
+  4. 外部ファイルへ保存
+  5. GLB へ埋め込み。ExportGLB 相当が要る。一番重い
+
+2 を先に決めること。ここを間違えると 5 で焼けなくなる。
+
+
+7. 参考実装のありか
+-------------------------------------------------------------------------------
+Downloads/ブレードクローラーcpp群/ブレードクローラーcpp群/
+
+    RigAnimationData.h / .cpp          データ構造
+    RigAnimationPlayer.h / .cpp        再生
+    EditedAnimationRuntime.h / .cpp    編集結果の実行時反映
+    Scene/AnimationEditorScene*.cpp    編集シーン 8 ファイル 約 160KB
+        Viewport   骨の掴み方
+        Gui        骨の一覧とタイムライン
+        Clips      クリップ管理
+        IO         保存と GLB への焼き込み
+    BoneRagdoll.cpp                    78KB。物理は今回の範囲外

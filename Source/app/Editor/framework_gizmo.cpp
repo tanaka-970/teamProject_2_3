@@ -562,3 +562,119 @@ bool framework::handle_normal_adjust_gizmo()
     object_editor_context.SetStatus("Normal Adjust の中心を確定しました");
     return true;
 }
+
+// 選択中の骨のギズモ。軸ハンドル 1 種類で、Move / Rotate / Scale は
+// ドラッグ量の使い道だけを変える。掴んでいる間は true を返して選択へ渡さない。
+bool framework::draw_bone_transform_gizmo()
+{
+    if (rig_selected_bone.empty()) return false;
+    if (!show_rig_debug_draw && !show_motion_rig_panel) return false;
+
+    const ReplayEngine::Core::GameObject* target =
+        active_object_scene().FindGameObjectByID(object_editor_context.Selection().Primary());
+    if (target == nullptr) return false;
+    const std::uint64_t owner = target->ID().Value();
+    const auto rig = object_rig_debug_bones.find(owner);
+    if (rig == object_rig_debug_bones.end()) return false;
+    const rig_debug_bone* bone = nullptr;
+    for (const rig_debug_bone& candidate : rig->second)
+        if (candidate.name == rig_selected_bone) { bone = &candidate; break; }
+    if (bone == nullptr) return false;
+
+    const DirectX::XMMATRIX view_projection =
+        viewport_view_matrix() * viewport_projection_matrix();
+    const ImVec2 origin = ImGui::GetMainViewport()->Pos;
+    const ImVec2 size = ImGui::GetMainViewport()->Size;
+    ImVec2 center{};
+    if (!project_world_to_screen(view_projection, bone->world, origin, size, center))
+        return false;
+
+    // 軸。ローカルは骨の姿勢、ワールドは単位軸。
+    const bool local = rig_gizmo_use_local && gizmo_local_space;
+    const DirectX::XMMATRIX bone_world = DirectX::XMLoadFloat4x4(&bone->world_matrix);
+    DirectX::XMFLOAT3 axis_end[3]{};
+    ImVec2 axis_screen[3]{};
+    constexpr float kAxisLength = 0.25f;
+    for (int index = 0; index < 3; ++index)
+    {
+        DirectX::XMVECTOR direction = index == 0 ? DirectX::g_XMIdentityR0.v
+            : index == 1 ? DirectX::g_XMIdentityR1.v : DirectX::g_XMIdentityR2.v;
+        if (local) direction = DirectX::XMVector3Normalize(bone_world.r[index]);
+        DirectX::XMStoreFloat3(&axis_end[index],
+            DirectX::XMVectorAdd(DirectX::XMLoadFloat3(&bone->world),
+                DirectX::XMVectorScale(direction, kAxisLength)));
+        if (!project_world_to_screen(view_projection, axis_end[index], origin, size,
+            axis_screen[index]))
+            axis_screen[index] = center;
+    }
+
+    ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
+    constexpr ImU32 kAxisColor[3] = {
+        IM_COL32(235, 90, 90, 235), IM_COL32(120, 225, 120, 235),
+        IM_COL32(110, 160, 255, 235) };
+    for (int index = 0; index < 3; ++index)
+        draw_list->AddLine(center, axis_screen[index],
+            rig_gizmo_axis == index ? IM_COL32(255, 225, 120, 255) : kAxisColor[index],
+            rig_gizmo_axis == index ? 3.5f : 2.0f);
+    draw_list->AddCircleFilled(center, 4.0f, IM_COL32(240, 240, 240, 230), 10);
+
+    auto& pose = object_rig_pose[owner];
+    rig_pose_override& entry = pose[rig_selected_bone];
+    const ImVec2 mouse = ImGui::GetIO().MousePos;
+
+    if (rig_gizmo_axis < 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && scene_view_hovered)
+    {
+        for (int index = 0; index < 3; ++index)
+        {
+            const float dx = axis_screen[index].x - mouse.x;
+            const float dy = axis_screen[index].y - mouse.y;
+            if (dx * dx + dy * dy > 12.0f * 12.0f) continue;
+            rig_gizmo_axis = index;
+            rig_gizmo_start_mouse = mouse;
+            const ReplayEngine::Editor::GizmoOperation operation = transform_gizmo.Operation();
+            rig_gizmo_start_value =
+                operation == ReplayEngine::Editor::GizmoOperation::Translate
+                    ? entry.translation
+                    : operation == ReplayEngine::Editor::GizmoOperation::Rotate
+                        ? entry.rotation : entry.scale;
+            break;
+        }
+    }
+
+    if (rig_gizmo_axis >= 0)
+    {
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            rig_gizmo_axis = -1;
+            return true;
+        }
+        // 軸の画面方向へどれだけ引いたかを量にする。
+        const ImVec2 axis_vector{ axis_screen[rig_gizmo_axis].x - center.x,
+            axis_screen[rig_gizmo_axis].y - center.y };
+        const float axis_length = (std::max)(1.0f,
+            std::sqrt(axis_vector.x * axis_vector.x + axis_vector.y * axis_vector.y));
+        const ImVec2 drag{ mouse.x - rig_gizmo_start_mouse.x,
+            mouse.y - rig_gizmo_start_mouse.y };
+        const float along = (drag.x * axis_vector.x + drag.y * axis_vector.y) / axis_length;
+        float* component = nullptr;
+        float delta = 0.0f;
+        switch (transform_gizmo.Operation())
+        {
+        case ReplayEngine::Editor::GizmoOperation::Translate:
+            component = &(&entry.translation.x)[rig_gizmo_axis];
+            delta = along / axis_length * kAxisLength;
+            break;
+        case ReplayEngine::Editor::GizmoOperation::Rotate:
+            component = &(&entry.rotation.x)[rig_gizmo_axis];
+            delta = along * 0.5f;
+            break;
+        default:
+            component = &(&entry.scale.x)[rig_gizmo_axis];
+            delta = along / axis_length;
+            break;
+        }
+        *component = (&rig_gizmo_start_value.x)[rig_gizmo_axis] + delta;
+        return true;
+    }
+    return false;
+}

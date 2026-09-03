@@ -586,6 +586,7 @@ void framework::draw_motion_rig()
         ImGui::SameLine();
         ImGui::TextDisabled(u8"0 で制限なし");
         ImGui::Checkbox(u8"名前を出す", &rig_show_names);
+        ImGui::Checkbox(u8"ギズモをローカル軸で出す", &rig_gizmo_use_local);
         ImGui::ColorEdit4(u8"骨の色", &rig_bone_tint.x,
             ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs);
         ImGui::ColorEdit4(u8"選択中の色", &rig_picked_tint.x,

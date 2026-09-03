@@ -1575,7 +1575,9 @@ bool framework::build_dx12_static_scene(
                         entry.parent = static_cast<int>(bone.parent_index);
                         const DirectX::XMMATRIX global =
                             DirectX::XMLoadFloat4x4(&bone_globals[index]);
-                        DirectX::XMStoreFloat3(&entry.world, (global * object_world).r[3]);
+                        const DirectX::XMMATRIX bone_world = global * object_world;
+                        DirectX::XMStoreFloat3(&entry.world, bone_world.r[3]);
+                        DirectX::XMStoreFloat4x4(&entry.world_matrix, bone_world);
                         bones.push_back(std::move(entry));
                     }
                 }
