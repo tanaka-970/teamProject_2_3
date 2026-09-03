@@ -1546,16 +1546,15 @@ bool framework::build_dx12_static_scene(
                 }
                 else if (has_pose && bone_globals_ready)
                 {
-                    // アニメーション未設定でもポーズは効かせる。基準はバインドの mesh。
-                    const DirectX::XMMATRIX inverse_mesh = DirectX::XMMatrixInverse(nullptr,
-                        DirectX::XMLoadFloat4x4(&mesh.default_global_transform));
+                    // アニメーション未設定でもポーズは効かせる。
+                    // offset は逆バインドなので、ポーズ無しならちょうど単位行列になる。
                     for (std::size_t bone_index = 0; bone_index < mesh.bind_pose.bones.size();
                         ++bone_index)
                     {
                         DirectX::XMStoreFloat4x4(&palette[bone_index],
                             DirectX::XMLoadFloat4x4(
                                 &mesh.bind_pose.bones[bone_index].offset_transform) *
-                            DirectX::XMLoadFloat4x4(&bone_globals[bone_index]) * inverse_mesh);
+                            DirectX::XMLoadFloat4x4(&bone_globals[bone_index]));
                     }
                 }
 
