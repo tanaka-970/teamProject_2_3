@@ -20,6 +20,9 @@ namespace ReplayEngine::Rendering::DX12
 {
     namespace
     {
+        // GBuffer 4 番はモーションベクター。分離したモデルの補完で参照する。
+        constexpr std::uint32_t kScene3DMotionVectorIndex = 4;
+
         constexpr DXGI_FORMAT kScene3DGBufferFormats[kScene3DGBufferCount] =
         {
             DXGI_FORMAT_R16G16B16A16_FLOAT, // BaseColorとシェーディングモデル
@@ -672,7 +675,7 @@ namespace ReplayEngine::Rendering::DX12
 
         const auto create_geometry_pso = [this](bool skinned, bool transparent,
             bool double_sided, const D3D12_INPUT_ELEMENT_DESC* input, UINT input_count,
-            ID3D12PipelineState** output) -> bool
+            ID3D12PipelineState** output, bool motion_only = false) -> bool
         {
             D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
             desc.pRootSignature = scene3d_geometry_root_signature_.Get();
@@ -703,6 +706,18 @@ namespace ReplayEngine::Rendering::DX12
             }
             desc.DSVFormat = kScene3DDepthDsvFormat;
             desc.SampleDesc.Count = 1;
+            if (motion_only)
+            {
+                // モーションベクター以外へは 1 bit も書かない。色は変わらない。
+                desc.BlendState.IndependentBlendEnable = TRUE;
+                for (UINT i = 0; i < kScene3DGBufferCount; ++i)
+                    desc.BlendState.RenderTarget[i].RenderTargetWriteMask =
+                        i == kScene3DMotionVectorIndex
+                            ? D3D12_COLOR_WRITE_ENABLE_ALL : 0u;
+                // 深度プリパスに居ないので EQUAL では落ちる。深度へも書かない。
+                desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+                desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+            }
             return SUCCEEDED(device_->CreateGraphicsPipelineState(&desc,
                 IID_PPV_ARGS(output)));
         };
@@ -854,6 +869,14 @@ namespace ReplayEngine::Rendering::DX12
                     static_cast<UINT>(std::size(skinned_input)),
                     scene3d_skinned_gbuffer_pipelines_[index].ReleaseAndGetAddressOf()))
                     return fail("Scene3D.PSO.SkinnedGBuffer");
+                if (!create_geometry_pso(false, false, sided != 0, static_input,
+                    static_cast<UINT>(std::size(static_input)),
+                    scene3d_static_motion_pipelines_[index].ReleaseAndGetAddressOf(), true))
+                    return fail("Scene3D.PSO.StaticMotionOnly");
+                if (!create_geometry_pso(true, false, sided != 0, skinned_input,
+                    static_cast<UINT>(std::size(skinned_input)),
+                    scene3d_skinned_motion_pipelines_[index].ReleaseAndGetAddressOf(), true))
+                    return fail("Scene3D.PSO.SkinnedMotionOnly");
             }
                 if (!create_geometry_pso(false, true, sided != 0, static_input,
                     static_cast<UINT>(std::size(static_input)),
@@ -3028,7 +3051,8 @@ namespace ReplayEngine::Rendering::DX12
 
         for (const D3D12StaticDrawItem& draw : submission.draws)
         {
-            if (model_effect_isolated_from_scene(draw)) continue;
+            // 分離したモデルは色を書かず、モーションベクターだけ書く。
+            const bool motion_only = model_effect_isolated_from_scene(draw);
             if (draw.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = static_mesh_cache_.find(draw.mesh_key);
             if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -3041,7 +3065,9 @@ namespace ReplayEngine::Rendering::DX12
             }
             const UINT index = (draw.double_sided ? 3u : 0u) +
                 static_cast<UINT>(draw.alpha_mode);
-            command_list_->SetPipelineState(scene3d_static_gbuffer_pipelines_[index].Get());
+            command_list_->SetPipelineState(motion_only
+                ? scene3d_static_motion_pipelines_[index].Get()
+                : scene3d_static_gbuffer_pipelines_[index].Get());
             if (!bind_surface(draw, previous_world, identity_bone_gpu, identity_bone_gpu, 0.0f,
                 false))
                 return false;
@@ -3050,13 +3076,16 @@ namespace ReplayEngine::Rendering::DX12
         for (std::size_t i = 0; i < submission.skinned_draws.size(); ++i)
         {
             const D3D12SkinnedDrawItem& draw = submission.skinned_draws[i];
-            if (model_effect_isolated_from_scene(draw.surface)) continue;
+            // 分離したモデルは色を書かず、モーションベクターだけ書く。
+            const bool motion_only = model_effect_isolated_from_scene(draw.surface);
             if (draw.surface.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
             if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
             const UINT index = (draw.surface.double_sided ? 3u : 0u) +
                 static_cast<UINT>(draw.surface.alpha_mode);
-            command_list_->SetPipelineState(scene3d_skinned_gbuffer_pipelines_[index].Get());
+            command_list_->SetPipelineState(motion_only
+                ? scene3d_skinned_motion_pipelines_[index].Get()
+                : scene3d_skinned_gbuffer_pipelines_[index].Get());
             if (!bind_surface(draw.surface, prepared_skinned[i].previous_world,
                 prepared_skinned[i].current_bones, prepared_skinned[i].previous_bones,
                 draw.morph_weight, false))

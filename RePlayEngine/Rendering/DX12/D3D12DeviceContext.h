@@ -1188,6 +1188,9 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12RootSignature> scene3d_shadow_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_gbuffer_pipelines_[6];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_gbuffer_pipelines_[6];
+        // Effect Stack で分離したモデルのモーションベクターだけを書き足す。
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_motion_pipelines_[6];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_motion_pipelines_[6];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_layer_pipelines_[kScene3DLayerPipelineCount];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_layer_pipelines_[kScene3DLayerPipelineCount];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_lighting_pipeline_;
