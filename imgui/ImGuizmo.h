@@ -143,6 +143,12 @@ namespace IMGUIZMO_NAMESPACE
    // plain IsUsing() ignores the id, so two gizmos in one frame both read true.
    IMGUI_API bool IsUsingID(int id);
 
+   // local addition: state whether the mouse is on the gizmo surface. ImGuizmo
+   // otherwise works it out from the draw list's owner window and from
+   // IsAnyItemHovered(), and a host that covers its viewport with an
+   // InvisibleButton defeats both. Pass -1 to go back to ImGuizmo's own answer.
+   IMGUI_API void SetHostHovered(int hovered);
+
    // enable/disable the gizmo. Stay in the state until next call to Enable.
    // gizmo is rendered with gray half transparent color when disabled
    IMGUI_API void Enable(bool enable);

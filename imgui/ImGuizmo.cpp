@@ -673,6 +673,7 @@ namespace IMGUIZMO_NAMESPACE
       bool mbUsing;
       bool mbEnable;
       bool mbMouseOver;
+      int mHostHovered = -1; // local addition. -1 = ask ImGui, 0/1 = the host's answer
       bool mReversed; // reversed projection matrix
 
       // translation
@@ -956,6 +957,12 @@ namespace IMGUIZMO_NAMESPACE
       return (gContext.mbUsing || gContext.mbUsingBounds) && gContext.mEditingID == id;
    }
 
+   // local addition. see the note in ImGuizmo.h
+   void SetHostHovered(int hovered)
+   {
+      gContext.mHostHovered = hovered;
+   }
+
    bool IsOver()
    {
       return (Intersects(gContext.mOperation, TRANSLATE) && GetMoveType(gContext.mOperation, NULL) != MT_NONE) ||
@@ -999,7 +1006,10 @@ namespace IMGUIZMO_NAMESPACE
       gContext.mMode = mode;
       gContext.mViewMat = *(matrix_t*)view;
       gContext.mProjectionMat = *(matrix_t*)projection;
-      gContext.mbMouseOver = IsHoveringWindow();
+      // local addition: the host's answer wins. IsHoveringWindow() looks up the draw
+      // list's owner window, which fails when the gizmo is driven from outside it.
+      gContext.mbMouseOver = gContext.mHostHovered >= 0
+         ? (gContext.mHostHovered != 0) : IsHoveringWindow();
 
       gContext.mModelLocal = *(matrix_t*)matrix;
       gContext.mModelLocal.OrthoNormalize();
@@ -1558,11 +1568,11 @@ namespace IMGUIZMO_NAMESPACE
 
    static bool CanActivate()
    {
-      if (ImGui::IsMouseClicked(0) && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive())
-      {
-         return true;
-      }
-      return false;
+      if (!ImGui::IsMouseClicked(0)) return false;
+      // local addition: a host covering its viewport with an InvisibleButton always
+      // trips IsAnyItemHovered(), so let it answer for itself when it says so.
+      if (gContext.mHostHovered >= 0) return gContext.mHostHovered != 0;
+      return !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive();
    }
 
    static void HandleAndDrawLocalBounds(const float* bounds, matrix_t* matrix, const float* snapValues, OPERATION operation)

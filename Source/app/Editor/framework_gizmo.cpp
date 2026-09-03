@@ -173,6 +173,7 @@ bool framework::draw_object_transform_gizmo()
         snap_values = snap;
     }
     const XMFLOAT4X4 before = world;
+    ImGuizmo::SetHostHovered(scene_view_hovered || object_gizmo_dragging ? 1 : 0);
     ImGuizmo::SetID(gizmo_id_object);
     ImGuizmo::Manipulate(&view._11, &projection._11, operation,
         gizmo_local_space ? ImGuizmo::LOCAL : ImGuizmo::WORLD, &world._11, nullptr, snap_values);
@@ -356,6 +357,7 @@ bool framework::handle_normal_adjust_gizmo()
     ImGuizmo::SetDrawlist(scene_window->DrawList);
     ImGuizmo::SetRect(main_viewport->Pos.x, main_viewport->Pos.y,
         main_viewport->Size.x, main_viewport->Size.y);
+    ImGuizmo::SetHostHovered(scene_view_hovered || normal_adjust_gizmo_dragging ? 1 : 0);
     ImGuizmo::SetID(gizmo_id_normal_adjust);
     ImGuizmo::Manipulate(&gizmo_view._11, &gizmo_projection._11,
         ImGuizmo::TRANSLATE, ImGuizmo::WORLD, &gizmo_world._11);
@@ -437,6 +439,7 @@ bool framework::draw_bone_transform_gizmo()
         current == ReplayEngine::Editor::GizmoOperation::Translate ? ImGuizmo::TRANSLATE
         : current == ReplayEngine::Editor::GizmoOperation::Rotate ? ImGuizmo::ROTATE
         : ImGuizmo::SCALE;
+    ImGuizmo::SetHostHovered(scene_view_hovered || ImGuizmo::IsUsingID(gizmo_id_bone) ? 1 : 0);
     ImGuizmo::SetID(gizmo_id_bone);
     ImGuizmo::Manipulate(&view._11, &projection._11, operation,
         rig_gizmo_use_local && gizmo_local_space ? ImGuizmo::LOCAL : ImGuizmo::WORLD,

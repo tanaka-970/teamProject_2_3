@@ -1,4 +1,6 @@
 ﻿#include "framework.h"
+
+#include "imgui/ImGuizmo.h"
 // Prefab は v7 の SceneData 方式へ移行済み。
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorSelectionBounds.h"
@@ -88,7 +90,8 @@ void framework::handle_viewport_selection()
         viewport_drag_selecting = false;
         return;
     }
-    if (!scene_view_hovered) return;
+    // 掴んでいる間は窓の外へ出ても離さない。ここで返すとドラッグが途中で止まる。
+    if (!scene_view_hovered && !ImGuizmo::IsUsing()) return;
 
     const bool suppress_drag_selection =
         landscape_edit_enabled && active_editor_view == editor_view::scene &&

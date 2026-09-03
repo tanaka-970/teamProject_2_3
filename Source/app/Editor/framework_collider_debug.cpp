@@ -511,6 +511,8 @@ bool framework::handle_ai_navigation_debug_edit()
         DirectX::XMFLOAT4X4 world{};
         DirectX::XMStoreFloat4x4(&world, DirectX::XMMatrixTranslation(
             center.x + sign * (std::max)(0.05f, range), center.y, center.z));
+        ImGuizmo::SetHostHovered(
+            scene_view_hovered || ai_navigation_handle_state.dragging ? 1 : 0);
         ImGuizmo::SetID(gizmo_id);
         ImGuizmo::Manipulate(&view._11, &projection._11,
             ImGuizmo::TRANSLATE_X, ImGuizmo::WORLD, &world._11);
