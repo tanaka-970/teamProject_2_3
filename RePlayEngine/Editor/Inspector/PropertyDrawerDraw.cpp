@@ -348,6 +348,7 @@ namespace ReplayEngine::Editor
                 {
                     static std::array<char, 96> effect_filter{};
                     ImGui::SetNextItemWidth(-1.0f);
+                    if (ImGui::IsWindowAppearing()) ImGui::SetKeyboardFocusHere();
                     ImGui::InputTextWithHint("##EffectKindSearch", "検索...",
                         effect_filter.data(), effect_filter.size());
                     const std::vector<std::size_t> frequent =
@@ -362,14 +363,16 @@ namespace ReplayEngine::Editor
                             const EffectKindUsage& usage = MutableEffectKindUsage();
                             option += "  [" + std::to_string(usage.counts[i]) + "]";
                         }
+                        ImGui::PushID(show_count ? "frequent" : "all");
+                        ImGui::PushID(static_cast<int>(i));
                         const bool selected = static_cast<int>(i) == value;
-                        if (ImGui::Selectable(option.c_str(), selected))
+                        if (ImGui::Selectable(option.c_str(), selected,
+                            ImGuiSelectableFlags_DontClosePopups))
                         {
                             desc.Apply(component, PropertyValue::MakeEnum(static_cast<int>(i)));
                             RecordEffectKindUsage(i);
                             changed = true;
                         }
-                        if (selected) ImGui::SetItemDefaultFocus();
                         {
                             const UI::UIEffectKind effect_kind =
                                 static_cast<UI::UIEffectKind>(i);
@@ -377,21 +380,35 @@ namespace ReplayEngine::Editor
                                 UI::UIEffectKindName(effect_kind);
                             EditorHelp::Item(help_key.c_str());
                         }
+                        ImGui::PopID();
+                        ImGui::PopID();
                     };
 
-                    ImGui::TextDisabled(u8"よく使う");
-                    if (frequent.empty())
+                    const bool filtering = effect_filter[0] != '\0';
+                    if (!filtering)
                     {
-                        ImGui::TextDisabled(u8"選択履歴はまだありません");
+                        ImGui::TextDisabled(u8"よく使う");
+                        if (frequent.empty())
+                        {
+                            ImGui::TextDisabled(u8"選択履歴はまだありません");
+                        }
+                        else
+                        {
+                            for (const std::size_t i : frequent) draw_effect_option(i, true);
+                        }
+                        ImGui::Separator();
+                        if (ImGui::CollapsingHeader(u8"全種類##EffectKindAll"))
+                        {
+                            for (std::size_t i = 0; i < desc.enum_labels.size(); ++i)
+                                draw_effect_option(i, false);
+                        }
                     }
                     else
                     {
-                        for (const std::size_t i : frequent) draw_effect_option(i, true);
+                        ImGui::TextDisabled(u8"検索結果");
+                        for (std::size_t i = 0; i < desc.enum_labels.size(); ++i)
+                            draw_effect_option(i, false);
                     }
-                    ImGui::Separator();
-                    ImGui::TextDisabled(u8"全種類");
-                    for (std::size_t i = 0; i < desc.enum_labels.size(); ++i)
-                        draw_effect_option(i, false);
                 }
                 else
                 {
