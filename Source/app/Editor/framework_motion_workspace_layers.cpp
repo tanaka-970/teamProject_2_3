@@ -663,6 +663,11 @@ void framework::draw_motion_rig()
     }
     ImGui::Separator();
     ImGui::Text(u8"選択中: %s", rig_selected_bone.c_str());
+    // 上のツールバーは遠いので、いまの操作をここにも出す。Shift+W/E/R で変わる。
+    const ReplayEngine::Editor::GizmoOperation rig_op = transform_gizmo.Operation();
+    ImGui::TextDisabled(u8"ギズモ: %s",
+        rig_op == ReplayEngine::Editor::GizmoOperation::Translate ? u8"移動"
+        : rig_op == ReplayEngine::Editor::GizmoOperation::Rotate ? u8"回転" : u8"拡縮");
     rig_pose_override& entry = pose[rig_selected_bone];
     ImGui::DragFloat3(u8"移動", &entry.translation.x, 0.01f);
     ImGui::DragFloat3(u8"回転", &entry.rotation.x, 0.5f, -360.0f, 360.0f, "%.1f");

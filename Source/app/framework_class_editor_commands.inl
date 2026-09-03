@@ -181,9 +181,12 @@
             // Maya の W/E/R を Shift 付きへ退避する。選択中の GameObject にだけ効く。
             const bool shift_down = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
             const bool alt_down = (GetKeyState(VK_MENU) & 0x8000) != 0;
+            // selected_editor_object は Inspector が何を映すかの状態で、Gizmo が
+            // 使えるかとは別。Project Browser を触ると asset へ移り、Motion で
+            // 骨を編集中に切替が丸ごと死んでいた。GameObject の選択だけを見る。
             if (msg == WM_KEYDOWN && edit_mode_active && !search_input_active &&
+                !ImGui::GetIO().WantTextInput &&
                 shift_down && !control_down && !alt_down &&
-                selected_editor_object == editor_selection::game_object &&
                 object_editor_context.Selection().Primary().Valid())
             {
                 if (wparam == 'W')
