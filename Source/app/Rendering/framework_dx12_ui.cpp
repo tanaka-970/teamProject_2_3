@@ -2849,8 +2849,7 @@ bool framework::build_dx12_scene_effects(
                 stack.isolate_from_scene = model->depth_mode !=
                     Components::ModelEffectStackComponent::PreserveDepth || has_blended_surface ||
                     model->extract_mode == Components::ModelEffectStackComponent::Isolate ||
-                    (model->extract_mode != Components::ModelEffectStackComponent::InPlace &&
-                        automatic_isolation);
+                    automatic_isolation;
                 std::uint64_t model_history_key = stack.owner_id ^
                     (static_cast<std::uint64_t>(model->StableID()) * 0x9E3779B185EBCA87ull);
                 if (model_history_key == 0) model_history_key = stack.owner_id;
