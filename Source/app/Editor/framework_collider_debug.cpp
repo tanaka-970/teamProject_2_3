@@ -514,8 +514,11 @@ bool framework::handle_ai_navigation_debug_edit()
         ImGuizmo::SetHostHovered(
             scene_view_hovered || ai_navigation_handle_state.dragging ? 1 : 0);
         ImGuizmo::SetID(gizmo_id);
+        scene_window->DrawList->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
+            ImVec2(scene_view_max_x, scene_view_max_y), true);
         ImGuizmo::Manipulate(&view._11, &projection._11,
             ImGuizmo::TRANSLATE_X, ImGuizmo::WORLD, &world._11);
+        scene_window->DrawList->PopClipRect();
         over = over || ImGuizmo::IsOver();
         const bool using_now = ImGuizmo::IsUsingID(gizmo_id);
         if (using_now && !ai_navigation_handle_state.dragging)

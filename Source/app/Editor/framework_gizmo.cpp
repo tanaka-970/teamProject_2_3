@@ -119,6 +119,9 @@ void framework::draw_scene_grid_overlay()
 bool framework::draw_object_transform_gizmo()
 {
     if (active_editor_view != editor_view::scene || !show_scene_view) return false;
+    // 骨のギズモが出ている間は譲る。2 つ重なるとどちらを掴んだのか分からなくなる。
+    if (!rig_selected_bone.empty() && (show_rig_debug_draw || show_motion_rig_panel))
+        return false;
 
     ReplayEngine::Scene::Scene& scene = active_object_scene();
     ReplayEngine::Core::GameObject* primary =
@@ -175,8 +178,11 @@ bool framework::draw_object_transform_gizmo()
     const XMFLOAT4X4 before = world;
     ImGuizmo::SetHostHovered(scene_view_hovered || object_gizmo_dragging ? 1 : 0);
     ImGuizmo::SetID(gizmo_id_object);
+    scene_window->DrawList->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
+        ImVec2(scene_view_max_x, scene_view_max_y), true);
     ImGuizmo::Manipulate(&view._11, &projection._11, operation,
         gizmo_local_space ? ImGuizmo::LOCAL : ImGuizmo::WORLD, &world._11, nullptr, snap_values);
+    scene_window->DrawList->PopClipRect();
     const bool using_now = ImGuizmo::IsUsingID(gizmo_id_object);
 
     if (using_now && !object_gizmo_dragging)
@@ -359,8 +365,11 @@ bool framework::handle_normal_adjust_gizmo()
         main_viewport->Size.x, main_viewport->Size.y);
     ImGuizmo::SetHostHovered(scene_view_hovered || normal_adjust_gizmo_dragging ? 1 : 0);
     ImGuizmo::SetID(gizmo_id_normal_adjust);
+    scene_window->DrawList->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
+        ImVec2(scene_view_max_x, scene_view_max_y), true);
     ImGuizmo::Manipulate(&gizmo_view._11, &gizmo_projection._11,
         ImGuizmo::TRANSLATE, ImGuizmo::WORLD, &gizmo_world._11);
+    scene_window->DrawList->PopClipRect();
     const bool using_now = ImGuizmo::IsUsingID(gizmo_id_normal_adjust);
 
     if (using_now && !normal_adjust_gizmo_dragging)
@@ -441,9 +450,12 @@ bool framework::draw_bone_transform_gizmo()
         : ImGuizmo::SCALE;
     ImGuizmo::SetHostHovered(scene_view_hovered || ImGuizmo::IsUsingID(gizmo_id_bone) ? 1 : 0);
     ImGuizmo::SetID(gizmo_id_bone);
+    scene_window->DrawList->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
+        ImVec2(scene_view_max_x, scene_view_max_y), true);
     ImGuizmo::Manipulate(&view._11, &projection._11, operation,
         rig_gizmo_use_local && gizmo_local_space ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
         &world._11);
+    scene_window->DrawList->PopClipRect();
     if (!ImGuizmo::IsUsingID(gizmo_id_bone)) return false;
 
     rig_pose_override& entry = object_rig_pose[owner][rig_selected_bone];
