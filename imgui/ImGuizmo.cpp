@@ -664,9 +664,9 @@ namespace ImGuizmo
        gContext.mYMax = gContext.mY + gContext.mXMax;
    }
 
-   void SetDrawlist()
+   void SetDrawlist(ImDrawList* drawList)
    {
-      gContext.mDrawList = ImGui::GetWindowDrawList();
+      gContext.mDrawList = drawList ? drawList : ImGui::GetWindowDrawList();
    }
 
    void BeginFrame()

@@ -12,12 +12,47 @@
 #include "../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
 #include "../../RePlayEngine/Physics/CookedMeshCollision.h"
 
+#include "imgui/ImGuizmo.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
 namespace
 {
+    // ポーズ 1 本ぶんの補正行列。描画側の組み立てと同じ順序でないと差分が合わない。
+    DirectX::XMMATRIX BonePoseAdjust(const DirectX::XMFLOAT3& translation,
+        const DirectX::XMFLOAT3& rotation, const DirectX::XMFLOAT3& scale)
+    {
+        return DirectX::XMMatrixScaling(scale.x, scale.y, scale.z) *
+            DirectX::XMMatrixRotationRollPitchYaw(
+                DirectX::XMConvertToRadians(rotation.x),
+                DirectX::XMConvertToRadians(rotation.y),
+                DirectX::XMConvertToRadians(rotation.z)) *
+            DirectX::XMMatrixTranslation(translation.x, translation.y, translation.z);
+    }
+
+    // XMMatrixRotationRollPitchYaw の逆。Z→X→Y の順に組まれた行列から角度を戻す。
+    DirectX::XMFLOAT3 BoneEulerDegrees(DirectX::FXMMATRIX rotation)
+    {
+        DirectX::XMFLOAT4X4 m{};
+        DirectX::XMStoreFloat4x4(&m, rotation);
+        const float sin_pitch = std::clamp(-m.m[2][1], -1.0f, 1.0f);
+        DirectX::XMFLOAT3 euler{ std::asin(sin_pitch), 0.0f, 0.0f };
+        if (std::abs(sin_pitch) < 0.999999f)
+        {
+            euler.y = std::atan2(m.m[2][0], m.m[2][2]);
+            euler.z = std::atan2(m.m[0][1], m.m[1][1]);
+        }
+        else
+        {
+            // ジンバル。Y と Z が縮退するので Z を捨てて Y へまとめる。
+            euler.y = std::atan2(-m.m[0][2], m.m[0][0]);
+        }
+        return DirectX::XMFLOAT3{ DirectX::XMConvertToDegrees(euler.x),
+            DirectX::XMConvertToDegrees(euler.y), DirectX::XMConvertToDegrees(euler.z) };
+    }
+
     bool ProjectPoint(const DirectX::XMFLOAT3& world, DirectX::FXMMATRIX view,
         DirectX::FXMMATRIX projection, float width, float height,
         const POINT& client_origin, ImVec2& screen)
@@ -563,8 +598,8 @@ bool framework::handle_normal_adjust_gizmo()
     return true;
 }
 
-// 選択中の骨のギズモ。軸ハンドル 1 種類で、Move / Rotate / Scale は
-// ドラッグ量の使い道だけを変える。掴んでいる間は true を返して選択へ渡さない。
+// 選択中の骨のギズモ。ImGuizmo へワールド行列を渡し、返った行列から差分だけを取る。
+// 掴んでいる間は true を返して選択へ渡さない。
 bool framework::draw_bone_transform_gizmo()
 {
     if (rig_selected_bone.empty()) return false;
@@ -581,100 +616,43 @@ bool framework::draw_bone_transform_gizmo()
         if (candidate.name == rig_selected_bone) { bone = &candidate; break; }
     if (bone == nullptr) return false;
 
-    const DirectX::XMMATRIX view_projection =
-        viewport_view_matrix() * viewport_projection_matrix();
-    const ImVec2 origin = ImGui::GetMainViewport()->Pos;
-    const ImVec2 size = ImGui::GetMainViewport()->Size;
-    ImVec2 center{};
-    if (!project_world_to_screen(view_projection, bone->world, origin, size, center))
-        return false;
+    using namespace DirectX;
+    XMFLOAT4X4 view{}, projection{};
+    XMStoreFloat4x4(&view, viewport_view_matrix());
+    XMStoreFloat4x4(&projection, viewport_projection_matrix());
+    // 骨の行列は前フレームの描画提出で作ったもので、いまのポーズと対になっている。
+    XMFLOAT4X4 world = bone->world_matrix;
 
-    // 軸。ローカルは骨の姿勢、ワールドは単位軸。
-    const bool local = rig_gizmo_use_local && gizmo_local_space;
-    const DirectX::XMMATRIX bone_world = DirectX::XMLoadFloat4x4(&bone->world_matrix);
-    DirectX::XMFLOAT3 axis_end[3]{};
-    ImVec2 axis_screen[3]{};
-    constexpr float kAxisLength = 0.25f;
-    for (int index = 0; index < 3; ++index)
+    const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+    ImGuizmo::SetDrawlist(ImGui::GetBackgroundDrawList());
+    ImGuizmo::SetRect(main_viewport->Pos.x, main_viewport->Pos.y,
+        main_viewport->Size.x, main_viewport->Size.y);
+
+    const ReplayEngine::Editor::GizmoOperation current = transform_gizmo.Operation();
+    const ImGuizmo::OPERATION operation =
+        current == ReplayEngine::Editor::GizmoOperation::Translate ? ImGuizmo::TRANSLATE
+        : current == ReplayEngine::Editor::GizmoOperation::Rotate ? ImGuizmo::ROTATE
+        : ImGuizmo::SCALE;
+    // 拡縮の WORLD は ImGuizmo が骨の回転を捨てた行列を返すので、必ず LOCAL で回す。
+    const bool local = operation == ImGuizmo::SCALE ||
+        (rig_gizmo_use_local && gizmo_local_space);
+    ImGuizmo::Manipulate(&view._11, &projection._11, operation,
+        local ? ImGuizmo::LOCAL : ImGuizmo::WORLD, &world._11);
+    if (!ImGuizmo::IsUsing()) return false;
+
+    rig_pose_override& entry = object_rig_pose[owner][rig_selected_bone];
+    // 骨のローカルと親は動いていないので、ワールドの差分がそのままポーズの差分になる。
+    const XMMATRIX edited = XMLoadFloat4x4(&world) *
+        XMMatrixInverse(nullptr, XMLoadFloat4x4(&bone->world_matrix)) *
+        BonePoseAdjust(entry.translation, entry.rotation, entry.scale);
+    XMVECTOR scale{}, rotation{}, translation{};
+    if (XMMatrixDecompose(&scale, &rotation, &translation, edited))
     {
-        DirectX::XMVECTOR direction = index == 0 ? DirectX::g_XMIdentityR0.v
-            : index == 1 ? DirectX::g_XMIdentityR1.v : DirectX::g_XMIdentityR2.v;
-        if (local) direction = DirectX::XMVector3Normalize(bone_world.r[index]);
-        DirectX::XMStoreFloat3(&axis_end[index],
-            DirectX::XMVectorAdd(DirectX::XMLoadFloat3(&bone->world),
-                DirectX::XMVectorScale(direction, kAxisLength)));
-        if (!project_world_to_screen(view_projection, axis_end[index], origin, size,
-            axis_screen[index]))
-            axis_screen[index] = center;
+        // 行列ごと返るので分解が他の成分へ滲む。掴んでいる種類だけ書き戻す。
+        if (operation == ImGuizmo::TRANSLATE) XMStoreFloat3(&entry.translation, translation);
+        else if (operation == ImGuizmo::SCALE) XMStoreFloat3(&entry.scale, scale);
+        else entry.rotation = BoneEulerDegrees(XMMatrixRotationQuaternion(rotation));
     }
-
-    ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
-    constexpr ImU32 kAxisColor[3] = {
-        IM_COL32(235, 90, 90, 235), IM_COL32(120, 225, 120, 235),
-        IM_COL32(110, 160, 255, 235) };
-    for (int index = 0; index < 3; ++index)
-        draw_list->AddLine(center, axis_screen[index],
-            rig_gizmo_axis == index ? IM_COL32(255, 225, 120, 255) : kAxisColor[index],
-            rig_gizmo_axis == index ? 3.5f : 2.0f);
-    draw_list->AddCircleFilled(center, 4.0f, IM_COL32(240, 240, 240, 230), 10);
-
-    auto& pose = object_rig_pose[owner];
-    rig_pose_override& entry = pose[rig_selected_bone];
-    const ImVec2 mouse = ImGui::GetIO().MousePos;
-
-    if (rig_gizmo_axis < 0 && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && scene_view_hovered)
-    {
-        for (int index = 0; index < 3; ++index)
-        {
-            const float dx = axis_screen[index].x - mouse.x;
-            const float dy = axis_screen[index].y - mouse.y;
-            if (dx * dx + dy * dy > 12.0f * 12.0f) continue;
-            rig_gizmo_axis = index;
-            rig_gizmo_start_mouse = mouse;
-            const ReplayEngine::Editor::GizmoOperation operation = transform_gizmo.Operation();
-            rig_gizmo_start_value =
-                operation == ReplayEngine::Editor::GizmoOperation::Translate
-                    ? entry.translation
-                    : operation == ReplayEngine::Editor::GizmoOperation::Rotate
-                        ? entry.rotation : entry.scale;
-            break;
-        }
-    }
-
-    if (rig_gizmo_axis >= 0)
-    {
-        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
-        {
-            rig_gizmo_axis = -1;
-            return true;
-        }
-        // 軸の画面方向へどれだけ引いたかを量にする。
-        const ImVec2 axis_vector{ axis_screen[rig_gizmo_axis].x - center.x,
-            axis_screen[rig_gizmo_axis].y - center.y };
-        const float axis_length = (std::max)(1.0f,
-            std::sqrt(axis_vector.x * axis_vector.x + axis_vector.y * axis_vector.y));
-        const ImVec2 drag{ mouse.x - rig_gizmo_start_mouse.x,
-            mouse.y - rig_gizmo_start_mouse.y };
-        const float along = (drag.x * axis_vector.x + drag.y * axis_vector.y) / axis_length;
-        float* component = nullptr;
-        float delta = 0.0f;
-        switch (transform_gizmo.Operation())
-        {
-        case ReplayEngine::Editor::GizmoOperation::Translate:
-            component = &(&entry.translation.x)[rig_gizmo_axis];
-            delta = along / axis_length * kAxisLength;
-            break;
-        case ReplayEngine::Editor::GizmoOperation::Rotate:
-            component = &(&entry.rotation.x)[rig_gizmo_axis];
-            delta = along * 0.5f;
-            break;
-        default:
-            component = &(&entry.scale.x)[rig_gizmo_axis];
-            delta = along / axis_length;
-            break;
-        }
-        *component = (&rig_gizmo_start_value.x)[rig_gizmo_axis] + delta;
-        return true;
-    }
-    return false;
+    // IsOver() では骨が密集した場所でギズモに隠れた骨を選び直せなくなる。
+    return true;
 }

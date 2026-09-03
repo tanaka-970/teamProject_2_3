@@ -334,9 +334,6 @@
     bool             rig_show_names{ false };
     // ギズモの空間。既定はローカル（ポーズ付けはローカル回転が主）。
     bool             rig_gizmo_use_local{ true };
-    int              rig_gizmo_axis{ -1 };
-    ImVec2           rig_gizmo_start_mouse{ 0.0f, 0.0f };
-    DirectX::XMFLOAT3 rig_gizmo_start_value{ 0.0f, 0.0f, 0.0f };
     DirectX::XMFLOAT4 rig_bone_tint{ 0.31f, 0.88f, 0.94f, 0.86f };
     DirectX::XMFLOAT4 rig_picked_tint{ 1.0f, 0.73f, 0.25f, 0.94f };
 
