@@ -10,6 +10,7 @@
 #include "../../RePlayEngine/Components/Gameplay/StageGameplayComponents.h"
 #include "../../RePlayEngine/Components/Navigation/NavAgentComponent.h"
 #include "../../RePlayEngine/Components/Physics/ColliderComponent.h"
+#include "../../RePlayEngine/Components/Rendering/LightComponents.h"
 #include "../../RePlayEngine/Editor/Debug/AINavigationDebugDraw.h"
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Physics/CollisionLayers.h"
@@ -69,6 +70,13 @@ namespace
         const float dy = a.y - b.y;
         return dx * dx + dy * dy;
     }
+
+    bool ProjectLightPoint(const DirectX::XMMATRIX& view_projection,
+        const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
+        ImVec2& out)
+    {
+        return ProjectToScreen(view_projection, world, origin, size, out);
+    }
 }
 
 void framework::draw_collider_debug_overlay()
@@ -111,8 +119,27 @@ void framework::draw_collider_debug_overlay()
         }
     }
 
+    const ReplayEngine::Core::GameObject* light_range_object = nullptr;
+    if (show_light_range_debug_draw && active_editor_view == editor_view::scene)
+    {
+        const ReplayEngine::Core::ObjectID selected =
+            object_editor_context.Selection().Primary();
+        const ReplayEngine::Core::GameObject* selected_object =
+            active_object_scene().FindGameObjectByID(selected);
+        if (selected_object != nullptr && !selected_object->PendingDestroy() &&
+            selected_object->ActiveInHierarchy() &&
+            (selected_object->GetComponent<
+                ReplayEngine::Components::PointLightComponent>() != nullptr ||
+                selected_object->GetComponent<
+                    ReplayEngine::Components::SpotLightComponent>() != nullptr))
+        {
+            light_range_object = selected_object;
+        }
+    }
+
     if (object_collider_debug_lines.empty() && ai_frame.lines.empty() &&
-        ai_frame.fills.empty() && ai_frame.labels.empty() && !has_stage_markers) return;
+        ai_frame.fills.empty() && ai_frame.labels.empty() && !has_stage_markers &&
+        light_range_object == nullptr) return;
 
     const DirectX::XMMATRIX view_projection =
         viewport_view_matrix() * viewport_projection_matrix();
@@ -143,6 +170,77 @@ void framework::draw_collider_debug_overlay()
         (std::max)(1.0f, scene_view_max_y - scene_view_min_y) };
     draw_list->PushClipRect(scene_origin,
         { scene_origin.x + scene_size.x, scene_origin.y + scene_size.y }, true);
+
+    if (light_range_object != nullptr)
+    {
+        constexpr int light_circle_segments = 24;
+        const auto draw_projected_line = [&](const DirectX::XMFLOAT3& start,
+                                             const DirectX::XMFLOAT3& end, ImU32 color)
+        {
+            ImVec2 screen_start{};
+            ImVec2 screen_end{};
+            if (ProjectLightPoint(view_projection, start, main_origin, main_size, screen_start) &&
+                ProjectLightPoint(view_projection, end, main_origin, main_size, screen_end))
+                draw_list->AddLine(screen_start, screen_end, color, 1.5f);
+        };
+        const ReplayEngine::Core::GameObject* object = light_range_object;
+        const DirectX::XMFLOAT3 center = object->GetTransform().WorldPosition();
+        if (const auto* point = object->GetComponent<
+            ReplayEngine::Components::PointLightComponent>();
+            point != nullptr && point->Enabled())
+        {
+            const float radius = (std::max)(0.05f, point->range);
+            DirectX::XMFLOAT3 previous{
+                center.x + radius, center.y, center.z };
+            for (int segment = 1; segment <= light_circle_segments; ++segment)
+            {
+                const float angle = 2.0f * DirectX::XM_PI *
+                    static_cast<float>(segment) / static_cast<float>(light_circle_segments);
+                const DirectX::XMFLOAT3 current{
+                    center.x + std::cos(angle) * radius, center.y,
+                    center.z + std::sin(angle) * radius };
+                draw_projected_line(previous, current, IM_COL32(255, 220, 80, 220));
+                previous = current;
+            }
+        }
+        else if (const auto* spot = object->GetComponent<
+            ReplayEngine::Components::SpotLightComponent>();
+            spot != nullptr && spot->Enabled())
+        {
+            const float range = (std::max)(0.05f, spot->range);
+            const DirectX::XMFLOAT4X4 world = object->GetTransform().WorldMatrixFloat4x4();
+            DirectX::XMVECTOR forward = DirectX::XMVector3Normalize(
+                DirectX::XMVectorSet(world._31, world._32, world._33, 0.0f));
+            DirectX::XMVECTOR reference_up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+            if (std::abs(DirectX::XMVectorGetX(DirectX::XMVector3Dot(forward, reference_up))) > 0.95f)
+                reference_up = DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f);
+            const DirectX::XMVECTOR right = DirectX::XMVector3Normalize(
+                DirectX::XMVector3Cross(reference_up, forward));
+            const DirectX::XMVECTOR up = DirectX::XMVector3Normalize(
+                DirectX::XMVector3Cross(forward, right));
+            const float half_angle = spot->outer_angle_degrees * DirectX::XM_PI / 360.0f;
+            const float radius = (std::max)(0.05f, std::tan(half_angle) * range);
+            const DirectX::XMVECTOR center_vector = DirectX::XMLoadFloat3(&center);
+            const DirectX::XMVECTOR tip_center = DirectX::XMVectorAdd(center_vector,
+                DirectX::XMVectorScale(forward, range));
+            DirectX::XMFLOAT3 previous{};
+            DirectX::XMStoreFloat3(&previous, DirectX::XMVectorAdd(tip_center,
+                DirectX::XMVectorScale(right, radius)));
+            for (int segment = 1; segment <= light_circle_segments; ++segment)
+            {
+                const float angle = 2.0f * DirectX::XM_PI *
+                    static_cast<float>(segment) / static_cast<float>(light_circle_segments);
+                const DirectX::XMVECTOR rim = DirectX::XMVectorAdd(
+                    DirectX::XMVectorScale(right, std::cos(angle) * radius),
+                    DirectX::XMVectorScale(up, std::sin(angle) * radius));
+                DirectX::XMFLOAT3 current{};
+                DirectX::XMStoreFloat3(&current, DirectX::XMVectorAdd(tip_center, rim));
+                draw_projected_line(previous, current, IM_COL32(255, 150, 80, 220));
+                draw_projected_line(center, current, IM_COL32(255, 150, 80, 180));
+                previous = current;
+            }
+        }
+    }
 
     for (const ReplayEngine::Editor::DebugFilledPolygon& polygon : ai_frame.fills)
     {
@@ -481,6 +579,8 @@ void framework::draw_collision_diagnostics_panel()
     ImGui::Checkbox(u8"Collider の形を描く", &show_collider_debug_draw);
     ImGui::Checkbox(u8"境界ボックスを描く", &show_collider_debug_bounds);
     ImGui::Checkbox(u8"Mesh の三角形を描く", &show_collider_debug_wireframe);
+    ImGui::Checkbox(u8"ライトの範囲を描く", &show_light_range_debug_draw);
+    ImGui::TextDisabled(u8"選択中の Point / Spot Light の範囲だけを表示します。");
     ImGui::TextDisabled(u8"Mesh は既定で境界ボックスのみです。"
         u8"三角形は Collider 側の「三角形を表示」も有効にしたものだけ描かれます。");
 

@@ -1,4 +1,4 @@
-#include "MaterialShaderInspector.h"
+﻿#include "MaterialShaderInspector.h"
 
 #include "../../Rendering/Materials/MaterialSchema.h"
 #include "../../Rendering/Shaders/BuiltInShaders.h"
@@ -126,7 +126,8 @@ namespace ReplayEngine::Editor
                 std::vector<const Assets::AssetRecord*> images;
                 for (const Assets::AssetRecord& record : assets.Records())
                 {
-                    if (record.kind == Assets::AssetKind::Image)
+                    if (record.kind == Assets::AssetKind::Image &&
+                        !assets.IsMissing(record.guid))
                         images.push_back(&record);
                 }
                 std::sort(images.begin(), images.end(),

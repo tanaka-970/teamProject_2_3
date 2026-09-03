@@ -37,6 +37,7 @@ void framework::scan_shader_library()
 
 void framework::poll_shader_source_changes(float elapsed_time)
 {
+    compile_pending_dx12_custom_effects();
     if (standalone_game_mode) return;
     if (!shader_auto_recompile) return;
 
@@ -56,6 +57,7 @@ void framework::poll_shader_source_changes(float elapsed_time)
     // ユーザーが修正した直後に再試行できる。
     if (recompiled != 0 && dx12_framework_active && dx12_device_context.IsInitialized())
         (void)dx12_device_context.ClearStaticAssetCaches();
+    if (recompiled != 0) compile_pending_dx12_custom_effects();
 }
 
 namespace

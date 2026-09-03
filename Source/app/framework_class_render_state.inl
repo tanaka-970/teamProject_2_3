@@ -8,6 +8,10 @@ public:
     bool dx12_framework_requested{ true };
     bool dx12_framework_active{ false };
     bool dx12_framework_render_error_reported{ false };
+    std::unordered_set<std::string> custom_ui_effect_diagnostics_reported;
+    std::unordered_map<std::string,
+        ReplayEngine::Rendering::DX12::D3D12UICustomEffectShaderSource>
+        pending_custom_ui_effect_shaders;
 
     DirectX::XMFLOAT4 camera_position{ 0.0f, 4.0f, -10.0f, 1.0f };
     DirectX::XMFLOAT4 light_direction{ 0.300f, 0.000f, 0.500f, 0.0f };
@@ -228,6 +232,7 @@ public:
 
     // Scene Flow Editor。ProjectSettings の GUID が Runtime で使う正本。
     ReplayEngine::Runtime::SceneFlowAsset scene_flow_editor_asset;
+    ReplayEngine::Editor::SceneFlowEditHistory scene_flow_edit_history;
     std::filesystem::path scene_flow_editor_path;
     std::string scene_flow_editor_guid;
     std::string scene_flow_editor_status{ "Scene Flow 未選択" };

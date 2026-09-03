@@ -1,5 +1,6 @@
 ﻿#include "framework.h"
 
+#include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Components/UI/UIImageComponent.h"
 #include "../../RePlayEngine/Motion/MotionBindingResolver.h"
 #include "../../RePlayEngine/Motion/MotionEvaluator.h"
@@ -26,6 +27,7 @@ using namespace framework_motion_workspace::Detail;
 void framework::draw_motion_preview()
 {
     if (!show_motion_preview_panel) return;
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
     if (!ImGui::Begin(u8"Motion プレビュー", &show_motion_preview_panel))
     {
         ImGui::End();

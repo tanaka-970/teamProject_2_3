@@ -8,7 +8,7 @@ OBJECT
   NAME "MIKU-V6"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0.95749998092651367 -14.699999809265137 1.4730000495910645 0 3.1415927410125732 0 1 1 1
+  TRANSFORM -0.14249999821186066 -14.699999809265137 1.4730000495910645 0 3.1415927410125732 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 3
   COMPONENT "SkinnedMeshRendererComponent" 1
@@ -106,24 +106,27 @@ OBJECT
     PROPERTY "effects[0].enabled" bool 1
     PROPERTY "effects[0].region_enabled" bool 1
     PROPERTY "effects[0].type" enum 2
-    PROPERTY "effects[0].radius" float 5.630000114440918
+    PROPERTY "effects[0].radius" float 4.8600001335144043
     PROPERTY "effects[0].intensity" float 1.0700000524520874
     PROPERTY "effects[0].amount" float 0.029999999329447746
     PROPERTY "effects[0].angle" float 9.1999998092651367
-    PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].color" color 0.5951417088508606 0.46502974629402161 0.46502974629402161 1
     PROPERTY "effects[0].custom_shader" assetref ""
     PROPERTY "effects[1].enabled" bool 1
     PROPERTY "effects[1].region_enabled" bool 1
-    PROPERTY "effects[1].type" enum 24
-    PROPERTY "effects[1].radius" float 3
-    PROPERTY "effects[1].intensity" float 1
-    PROPERTY "effects[1].color" color 0 0 0 1
+    PROPERTY "effects[1].type" enum 2
+    PROPERTY "effects[1].radius" float 0.70999997854232788
+    PROPERTY "effects[1].intensity" float 1.0900000333786011
+    PROPERTY "effects[1].amount" float 0.029999999329447746
+    PROPERTY "effects[1].angle" float 6.0999999046325684
+    PROPERTY "effects[1].color" color 1 0.99998998641967773 0.99998998641967773 1
     PROPERTY "effects[1].custom_shader" assetref ""
     PROPERTY "effects[2].enabled" bool 1
     PROPERTY "effects[2].region_enabled" bool 1
-    PROPERTY "effects[2].type" enum 0
-    PROPERTY "effects[2].radius" float 8
+    PROPERTY "effects[2].type" enum 24
+    PROPERTY "effects[2].radius" float 2
     PROPERTY "effects[2].intensity" float 1
+    PROPERTY "effects[2].color" color 0 0 0 1
     PROPERTY "effects[2].custom_shader" assetref ""
     PROPERTY "effect_region_path_count" int 0
     PROPERTY "effects[0].threshold" float 0
@@ -160,12 +163,10 @@ OBJECT
     PROPERTY "effects[0].brush_pattern_weight_14" float 0
     PROPERTY "effects[0].brush_pattern_weight_15" float 0
     PROPERTY "effects[0].waveform" enum 0
-    PROPERTY "effects[1].threshold" float 0.44999998807907104
-    PROPERTY "effects[1].amount" float 3
-    PROPERTY "effects[1].angle" float 35
+    PROPERTY "effects[1].threshold" float 12
     PROPERTY "effects[1].progress" float 0.25
-    PROPERTY "effects[1].softness" float 0.11999999731779099
-    PROPERTY "effects[1].speed" float 0
+    PROPERTY "effects[1].softness" float 0.60000002384185791
+    PROPERTY "effects[1].speed" float 1
     PROPERTY "effects[1].seed" float 0
     PROPERTY "effects[1].direction" vec2 0 1
     PROPERTY "effects[1].color_2" color 1 1 1 1
@@ -204,7 +205,6 @@ OBJECT
     PROPERTY "effects[2].speed" float 1
     PROPERTY "effects[2].seed" float 0
     PROPERTY "effects[2].direction" vec2 0 1
-    PROPERTY "effects[2].color" color 0 0 0 0.75
     PROPERTY "effects[2].color_2" color 0.11999999731779099 0.18000000715255737 0.55000001192092896 1
     PROPERTY "effects[2].color_3" color 0.94999998807907104 0.31999999284744263 0.11999999731779099 1
     PROPERTY "effects[2].color_4" color 1 0.94999998807907104 0.55000001192092896 1
@@ -240,7 +240,36 @@ OBJECT
   NAME "GameObject"
   ENABLED 1
   PARENT 0
-  TRANSFORM 0 0 0 0 0 0 1 1 1
+  TRANSFORM 11.399999618530273 -1.3500000238418579 -2.3499999046325684 0 0 0 1 1 1
   PREFAB "" 0 0
-  COMPONENT_COUNT 0
+  COMPONENT_COUNT 2
+  COMPONENT "PointLightComponent" 0
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 8
+    PROPERTY "color" color 1 0.89999997615814209 0.75 1
+    PROPERTY "intensity" float 400
+    PROPERTY "range" float 42.799999237060547
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 0.46000000834465027
+    PROPERTY "shadow_depth_bias" float 0.21899999678134918
+    PROPERTY "shadow_normal_bias" float 5.25
+    PROPERTY "shadow_near_plane" float 2.4600000381469727
+  END_COMPONENT
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "intensity" float 50.900001525878906
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0.019999999552965164
+    PROPERTY "shadow_normal_bias" float 1.3999999761581421
+    PROPERTY "shadow_distance" float 120
+  END_COMPONENT
 END_OBJECT

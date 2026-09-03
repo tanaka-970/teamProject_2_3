@@ -6,6 +6,7 @@
 #include "../../Reflection/Property/PropertyValue.h"
 #include "../../Rendering/Materials/MaterialSchema.h"
 #include "../../UI/Effects/UIEffect.h"
+#include "../../UI/Effects/EffectKindLabels.h"
 #include "../../Rendering/Effects/EffectPresetAsset.h"
 #include "../../Rendering/Effects/EffectChain.h"
 
@@ -227,11 +228,15 @@ namespace ReplayEngine::Components
                         property.kind == Rendering::ShaderPropertyKind::Enum
                         ? Reflection::Animatable::Step
                         : Reflection::Animatable::Interpolatable));
-            desc.display_name = property.DisplayName() + std::string(u8" [未対応]");
+            desc.display_name = property.DisplayName() +
+                (property.kind == Rendering::ShaderPropertyKind::Texture
+                    ? std::string(u8" [DX12 未対応]") : std::string());
             desc.category = property.category.empty() ? "Custom Shader" : property.category;
-            desc.tooltip = property.tooltip.empty()
-                ? std::string(u8"DX12 の UI Effect 描画では未対応です。設定値は保存されます。")
-                : property.tooltip + std::string(u8" DX12 の UI Effect 描画では未対応です。設定値は保存されます。");
+            desc.tooltip = property.kind == Rendering::ShaderPropertyKind::Texture
+                ? std::string(u8"Texture プロパティは DX12 Effect Stack では未対応です。")
+                : property.tooltip.empty()
+                ? std::string(u8"カスタムシェーダーへ渡すプロパティ値。")
+                : property.tooltip;
             if (property.kind == Rendering::ShaderPropertyKind::Range)
             {
                 desc.has_range = true;

@@ -240,6 +240,7 @@ namespace ReplayEngine::Core
         // 削除予約中を含めた実体の並び。Editor の表示と保存処理が添字で走査する。
         std::size_t ComponentCount() const noexcept { return components_.size(); }
         Component* ComponentAt(std::size_t index) const noexcept;
+        bool MoveComponent(std::size_t source, std::size_t destination);
 
         // ---- Component の削除 ----------------------------------------------
         // いずれも即座に破棄せず削除予約を立てる。実際の破棄は Scene の同期点。

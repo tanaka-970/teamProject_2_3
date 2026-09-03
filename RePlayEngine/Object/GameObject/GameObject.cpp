@@ -4,6 +4,7 @@
 #include "../../Scene/Runtime/Scene.h"
 
 #include <algorithm>
+#include <cstddef>
 
 using namespace DirectX;
 
@@ -296,6 +297,20 @@ namespace ReplayEngine::Core
     {
         if (index >= components_.size()) return nullptr;
         return components_[index].get();
+    }
+
+    bool GameObject::MoveComponent(std::size_t source, std::size_t destination)
+    {
+        if (pending_destroy_ || source >= components_.size() ||
+            destination >= components_.size() || source == destination)
+            return false;
+
+        std::unique_ptr<Component> moved = std::move(components_[source]);
+        components_.erase(components_.begin() + static_cast<std::ptrdiff_t>(source));
+        components_.insert(components_.begin() + static_cast<std::ptrdiff_t>(destination),
+            std::move(moved));
+        if (scene_ != nullptr) scene_->BumpStructureGeneration();
+        return true;
     }
 
     bool GameObject::RemoveComponent(Component* component)

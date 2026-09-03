@@ -224,17 +224,21 @@ void framework::draw_project_browser()
 
     draw_project_delete_popup();
 
-    // 登録数が変わったときだけ数え直す。毎フレーム全件を stat すると CPU が跳ねる。
-    if (project_missing_assets_source_count != asset_database.Records().size())
+    // Picker と同じ AssetDatabase の欠損キャッシュを使い、描画中の stat を避ける。
+    bool missing_cache_refreshed = false;
+    if (!asset_database.MissingFilesCached())
     {
         const std::filesystem::path resources_root = content_path("resources");
+        asset_database.RefreshMissingFiles(resources_root);
+        missing_cache_refreshed = true;
+    }
+    if (missing_cache_refreshed ||
+        project_missing_assets_source_count != asset_database.Records().size())
+    {
         project_missing_assets.clear();
         for (const auto& record : asset_database.Records())
         {
-            if (!IsProjectPathInsideOrEqual(record.source_path, resources_root)) continue;
-            std::error_code missing_error;
-            if (!std::filesystem::is_regular_file(content_path(record.source_path), missing_error) ||
-                missing_error)
+            if (asset_database.IsMissing(record.guid))
                 project_missing_assets.push_back({ record.guid, record.display_name,
                     record.source_path.generic_u8string() });
         }

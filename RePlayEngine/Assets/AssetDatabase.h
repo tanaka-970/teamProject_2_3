@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace ReplayEngine::Assets
@@ -46,6 +47,11 @@ namespace ReplayEngine::Assets
         bool HasPathGuidReservation(const std::filesystem::path& path) const;
         const std::vector<AssetRecord>& Records() const noexcept { return records_; }
 
+        // 欠損判定を一度だけ更新し、Picker は保存済みの結果だけを読む。
+        void RefreshMissingFiles(const std::filesystem::path& project_root);
+        bool MissingFilesCached() const noexcept { return missing_files_cached_; }
+        bool IsMissing(const std::string& guid) const noexcept;
+
         static std::filesystem::path NormalizeProjectPath(const std::filesystem::path& path);
 
     private:
@@ -53,5 +59,9 @@ namespace ReplayEngine::Assets
 
         std::filesystem::path database_path_;
         std::vector<AssetRecord> records_;
+        std::unordered_set<std::string> missing_guids_;
+        bool missing_files_cached_ = false;
+
+        void InvalidateMissingFiles() noexcept;
     };
 }

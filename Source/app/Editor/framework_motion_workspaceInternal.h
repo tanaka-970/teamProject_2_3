@@ -340,7 +340,8 @@ namespace framework_motion_workspace::Detail
                 {
                     for (const ReplayEngine::Assets::AssetRecord& record : database->Records())
                     {
-                        if (record.kind != ReplayEngine::Assets::AssetKind::EasingCurve) continue;
+                        if (record.kind != ReplayEngine::Assets::AssetKind::EasingCurve ||
+                            database->IsMissing(record.guid)) continue;
                         ImGui::PushID(record.guid.c_str());
                         const bool selected = curve->guid == record.guid;
                         if (ImGui::Selectable(record.display_name.c_str(), selected))

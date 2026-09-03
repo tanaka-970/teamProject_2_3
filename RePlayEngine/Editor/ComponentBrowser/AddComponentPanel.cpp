@@ -160,8 +160,15 @@ namespace ReplayEngine::Editor
             if (visible_in_category == 0) continue;
             any_visible = true;
 
-            ImGui::TextDisabled("%s", category.c_str());
-            ImGui::Separator();
+            const std::string category_label = category + "  (" +
+                std::to_string(visible_in_category) + ")##AddComponentCategory_" + category;
+            if (!query.empty()) ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+            const bool category_open = ImGui::CollapsingHeader(category_label.c_str());
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("カテゴリを開くと追加できる Component を表示します");
+            if (!category_open) continue;
+
+            ImGui::Indent();
 
             for (const ComponentTypeInfo& info : ComponentRegistry::All())
             {
@@ -256,8 +263,8 @@ namespace ReplayEngine::Editor
 
                 if (added) break;
             }
+            ImGui::Unindent();
             if (added) break;
-            ImGui::Spacing();
         }
 
         const Scene::Scene* scene = context.GetScene();
@@ -280,8 +287,15 @@ namespace ReplayEngine::Editor
                 if (visible_in_category == 0) continue;
                 any_visible = true;
 
-                ImGui::TextDisabled("%s", category.c_str());
-                ImGui::Separator();
+                const std::string category_label = "Script / " + category + "  (" +
+                    std::to_string(visible_in_category) + ")##AddScriptCategory_" + category;
+                if (!query.empty()) ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+                const bool category_open = ImGui::CollapsingHeader(category_label.c_str());
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("カテゴリを開くと追加できる Script を表示します");
+                if (!category_open) continue;
+
+                ImGui::Indent();
 
                 for (const Scripting::ScriptTypeDescriptor& script : *script_types)
                 {
@@ -343,8 +357,8 @@ namespace ReplayEngine::Editor
 
                     if (added) break;
                 }
+                ImGui::Unindent();
                 if (added) break;
-                ImGui::Spacing();
             }
         }
 

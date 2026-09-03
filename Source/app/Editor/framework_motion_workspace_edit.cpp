@@ -53,6 +53,7 @@ bool framework::open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset
         motion_editor_path = asset.source_path;
         motion_editor_dirty = false;
         motion_edit_history.Clear();
+        composition_edit_history.Clear();
         composition_asset_cache[motion_editor_guid] = motion_editor_composition;
         composition_asset_load_failures.erase(motion_editor_guid);
         set_editor_workspace(editor_workspace::motion);
@@ -81,6 +82,7 @@ bool framework::open_motion_asset(const ReplayEngine::Assets::AssetRecord& asset
     motion_selected_event = -1;
     motion_preview_time = 0.0f;
     motion_edit_history.Clear();
+    composition_edit_history.Clear();
     motion_asset_cache[motion_editor_guid] = motion_editor_asset;
     motion_asset_load_failures.erase(motion_editor_guid);
     set_editor_workspace(editor_workspace::motion);
@@ -510,6 +512,15 @@ bool framework::undo_motion_edit()
 {
     stop_motion_preview();
     std::string label;
+    if (motion_composition_loaded)
+    {
+        if (!composition_edit_history.Undo(motion_editor_composition, label)) return false;
+        motion_editor_dirty = true;
+        if (!motion_editor_guid.empty())
+            composition_asset_cache[motion_editor_guid] = motion_editor_composition;
+        motion_editor_status = "Undo: " + label;
+        return true;
+    }
     if (!motion_edit_history.Undo(motion_editor_asset, label)) return false;
     motion_editor_asset.SortKeys();
     motion_selected_track = motion_editor_asset.tracks.empty()
@@ -530,6 +541,15 @@ bool framework::redo_motion_edit()
 {
     stop_motion_preview();
     std::string label;
+    if (motion_composition_loaded)
+    {
+        if (!composition_edit_history.Redo(motion_editor_composition, label)) return false;
+        motion_editor_dirty = true;
+        if (!motion_editor_guid.empty())
+            composition_asset_cache[motion_editor_guid] = motion_editor_composition;
+        motion_editor_status = "Redo: " + label;
+        return true;
+    }
     if (!motion_edit_history.Redo(motion_editor_asset, label)) return false;
     motion_editor_asset.SortKeys();
     motion_selected_track = motion_editor_asset.tracks.empty()

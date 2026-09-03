@@ -17,14 +17,21 @@
 #include "../../Reflection/Registry/PropertyRegistry.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../UI/Effects/UIEffect.h"
+#include "../ReorderableList.h"
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <iomanip>
+#include <limits>
+#include <locale>
 #include <utility>
 #include <string>
 #include <vector>
@@ -33,6 +40,120 @@
 
 namespace ReplayEngine::Editor
 {
+    namespace
+    {
+        constexpr std::size_t effect_kind_count =
+            static_cast<std::size_t>(UI::UIEffectKind::Count);
+
+        struct EffectKindUsage final
+        {
+            std::array<std::uint64_t, effect_kind_count> counts{};
+            bool loaded = false;
+        };
+
+        EffectKindUsage& MutableEffectKindUsage()
+        {
+            static EffectKindUsage usage;
+            return usage;
+        }
+
+        const std::filesystem::path& EffectKindUsagePath()
+        {
+            static const std::filesystem::path path =
+                std::filesystem::path("Saved") / "Editor" /
+                "EffectKindUsage.replayeffectusage";
+            return path;
+        }
+
+        void LoadEffectKindUsage()
+        {
+            EffectKindUsage& usage = MutableEffectKindUsage();
+            if (usage.loaded) return;
+            usage.loaded = true;
+
+            std::ifstream stream(EffectKindUsagePath(), std::ios::binary);
+            if (!stream) return;
+            stream.imbue(std::locale::classic());
+            std::string header;
+            int version = 0;
+            if (!(stream >> header >> version) || header != "REPLAY_EFFECT_KIND_USAGE" ||
+                version != 1) return;
+
+            std::string keyword;
+            while (stream >> keyword)
+            {
+                if (keyword != "USE")
+                {
+                    std::string ignored;
+                    std::getline(stream, ignored);
+                    continue;
+                }
+                std::size_t index = 0;
+                std::uint64_t count = 0;
+                if (!(stream >> index >> count)) break;
+                if (index < usage.counts.size()) usage.counts[index] = count;
+            }
+        }
+
+        void SaveEffectKindUsage()
+        {
+            const EffectKindUsage& usage = MutableEffectKindUsage();
+            std::error_code error;
+            std::filesystem::create_directories(EffectKindUsagePath().parent_path(), error);
+            if (error) return;
+
+            std::ofstream stream(EffectKindUsagePath(), std::ios::binary | std::ios::trunc);
+            if (!stream) return;
+            stream.imbue(std::locale::classic());
+            stream << "REPLAY_EFFECT_KIND_USAGE 1\n";
+            for (std::size_t index = 0; index < usage.counts.size(); ++index)
+            {
+                if (usage.counts[index] == 0) continue;
+                stream << "USE " << index << ' ' << usage.counts[index] << '\n';
+            }
+        }
+
+        void RecordEffectKindUsage(std::size_t index)
+        {
+            LoadEffectKindUsage();
+            EffectKindUsage& usage = MutableEffectKindUsage();
+            if (index >= usage.counts.size()) return;
+            if (usage.counts[index] != (std::numeric_limits<std::uint64_t>::max)())
+                ++usage.counts[index];
+            SaveEffectKindUsage();
+        }
+
+        std::string EffectKindPickerLabel(const std::string& label)
+        {
+            return label;
+        }
+
+        bool EffectKindMatchesFilter(const std::string& label, const char* filter)
+        {
+            return filter == nullptr || filter[0] == '\0' || label.find(filter) != std::string::npos;
+        }
+
+        std::vector<std::size_t> FrequentlyUsedEffectKinds(
+            const std::vector<std::string>& labels)
+        {
+            LoadEffectKindUsage();
+            const EffectKindUsage& usage = MutableEffectKindUsage();
+            std::vector<std::size_t> result;
+            for (std::size_t index = 0; index < labels.size() &&
+                index < usage.counts.size(); ++index)
+            {
+                if (usage.counts[index] != 0) result.push_back(index);
+            }
+            std::sort(result.begin(), result.end(), [&](std::size_t left, std::size_t right)
+            {
+                if (usage.counts[left] != usage.counts[right])
+                    return usage.counts[left] > usage.counts[right];
+                return left < right;
+            });
+            return result;
+        }
+    }
+
     using Reflection::PropertyDesc;
     using Reflection::PropertyRegistry;
     using Reflection::PropertyType;
@@ -218,33 +339,71 @@ namespace ReplayEngine::Editor
             {
                 const std::string& enum_label =
                     desc.enum_labels[static_cast<std::size_t>(value)];
-                const std::size_t description_separator = enum_label.find(u8" — ");
-                if (description_separator == std::string::npos)
-                    preview = enum_label.c_str();
-                else
-                {
-                    preview_storage = enum_label.substr(0, description_separator);
-                    preview = preview_storage.c_str();
-                }
+                preview_storage = EffectKindPickerLabel(enum_label);
+                preview = preview_storage.c_str();
             }
             if (ImGui::BeginCombo(label.c_str(), preview))
             {
-                for (std::size_t i = 0; i < desc.enum_labels.size(); ++i)
+                if (is_effect_kind)
                 {
-                    const bool selected = static_cast<int>(i) == value;
-                    if (ImGui::Selectable(desc.enum_labels[i].c_str(), selected))
+                    static std::array<char, 96> effect_filter{};
+                    ImGui::SetNextItemWidth(-1.0f);
+                    ImGui::InputTextWithHint("##EffectKindSearch", "検索...",
+                        effect_filter.data(), effect_filter.size());
+                    const std::vector<std::size_t> frequent =
+                        FrequentlyUsedEffectKinds(desc.enum_labels);
+                    const auto draw_effect_option = [&](std::size_t i, bool show_count)
                     {
-                        desc.Apply(component, PropertyValue::MakeEnum(static_cast<int>(i)));
-                        changed = true;
+                        const std::string display = EffectKindPickerLabel(desc.enum_labels[i]);
+                        if (!EffectKindMatchesFilter(display, effect_filter.data())) return;
+                        std::string option = display;
+                        if (show_count)
+                        {
+                            const EffectKindUsage& usage = MutableEffectKindUsage();
+                            option += "  [" + std::to_string(usage.counts[i]) + "]";
+                        }
+                        const bool selected = static_cast<int>(i) == value;
+                        if (ImGui::Selectable(option.c_str(), selected))
+                        {
+                            desc.Apply(component, PropertyValue::MakeEnum(static_cast<int>(i)));
+                            RecordEffectKindUsage(i);
+                            changed = true;
+                        }
+                        if (selected) ImGui::SetItemDefaultFocus();
+                        {
+                            const UI::UIEffectKind effect_kind =
+                                static_cast<UI::UIEffectKind>(i);
+                            const std::string help_key = std::string("effect.kind.") +
+                                UI::UIEffectKindName(effect_kind);
+                            EditorHelp::Item(help_key.c_str());
+                        }
+                    };
+
+                    ImGui::TextDisabled(u8"よく使う");
+                    if (frequent.empty())
+                    {
+                        ImGui::TextDisabled(u8"選択履歴はまだありません");
                     }
-                    if (selected) ImGui::SetItemDefaultFocus();
-                    if (is_effect_kind)
+                    else
                     {
-                        const UI::UIEffectKind effect_kind =
-                            static_cast<UI::UIEffectKind>(i);
-                        const std::string help_key = std::string("effect.kind.") +
-                            UI::UIEffectKindName(effect_kind);
-                        EditorHelp::Item(help_key.c_str());
+                        for (const std::size_t i : frequent) draw_effect_option(i, true);
+                    }
+                    ImGui::Separator();
+                    ImGui::TextDisabled(u8"全種類");
+                    for (std::size_t i = 0; i < desc.enum_labels.size(); ++i)
+                        draw_effect_option(i, false);
+                }
+                else
+                {
+                    for (std::size_t i = 0; i < desc.enum_labels.size(); ++i)
+                    {
+                        const bool selected = static_cast<int>(i) == value;
+                        if (ImGui::Selectable(desc.enum_labels[i].c_str(), selected))
+                        {
+                            desc.Apply(component, PropertyValue::MakeEnum(static_cast<int>(i)));
+                            changed = true;
+                        }
+                        if (selected) ImGui::SetItemDefaultFocus();
                     }
                 }
                 ImGui::EndCombo();
@@ -565,47 +724,72 @@ namespace ReplayEngine::Editor
             {
                 ImGui::TextDisabled(u8"要素の型: %s", Reflection::ToString(element_type));
 
-                std::size_t remove_index = elements.size();
-                std::size_t move_up_index = elements.size();
-                std::size_t move_down_index = elements.size();
-
+                ReorderRequest move_request{};
+                std::size_t remove_index = invalid_reorder_index;
                 for (std::size_t index = 0; index < elements.size(); ++index)
                 {
-                    ImGui::PushID(static_cast<int>(index));
-
                     const std::string element_label = "[" + std::to_string(index) + "]";
-                    if (DrawArrayElementValue(element_label.c_str(), elements[index],
-                        assets, scene, desc.read_only, desc.asset_type))
+                    const std::string item_id = label + "ArrayElement" +
+                        std::to_string(index);
+                    const ReorderableItemResult reorder = DrawReorderableItemEx(
+                        &component, item_id.c_str(), index, elements.size(),
+                        element_label.c_str(), false, true, !desc.read_only, 0, &desc,
+                        [](const char* header_title, ImGuiTreeNodeFlags flags)
+                        {
+                            return ImGui::CollapsingHeader(header_title, flags);
+                        },
+                        [&remove_index, &desc, index]
+                        {
+                            if (desc.read_only) return;
+                            if (ImGui::MenuItem(u8"削除"))
+                                remove_index = index;
+                        },
+                        [](ReorderDropInfo&, const ImVec2&, const ImVec2&) {});
+                    if (reorder.request.Valid() && !move_request.Valid())
+                        move_request = reorder.request;
+                    if (reorder.opened)
                     {
-                        array_changed = true;
+                        ImGui::PushID(static_cast<int>(index));
+                        if (DrawArrayElementValue(u8"値", elements[index],
+                            assets, scene, desc.read_only, desc.asset_type))
+                        {
+                            array_changed = true;
+                        }
+                        if (!desc.read_only)
+                        {
+                            ImGui::SameLine();
+                            if (ImGui::SmallButton(u8"削除"))
+                                remove_index = index;
+                        }
+                        ImGui::PopID();
                     }
-
-                    if (!desc.read_only)
-                    {
-                        ImGui::SameLine();
-                        if (ImGui::SmallButton(u8"▲")) move_up_index = index;
-                        ImGui::SameLine();
-                        if (ImGui::SmallButton(u8"▼")) move_down_index = index;
-                        ImGui::SameLine();
-                        if (ImGui::SmallButton(u8"削除")) remove_index = index;
-                    }
-                    ImGui::PopID();
                 }
 
-                if (move_up_index > 0 && move_up_index < elements.size())
+                if (const char* active_label = ActiveReorderLabel(&component);
+                    active_label != nullptr)
                 {
-                    std::swap(elements[move_up_index], elements[move_up_index - 1]);
-                    array_changed = true;
+                    ImGui::TextColored(ImGui::GetStyle().Colors[ImGuiCol_DragDropTarget],
+                        u8"移動中: %s", active_label);
                 }
-                if (move_down_index + 1 < elements.size())
-                {
-                    std::swap(elements[move_down_index], elements[move_down_index + 1]);
-                    array_changed = true;
-                }
-                if (remove_index < elements.size())
+                if (remove_index < elements.size() && !desc.read_only)
                 {
                     elements.erase(elements.begin() +
                         static_cast<std::ptrdiff_t>(remove_index));
+                    array_changed = true;
+                }
+                else if (move_request.Valid() && !desc.read_only &&
+                    move_request.source < elements.size() &&
+                    move_request.destination < elements.size())
+                {
+                    std::rotate(elements.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.source),
+                        elements.begin() +
+                        static_cast<std::ptrdiff_t>(move_request.source <
+                            move_request.destination ? move_request.source + 1u :
+                            move_request.destination),
+                        elements.begin() + static_cast<std::ptrdiff_t>(
+                            move_request.source < move_request.destination
+                                ? move_request.destination + 1u : move_request.source + 1u));
                     array_changed = true;
                 }
 

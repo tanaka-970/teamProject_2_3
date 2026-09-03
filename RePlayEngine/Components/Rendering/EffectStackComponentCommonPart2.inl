@@ -808,6 +808,7 @@
             desc.serializable = true;
             desc.display_name = "マテリアルスロット";
             desc.tooltip = "対象が「マテリアルスロット」のときに効果を掛けるスロット。";
+            desc.category = "Effect Stack / 対象";
             desc.enum_labels = std::move(slot_labels);
             desc.getter = [](const Core::Component& component)
             {
@@ -841,6 +842,7 @@
             desc.serializable = true;
             desc.display_name = display;
             desc.tooltip = tooltip;
+            desc.category = "Effect Stack / 適用範囲";
             if (std::string(name) == "effect_region_shape")
             {
                 desc.enum_labels = { "矩形", "円 / 楕円", "画像マスク（投げ縄）", "自由形状" };
@@ -971,8 +973,14 @@
         for (std::size_t index = 0; index < effects.size(); ++index)
         {
             const int i = static_cast<int>(index);
+            const UI::UIEffectKind current_kind =
+                static_cast<UI::UIEffectKind>(effects[index].kind);
+            const std::string effect_category = "Effect " +
+                std::to_string(index + 1) + " / " + UI::EffectKindLabel(current_kind);
             auto push = [&](Reflection::PropertyDesc desc)
             {
+                if (desc.category.empty()) desc.category = effect_category;
+                else desc.category = effect_category + " / " + desc.category;
                 dynamic_properties_.push_back(std::move(desc));
             };
 
@@ -981,42 +989,7 @@
             push(MakeEffectProperty(i, "region_enabled", Reflection::PropertyType::Bool,
                 Reflection::Animatable::Step).Display("範囲へ適用")
                 .Tooltip("範囲制限を個別選択モードでこの Effect に掛けるか。全 Effect モードでは無視される。"));
-            const UI::UIEffectKind current_kind =
-                static_cast<UI::UIEffectKind>(effects[index].kind);
-            std::vector<std::string> effect_kind_labels{
-                "ぼかし", "発光", "色調補正", "ノイズ",
-                "揺れ", "マスク", "ワイプ", "ディゾルブ", "歪み",
-                "色収差", "クワハラ", "網点",
-                "方向ブラー", "放射ブラー", "回転ブラー",
-                "ビネット", "光条", "レンズ歪み",
-                "ポスタライズ", "二値化", "カラーランプ", "レベル補正",
-                "色温度", "エッジ検出", "輪郭線", "ロングシャドウ",
-                "クロスハッチング", "ブラシストローク", "モザイク", "結晶化",
-                "ステンドグラス", "渦巻き", "球面化", "波紋",
-                "極座標", "走査線", "CRT", "グリッチ",
-                "ディザ", "VHS", "レターボックス", "波形",
-                "ディスプレイスメントマップ", "タービュレント変形", "フラクタルノイズ",
-                "モーションブラー", "エコー / 残像", "ドロップシャドウ", "インナーシャドウ",
-                "LUT", "トーンカーブ", "Matte Composite",
-                "マット形態学", "ベベル / エンボス", "万華鏡 / ミラータイル",
-                "ページカール / フォールド", "ASCII / LED マトリクス",
-                "フィードバックズーム", "Liquid Glass", "ライトスイープ",
-                "ショックウェーブ", "ピクセルソート",
-                "ホログラム", "イリデッセントフォイル", "レーダースイープ",
-                "エネルギーパルス", "サーキットフロー", "ヒートヘイズ",
-                "ウォーターコースティクス", "ボロノイシャッター",
-                "インクブリード", "バーンリビール", "ポータルヴォルテックス",
-                "フロストクラック"
-            };
-            for (std::size_t kind_index = 0;
-                kind_index < effect_kind_labels.size(); ++kind_index)
-            {
-                if (UI::IsTimeDrivenEffect(
-                    static_cast<UI::UIEffectKind>(kind_index)))
-                {
-                    effect_kind_labels[kind_index] += "  [M]";
-                }
-            }
+            std::vector<std::string> effect_kind_labels = UI::MakeEffectKindLabels();
             push(MakeEffectProperty(i, "type", Reflection::PropertyType::Enum,
                 Reflection::Animatable::Step)
                 .Display(UI::IsTimeDrivenEffect(current_kind) ? "種類  [M]" : "種類")

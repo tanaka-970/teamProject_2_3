@@ -54,6 +54,16 @@
                     else redo_motion_edit();
                     handled = true;
                 }
+                else if (show_scene_flow_panel && scene_flow_editor_loaded &&
+                    !project_browser_focused)
+                {
+                    handled = (wparam == 'Z') ? undo_scene_flow_edit() : redo_scene_flow_edit();
+                }
+                else if (!project_browser_focused && material_editor_loaded &&
+                    selected_editor_object == editor_selection::asset)
+                {
+                    handled = (wparam == 'Z') ? undo_material_editor() : redo_material_editor();
+                }
                 else
                 {
                     const bool external_context = project_browser_focused;
@@ -413,6 +423,8 @@ private:
 
     bool load_scene_flow_editor(const ReplayEngine::Assets::AssetRecord& record);
     bool save_scene_flow_editor();
+    bool undo_scene_flow_edit();
+    bool redo_scene_flow_edit();
     void draw_scene_flow_panel();
     void sync_runtime_scene_flow_asset();
 
