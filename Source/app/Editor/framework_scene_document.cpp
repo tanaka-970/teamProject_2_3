@@ -141,7 +141,7 @@ void framework::handle_viewport_selection()
         }
         if (best_name != nullptr)
         {
-            rig_selected_bone = *best_name;
+            select_rig_bone(*best_name, ImGui::GetIO().KeyCtrl);
             object_editor_context.Selection().Select(
                 ReplayEngine::Core::ObjectID{ best_owner });
             viewport_drag_selecting = false;

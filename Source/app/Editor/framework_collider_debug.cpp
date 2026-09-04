@@ -20,6 +20,7 @@
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Physics/CollisionLayers.h"
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 
@@ -327,8 +328,8 @@ void framework::draw_collider_debug_overlay()
                     }
                     if (depth > rig_max_depth) continue;
                 }
-                const bool picked = !rig_selected_bone.empty() &&
-                    bone.name == rig_selected_bone;
+                const bool picked = std::find(rig_selected_bones.begin(),
+                    rig_selected_bones.end(), bone.name) != rig_selected_bones.end();
                 ImVec2 joint{};
                 if (!project_world_to_screen(view_projection, bone.world,
                     main_origin, main_size, joint))

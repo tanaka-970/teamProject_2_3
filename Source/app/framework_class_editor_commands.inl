@@ -50,9 +50,16 @@
                     handled = (wparam == 'Z') ? undo_sprite_atlas_edit() : redo_sprite_atlas_edit();
                 else if (active_editor_workspace == editor_workspace::motion)
                 {
-                    if (wparam == 'Z') undo_motion_edit();
-                    else redo_motion_edit();
-                    handled = true;
+                    // Motion の履歴と骨のポーズは別物。リグパネルの上にいる間だけ
+                    // 骨側へ回す。そうしないとどちらが戻るのか予測できない。
+                    if (motion_rig_panel_hovered)
+                        handled = (wparam == 'Z') ? undo_rig_pose_edit() : redo_rig_pose_edit();
+                    if (!handled)
+                    {
+                        if (wparam == 'Z') undo_motion_edit();
+                        else redo_motion_edit();
+                        handled = true;
+                    }
                 }
                 else if (show_scene_flow_panel && scene_flow_editor_loaded &&
                     !project_browser_focused)

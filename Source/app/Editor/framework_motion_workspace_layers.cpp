@@ -573,6 +573,7 @@ void framework::draw_motion_rig()
         return;
     }
 
+    motion_rig_panel_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
     ImGui::Checkbox(u8"シーンビューへ描く", &show_rig_debug_draw);
     ReplayEngine::Editor::EditorHelp::Item("rig.draw",
         u8"骨を持つモデルのリグを Scene View へ重ねて描きます。");
@@ -649,8 +650,10 @@ void framework::draw_motion_rig()
                 continue;
             std::string label = bone.name;
             if (pose.find(bone.name) != pose.end()) label += u8"  ●";
-            if (ImGui::Selectable(label.c_str(), rig_selected_bone == bone.name))
-                rig_selected_bone = bone.name;
+            const bool picked = std::find(rig_selected_bones.begin(),
+                rig_selected_bones.end(), bone.name) != rig_selected_bones.end();
+            if (ImGui::Selectable(label.c_str(), picked))
+                select_rig_bone(bone.name, ImGui::GetIO().KeyCtrl);
         }
     }
     ImGui::EndChild();
@@ -663,15 +666,40 @@ void framework::draw_motion_rig()
     }
     ImGui::Separator();
     ImGui::Text(u8"選択中: %s", rig_selected_bone.c_str());
+    if (rig_selected_bones.size() > 1)
+    {
+        ImGui::SameLine();
+        ImGui::TextDisabled(u8"ほか %zu 本", rig_selected_bones.size() - 1);
+    }
     // 上のツールバーは遠いので、いまの操作をここにも出す。Shift+W/E/R で変わる。
     const ReplayEngine::Editor::GizmoOperation rig_op = transform_gizmo.Operation();
-    ImGui::TextDisabled(u8"ギズモ: %s",
+    ImGui::TextDisabled(u8"ギズモ: %s   Ctrl+クリックで複数選択",
         rig_op == ReplayEngine::Editor::GizmoOperation::Translate ? u8"移動"
         : rig_op == ReplayEngine::Editor::GizmoOperation::Rotate ? u8"回転" : u8"拡縮");
+
     rig_pose_override& entry = pose[rig_selected_bone];
+    // 数字での編集も履歴へ積む。掴み始めで控え、離したところで確定する。
+    const bool was_active = ImGui::IsAnyItemActive();
     ImGui::DragFloat3(u8"移動", &entry.translation.x, 0.01f);
     ImGui::DragFloat3(u8"回転", &entry.rotation.x, 0.5f, -360.0f, 360.0f, "%.1f");
     ImGui::DragFloat3(u8"拡縮", &entry.scale.x, 0.01f, 0.01f, 10.0f);
-    if (ImGui::Button(u8"この骨を戻す")) pose.erase(rig_selected_bone);
+    if (ImGui::IsItemActivated() || (!was_active && ImGui::IsAnyItemActive()))
+        begin_rig_pose_edit(owner, u8"骨のポーズ");
+    if (ImGui::IsItemDeactivatedAfterEdit() || (was_active && !ImGui::IsAnyItemActive()))
+        commit_rig_pose_edit();
+
+    if (ImGui::Button(u8"この骨を戻す"))
+    {
+        begin_rig_pose_edit(owner, u8"骨のポーズを戻す");
+        for (const std::string& name : rig_selected_bones) pose.erase(name);
+        pose.erase(rig_selected_bone);
+        commit_rig_pose_edit();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(u8"戻す")) undo_rig_pose_edit();
+    ImGui::SameLine();
+    if (ImGui::Button(u8"やり直す")) redo_rig_pose_edit();
+    ImGui::SameLine();
+    ImGui::TextDisabled(u8"履歴 %zu/%zu", rig_pose_history_cursor, rig_pose_history.size());
     ImGui::End();
 }

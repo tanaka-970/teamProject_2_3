@@ -329,6 +329,14 @@ private:
     void draw_motion_graph_editor();
     void draw_motion_rig();
     bool draw_bone_transform_gizmo();
+    void select_rig_bone(const std::string& name, bool additive);
+    void apply_rig_pose_to_selection(std::uint64_t owner,
+        const std::vector<rig_debug_bone>& bones, const rig_pose_override& primary_start,
+        const rig_pose_override& primary_now, int operation);
+    void begin_rig_pose_edit(std::uint64_t owner, std::string label);
+    void commit_rig_pose_edit();
+    bool undo_rig_pose_edit();
+    bool redo_rig_pose_edit();
     bool project_world_to_screen(const DirectX::XMMATRIX& view_projection,
         const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
         ImVec2& out) const noexcept;
