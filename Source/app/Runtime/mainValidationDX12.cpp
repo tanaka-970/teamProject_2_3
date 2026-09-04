@@ -449,7 +449,9 @@ namespace ReplayEngine::Runtime::Detail
             skinned_draw.surface.base_color_texture_key = kDdsValidationKey;
             skinned_draw.surface.base_color = { 0.25f, 0.75f, 0.95f, 1.0f };
             skinned_draw.motion_key = "validation:scene3d-motion";
-            skinned_draw.bone_palette.push_back(DirectX::XMFLOAT4X4{
+            skinned_draw.bone_palette =
+                std::make_shared<std::vector<DirectX::XMFLOAT4X4>>();
+            skinned_draw.bone_palette->push_back(DirectX::XMFLOAT4X4{
                 1,0,0,0, 0,1,0,0, 0,0,1,0,
                 static_cast<float>(submitted_frame & 1u) * 0.01f,0,0,1 });
             static_scene.skinned_draws.push_back(std::move(skinned_draw));

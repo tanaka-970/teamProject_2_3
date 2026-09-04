@@ -1481,8 +1481,9 @@ bool framework::build_dx12_static_scene(
                     }
                     skinned_palette_size_cache.insert_or_assign(mesh_key, palette_size);
                 }
-                std::vector<DirectX::XMFLOAT4X4> palette(palette_size,
-                    DirectX::XMFLOAT4X4{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 });
+                auto shared_palette = std::make_shared<std::vector<DirectX::XMFLOAT4X4>>(
+                    palette_size, DirectX::XMFLOAT4X4{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 });
+                std::vector<DirectX::XMFLOAT4X4>& palette = *shared_palette;
 
                 const auto pose_for_object = object_rig_pose.find(source_item.owner.Value());
                 const bool has_pose = pose_for_object != object_rig_pose.end() &&
@@ -1734,7 +1735,7 @@ bool framework::build_dx12_static_scene(
                     skinned_draw.motion_key = std::to_string(source_item.owner.Value()) + ":" +
                         mesh_key + ":" + std::to_string(start);
                     resolve_normal_adjust(source_item, draw, &mesh, keyframe);
-                    skinned_draw.bone_palette = palette;
+                    skinned_draw.bone_palette = shared_palette;
                     skinned_draw.morph_weight = morph_weight;
                     submission.skinned_draws.push_back(std::move(skinned_draw));
                 };
