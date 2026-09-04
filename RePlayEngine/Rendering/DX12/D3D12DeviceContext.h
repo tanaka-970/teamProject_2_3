@@ -13,6 +13,7 @@
 #include "D3D12RenderItemBatch.h"
 #include "D3D12ResourceStateTracker.h"
 #include "D3D12ScreenBounds.h"
+#include "../Frustum.h"
 #include "D3D12ShaderCompiler.h"
 #include "D3D12UploadContext.h"
 #include "../ShaderStack/ShaderLayerStack.h"
@@ -945,6 +946,19 @@ namespace ReplayEngine::Rendering::DX12
         {
             return last_scene_vertex_count_;
         }
+        // カメラの視錐台に入っているぶん。まだ捨ててはいないので描画数とは別に持つ。
+        std::uint64_t LastVisibleTriangleCount() const noexcept
+        {
+            return last_visible_triangle_count_;
+        }
+        std::uint64_t LastVisibleVertexCount() const noexcept
+        {
+            return last_visible_vertex_count_;
+        }
+        std::uint64_t LastVisibleDrawCallCount() const noexcept
+        {
+            return last_visible_draw_call_count_;
+        }
         bool HasStaticMesh(const std::string& key) const noexcept
         {
             return static_mesh_cache_.find(key) != static_mesh_cache_.end();
@@ -1312,6 +1326,12 @@ namespace ReplayEngine::Rendering::DX12
         std::uint32_t last_scene_draw_call_count_ = 0;
         std::uint64_t last_scene_triangle_count_ = 0;
         std::uint64_t last_scene_vertex_count_ = 0;
+        std::uint64_t last_visible_triangle_count_ = 0;
+        std::uint64_t last_visible_vertex_count_ = 0;
+        std::uint64_t last_visible_draw_call_count_ = 0;
+        // GBuffer を描いている間だけ true。影パスは別のカメラなので数えない。
+        bool counting_visible_ = false;
+        Frustum visible_frustum_;
         struct UIEffectHistoryEntry final
         {
             D3D12OffscreenTarget target{};

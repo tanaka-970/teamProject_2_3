@@ -72,6 +72,24 @@ void framework::draw_render_stats_overlay()
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip(u8"同じメッシュを複数スロットで描くと頂点は重複して数えます。");
 
+        // カメラの視錐台に入っている量。視錐台カリングを入れたときの上限がこれ。
+        const std::uint64_t visible_triangles = dx12_device_context.LastVisibleTriangleCount();
+        const std::uint64_t visible_vertices = dx12_device_context.LastVisibleVertexCount();
+        const std::uint64_t visible_draws = dx12_device_context.LastVisibleDrawCallCount();
+        ImGui::Text(u8"カメラ内 三角形 %s / 頂点 %s / 描画 %s 回",
+            separated(visible_triangles).c_str(), separated(visible_vertices).c_str(),
+            separated(visible_draws).c_str());
+        {
+            const std::uint64_t gbuffer_triangles =
+                dx12_device_context.LastSceneTriangleCount();
+            const float ratio = gbuffer_triangles > 0
+                ? 100.0f * static_cast<float>(visible_triangles) /
+                    static_cast<float>(gbuffer_triangles) : 0.0f;
+            ImGui::TextDisabled(u8"  画面外を捨てれば全体の %.1f%% まで落とせる見込み", ratio);
+        }
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(u8"GBuffer パスだけを視錐台で判定した数です。影のパスは別のカメラなので含みません。まだ実際には捨てていません。");
+
         // VSync 待ちを除いた実力値。BeginFrame は前フレームの GPU 完了待ちで、仕事ではない。
         double gpu_wait_ms = 0.0;
         for (const auto& scope : stats.Scopes())

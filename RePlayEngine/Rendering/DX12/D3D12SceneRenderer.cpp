@@ -2088,6 +2088,11 @@ namespace ReplayEngine::Rendering::DX12
         last_model_effect_stack_count_ = 0;
         last_scene_draw_call_count_ = 0;
         last_scene_triangle_count_ = 0;
+        last_visible_draw_call_count_ = 0;
+        last_visible_triangle_count_ = 0;
+        last_visible_vertex_count_ = 0;
+        counting_visible_ = false;
+        visible_frustum_.BuildFromViewProjection(current_frame_constants_.view_projection);
         last_scene_vertex_count_ = 0;
         last_screen_effect_stack_count_ = 0;
         last_shadow_coverage_draw_count_ = 0;
@@ -2505,8 +2510,20 @@ namespace ReplayEngine::Rendering::DX12
                 command_list_->DrawIndexedInstanced(count, 1, start, 0, 0);
                 ++last_scene_draw_call_count_;
                 last_scene_triangle_count_ += count / 3u;
-                last_scene_vertex_count_ += vb.StrideInBytes != 0
+                const std::uint64_t vertex_count = vb.StrideInBytes != 0
                     ? vb.SizeInBytes / vb.StrideInBytes : 0u;
+                last_scene_vertex_count_ += vertex_count;
+                // 視錐台に入るぶんを別に数える。境界が無い物は入っている扱いにする。
+                if (counting_visible_ && visible_frustum_.Valid() &&
+                    (!draw.material_bounds.valid ||
+                        visible_frustum_.IntersectsTransformedAabb(
+                            draw.material_bounds.minimum, draw.material_bounds.maximum,
+                            draw.world)))
+                {
+                    ++last_visible_draw_call_count_;
+                    last_visible_triangle_count_ += count / 3u;
+                    last_visible_vertex_count_ += vertex_count;
+                }
             }
         };
         const auto bind_surface = [this, &allocate_cb, scene_gpu, light_gpu, identity_bone_gpu,
@@ -3049,6 +3066,8 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->ClearRenderTargetView(target.rtv.cpu, clear, 0, nullptr);
         command_list_->SetGraphicsRootSignature(scene3d_geometry_root_signature_.Get());
 
+        // ここから GBuffer。カメラ内の量はこのパスの数だけを見る。
+        counting_visible_ = true;
         for (const D3D12StaticDrawItem& draw : submission.draws)
         {
             // 分離したモデルは色を書かず、モーションベクターだけ書く。
@@ -3093,6 +3112,7 @@ namespace ReplayEngine::Rendering::DX12
             draw_mesh(*it->second, draw.surface);
         }
 
+        counting_visible_ = false;
         for (Scene3DTarget& target : scene3d_gbuffer_)
         {
             if (!resource_state_tracker_.Transition(command_list_.Get(), target.resource.Get(),
