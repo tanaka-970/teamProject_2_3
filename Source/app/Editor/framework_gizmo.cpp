@@ -1,6 +1,6 @@
 ﻿// Editor Gizmo のうち、Scene Grid と Transform Gizmo の描画・操作だけを持つ。
 //
-//   framework_gizmo.cpp        ... Grid と Transform Gizmo（このファイル）
+//   framework_gizmo.cpp        ... Grid と Transform Gizmo、骨のポーズ（このファイル）
 //   framework_gizmo_pivot.cpp  ... Pivot 解決と Mesh Surface Snap
 
 #include "framework.h"
@@ -13,6 +13,8 @@
 #include "../../RePlayEngine/Physics/CookedMeshCollision.h"
 
 #include "imgui/ImGuizmo.h"
+
+#include "../../RePlayEngine/Motion/RigClip.h"
 
 #include <algorithm>
 #include <cmath>
@@ -406,6 +408,128 @@ bool framework::handle_normal_adjust_gizmo()
         normal_adjust_gizmo_dragging = false;
         object_editor_context.SetStatus("Normal Adjust の中心を確定しました");
     }
+    return true;
+}
+
+// 骨の階層のパス。名前だけだと同名の骨で衝突するので親から連ねる。
+static std::string RigBonePath(const std::vector<framework::rig_debug_bone>& bones,
+    std::size_t index)
+{
+    std::string path = bones[index].name;
+    for (int parent = bones[index].parent;
+        parent >= 0 && parent < static_cast<int>(bones.size());
+        parent = bones[static_cast<std::size_t>(parent)].parent)
+        path = bones[static_cast<std::size_t>(parent)].name + "/" + path;
+    return path;
+}
+
+// 骨構成の指紋。構成の違うモデルへ読み込ませないための照合に使う。
+static std::string RigSkeletonHash(const std::vector<framework::rig_debug_bone>& bones)
+{
+    std::uint64_t hash = 1469598103934665603ull;
+    for (const framework::rig_debug_bone& bone : bones)
+        for (const char character : bone.name)
+        {
+            hash ^= static_cast<std::uint8_t>(character);
+            hash *= 1099511628211ull;
+        }
+    char text[32]{};
+    std::snprintf(text, sizeof(text), "%016llx", static_cast<unsigned long long>(hash));
+    return text;
+}
+
+// いまのポーズを RigClip の time=0 の 1 キーとして書き出す。
+// キーを増やせばそのままアニメーションになる形にしておく（RIG_DESIGN.txt）。
+bool framework::save_rig_pose(const std::filesystem::path& path)
+{
+    using namespace DirectX;
+    const ReplayEngine::Core::GameObject* target =
+        active_object_scene().FindGameObjectByID(object_editor_context.Selection().Primary());
+    if (target == nullptr) return false;
+    const auto rig = object_rig_debug_bones.find(target->ID().Value());
+    if (rig == object_rig_debug_bones.end() || rig->second.empty()) return false;
+    const auto pose = object_rig_pose.find(target->ID().Value());
+
+    ReplayEngine::Motion::RigClip clip;
+    clip.name = path.stem().u8string();
+    clip.model_path = target->Name();
+    clip.skeleton_hash = RigSkeletonHash(rig->second);
+    clip.duration = 0.0f;
+    if (pose != object_rig_pose.end())
+    {
+        for (std::size_t index = 0; index < rig->second.size(); ++index)
+        {
+            const auto entry = pose->second.find(rig->second[index].name);
+            if (entry == pose->second.end()) continue;
+            const rig_pose_override& value = entry->second;
+            ReplayEngine::Motion::RigTrack track;
+            track.bone_path = RigBonePath(rig->second, index);
+            ReplayEngine::Motion::RigKey key;
+            key.time = 0.0f;
+            key.transform.scale = value.scale;
+            key.transform.translation = value.translation;
+            XMStoreFloat4(&key.transform.rotation, XMQuaternionRotationRollPitchYaw(
+                XMConvertToRadians(value.rotation.x), XMConvertToRadians(value.rotation.y),
+                XMConvertToRadians(value.rotation.z)));
+            track.keys.push_back(key);
+            clip.tracks.push_back(std::move(track));
+        }
+    }
+
+    std::string error;
+    if (!ReplayEngine::Motion::RigClip::SaveToFile(path, clip, error))
+    {
+        object_editor_context.SetStatus(error);
+        return false;
+    }
+    object_editor_context.SetStatus(u8"ポーズを保存しました: " + path.filename().u8string());
+    return true;
+}
+
+// 読み込み。骨は名前で引くので、パスの末尾だけを見る。
+bool framework::load_rig_pose(const std::filesystem::path& path)
+{
+    using namespace DirectX;
+    const ReplayEngine::Core::GameObject* target =
+        active_object_scene().FindGameObjectByID(object_editor_context.Selection().Primary());
+    if (target == nullptr) return false;
+    const std::uint64_t owner = target->ID().Value();
+    const auto rig = object_rig_debug_bones.find(owner);
+    if (rig == object_rig_debug_bones.end() || rig->second.empty()) return false;
+
+    ReplayEngine::Motion::RigClip clip;
+    std::string error;
+    if (!ReplayEngine::Motion::RigClip::LoadFromFile(path, clip, error))
+    {
+        object_editor_context.SetStatus(error);
+        return false;
+    }
+    if (!clip.skeleton_hash.empty() && clip.skeleton_hash != RigSkeletonHash(rig->second))
+    {
+        object_editor_context.SetStatus(u8"骨の構成が違うので読み込めません: " +
+            path.filename().u8string());
+        return false;
+    }
+
+    begin_rig_pose_edit(owner, u8"ポーズを読み込む");
+    auto& pose = object_rig_pose[owner];
+    pose.clear();
+    for (const ReplayEngine::Motion::RigTrack& track : clip.tracks)
+    {
+        if (track.keys.empty()) continue;
+        const std::size_t separator = track.bone_path.find_last_of('/');
+        const std::string name = separator == std::string::npos
+            ? track.bone_path : track.bone_path.substr(separator + 1);
+        const ReplayEngine::Motion::RigTransform& transform = track.keys.front().transform;
+        rig_pose_override entry;
+        entry.translation = transform.translation;
+        entry.scale = transform.scale;
+        entry.rotation = BoneEulerDegrees(
+            XMMatrixRotationQuaternion(XMLoadFloat4(&transform.rotation)));
+        pose[name] = entry;
+    }
+    commit_rig_pose_edit();
+    object_editor_context.SetStatus(u8"ポーズを読み込みました: " + path.filename().u8string());
     return true;
 }
 

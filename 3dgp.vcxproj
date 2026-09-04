@@ -490,6 +490,7 @@
     <ClCompile Include="RePlayEngine\Motion\EasingCurveAsset.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEasing.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\RigClip.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionAssetLoad.cpp" />
     <ClCompile Include="RePlayEngine\Motion\CompositionAsset.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEvaluator.cpp" />

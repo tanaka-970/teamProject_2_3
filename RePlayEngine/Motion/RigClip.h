@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -58,5 +59,14 @@ namespace ReplayEngine::Motion
                 if (track.bone_path == path) return &track;
             return nullptr;
         }
+
+        static constexpr const char* file_extension = ".replayrig";
+        static constexpr int current_version = 1;
+
+        // MotionAsset と同じ行ベースのテキスト。差分が読めて Git にも載る。
+        static bool SaveToFile(const std::filesystem::path& path, const RigClip& clip,
+            std::string& error);
+        static bool LoadFromFile(const std::filesystem::path& path, RigClip& clip,
+            std::string& error);
     };
 }

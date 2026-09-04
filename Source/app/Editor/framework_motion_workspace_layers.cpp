@@ -562,7 +562,24 @@ void framework::draw_motion_layers()
     ImGui::End();
 }
 
-// Motion リグ。骨を選んでポーズを付ける。保存はしないので実行中だけ持つ。
+// ポーズの保存先/読み込み元を選ぶ。Scene と同じ Win32 ダイアログを使う。
+static std::filesystem::path browse_rig_pose_file(bool save)
+{
+    wchar_t filename[32768]{};
+    OPENFILENAMEW dialog{};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.lpstrFile = filename;
+    dialog.nMaxFile = static_cast<DWORD>(_countof(filename));
+    dialog.lpstrFilter = L"RePlay Rig Pose (*.replayrig)\0*.replayrig\0";
+    dialog.lpstrDefExt = L"replayrig";
+    dialog.lpstrTitle = save ? L"ポーズを保存" : L"ポーズを読み込む";
+    dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST |
+        (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+    const BOOL accepted = save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog);
+    return accepted ? std::filesystem::path(filename) : std::filesystem::path{};
+}
+
+// Motion リグ。骨を選んでポーズを付ける。ポーズは .replayrig へ保存できる。
 void framework::draw_motion_rig()
 {
     if (!show_motion_rig_panel) return;
@@ -637,7 +654,24 @@ void framework::draw_motion_rig()
     ImGui::SetNextItemWidth(-1.0f);
     ImGui::InputTextWithHint("##MotionRigSearch", u8"骨を検索...",
         rig_filter.data(), rig_filter.size());
-    if (ImGui::Button(u8"すべて戻す")) pose.clear();
+    if (ImGui::Button(u8"すべて戻す"))
+    {
+        begin_rig_pose_edit(owner, u8"ポーズをすべて戻す");
+        pose.clear();
+        commit_rig_pose_edit();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(u8"ポーズを保存..."))
+    {
+        const std::filesystem::path chosen = browse_rig_pose_file(true);
+        if (!chosen.empty()) save_rig_pose(chosen);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(u8"読み込む..."))
+    {
+        const std::filesystem::path chosen = browse_rig_pose_file(false);
+        if (!chosen.empty()) load_rig_pose(chosen);
+    }
     ReplayEngine::Editor::EditorHelp::Item("button.rig.reset_all",
         u8"この GameObject に付けたポーズをすべて捨てます。");
 

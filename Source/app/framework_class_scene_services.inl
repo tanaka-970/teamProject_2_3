@@ -337,6 +337,8 @@ private:
     void commit_rig_pose_edit();
     bool undo_rig_pose_edit();
     bool redo_rig_pose_edit();
+    bool save_rig_pose(const std::filesystem::path& path);
+    bool load_rig_pose(const std::filesystem::path& path);
     bool project_world_to_screen(const DirectX::XMMATRIX& view_projection,
         const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
         ImVec2& out) const noexcept;
