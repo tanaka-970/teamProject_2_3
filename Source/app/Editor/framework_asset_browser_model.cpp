@@ -111,7 +111,8 @@ bool framework::prewarm_model_asset(const std::filesystem::path& path)
             if (!std::filesystem::exists(cache, error)) return false;
             return skinned_mesh_cache.Load(path, [this, path]
             {
-                return std::make_shared<skinned_mesh>(path.string().c_str(), false, 0.0f);
+                // path をそのまま渡す。string() は ACP へ落とすので非ASCII名が壊れる。
+                return std::make_shared<skinned_mesh>(path, false, 0.0f);
             }) != nullptr;
         }
     }
@@ -153,7 +154,7 @@ bool framework::load_model_asset_async(const std::wstring& filename)
                 }
                 skinned_mesh_cache.Load(path, [this, path]
                 {
-                    return std::make_shared<skinned_mesh>(path.string().c_str());
+                    return std::make_shared<skinned_mesh>(path);
                 });
                 return;
             }
@@ -208,7 +209,7 @@ bool framework::load_model_asset_now(const std::wstring& filename)
 
             auto candidate = skinned_mesh_cache.Load(path, [this, path]
             {
-                return std::make_shared<skinned_mesh>(path.string().c_str());
+                return std::make_shared<skinned_mesh>(path);
             });
             skinned_meshes[1] = std::move(candidate);
             stage_gltf_model.reset();

@@ -354,7 +354,8 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
     std::unique_ptr<skinned_mesh> loaded;
     try
     {
-        loaded = std::make_unique<skinned_mesh>(source.string().c_str(), false, 0.0f);
+        // source をそのまま渡す。string() は ACP へ落とすので非ASCII名が壊れる。
+        loaded = std::make_unique<skinned_mesh>(source, false, 0.0f);
     }
     catch (...)
     {
