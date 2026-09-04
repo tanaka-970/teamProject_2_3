@@ -337,6 +337,10 @@ private:
     void commit_rig_pose_edit();
     bool undo_rig_pose_edit();
     bool redo_rig_pose_edit();
+    // 既存のモデルを地形にする。対象は GameObject で受ける。
+    // Components の型はこの .inl からは見えないため。
+    bool build_landscape_from_model(ReplayEngine::Core::GameObject& object,
+        const std::string& asset_guid, std::string& error);
     bool save_rig_pose(const std::filesystem::path& path);
     bool load_rig_pose(const std::filesystem::path& path);
     bool project_world_to_screen(const DirectX::XMMATRIX& view_projection,
