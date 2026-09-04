@@ -1333,6 +1333,8 @@ namespace ReplayEngine::Rendering::DX12
         bool counting_visible_ = false;
         // 不具合の切り分け時は false にしてカメラ視錐台カリングを止める。
         bool frustum_culling_enabled_ = true;
+        // 不具合の切り分け時は false にして影視錐台カリングを止める。
+        bool shadow_culling_enabled_ = true;
         Frustum visible_frustum_;
         struct UIEffectHistoryEntry final
         {

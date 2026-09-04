@@ -2912,13 +2912,18 @@ namespace ReplayEngine::Rendering::DX12
 
         const auto render_shadow_casters = [this, &submission, &prepared_skinned,
             &bind_shadow_surface, &draw_mesh, &has_shadow_coverage, identity_bone_gpu](
-            D3D12_GPU_VIRTUAL_ADDRESS pass_gpu) noexcept -> bool
+            D3D12_GPU_VIRTUAL_ADDRESS pass_gpu, const Frustum* shadow_frustum) noexcept -> bool
         {
             command_list_->SetGraphicsRootSignature(scene3d_shadow_root_signature_.Get());
             command_list_->SetGraphicsRootConstantBufferView(1, pass_gpu);
             for (const D3D12StaticDrawItem& draw : submission.draws)
             {
                 if (!draw.cast_shadow) continue;
+                if (shadow_culling_enabled_ && shadow_frustum != nullptr &&
+                    draw.material_bounds.valid &&
+                    !shadow_frustum->IntersectsTransformedAabb(draw.material_bounds.minimum,
+                        draw.material_bounds.maximum, draw.world))
+                    continue;
                 const auto it = static_mesh_cache_.find(draw.mesh_key);
                 if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
                 const UINT alpha_clip = (draw.alpha_mode != D3D12StaticAlphaMode::Opaque ||
@@ -2970,9 +2975,11 @@ namespace ReplayEngine::Rendering::DX12
                     1.0f, 0, 0, nullptr);
                 Scene3DShadowPassConstants pass{};
                 pass.view_projection = submission.directional_shadow.view_projection[cascade];
+                Frustum shadow_frustum;
+                shadow_frustum.BuildFromViewProjection(pass.view_projection);
                 D3D12_GPU_VIRTUAL_ADDRESS pass_gpu = 0;
                 if (!allocate_cb(&pass, sizeof(pass), pass_gpu) ||
-                    !render_shadow_casters(pass_gpu))
+                    !render_shadow_casters(pass_gpu, &shadow_frustum))
                     return false;
             }
             if (!resource_state_tracker_.Transition(command_list_.Get(),
@@ -3007,7 +3014,7 @@ namespace ReplayEngine::Rendering::DX12
                 pass.view_projection = submission.local_shadows.slices[slice].view_projection;
                 D3D12_GPU_VIRTUAL_ADDRESS pass_gpu = 0;
                 if (!allocate_cb(&pass, sizeof(pass), pass_gpu) ||
-                    !render_shadow_casters(pass_gpu))
+                    !render_shadow_casters(pass_gpu, nullptr))
                     return false;
             }
             if (!resource_state_tracker_.Transition(command_list_.Get(),
