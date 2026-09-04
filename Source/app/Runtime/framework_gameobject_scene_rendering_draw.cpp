@@ -493,7 +493,8 @@ bool framework::build_dx12_static_scene(
     {
         if (input_path.empty()) return {};
         // 解決結果はパスごとに不変。描画中に exists() を呼ぶと毎フレーム効いてくる。
-        const std::string input_key = input_path.generic_string();
+        // キーは UTF-8 で持つ。generic_string() は ACP へ落とせない文字で例外を投げる。
+        const std::string input_key = input_path.generic_u8string();
         std::string key;
         const auto cached_key = texture_path_resolve_cache.find(input_key);
         if (cached_key != texture_path_resolve_cache.end())
@@ -510,7 +511,7 @@ bool framework::build_dx12_static_scene(
                     resolved = content_path(resolved);
             }
             resolved = resolved.lexically_normal();
-            key = resolved.generic_string();
+            key = resolved.generic_u8string();
             texture_path_resolve_cache.insert_or_assign(input_key, key);
         }
         if (key.empty()) return {};
@@ -519,7 +520,7 @@ bool framework::build_dx12_static_scene(
         {
             D3D12StaticTextureSource source;
             source.key = key;
-            source.source_path = std::filesystem::path(key);
+            source.source_path = std::filesystem::u8path(key);
             submission.texture_sources.push_back(std::move(source));
         }
         return key;
@@ -537,7 +538,7 @@ bool framework::build_dx12_static_scene(
                 resolved = content_path(resolved);
         }
         resolved = resolved.lexically_normal();
-        const std::string key = "sky:" + resolved.generic_string();
+        const std::string key = "sky:" + resolved.generic_u8string();
         if (key == "sky:") return {};
         if (!dx12_device_context.HasStaticTexture(key) &&
             texture_source_keys.insert(key).second)
