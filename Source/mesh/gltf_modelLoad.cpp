@@ -126,7 +126,8 @@ namespace
 // glTF経路とメッシュキャッシュ経路の両方から呼ぶ。
 bool gltf_model::Load(const std::string& filename)
 {
-    std::string extension = std::filesystem::path(filename).extension().string();
+    // filename は UTF-8。path(std::string) は ACP 解釈なので変換に失敗して例外を投げる。
+    std::string extension = std::filesystem::u8path(filename).extension().string();
     std::transform(extension.begin(), extension.end(), extension.begin(),
         [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
     if (extension != ".gltf" && extension != ".glb")
