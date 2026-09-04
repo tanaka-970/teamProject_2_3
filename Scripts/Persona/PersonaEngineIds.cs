@@ -6,7 +6,7 @@ namespace Game;
 public readonly struct PersonaEngineIds
 {
     public const string MotionEventGuid = "a1000000000000000000000000000008";
-    public const string MotionHitEventName = "persona.hit";
+    public const string MotionHitEventName = "persona.hit";//
 
     public static readonly uint ScriptComponent = TypeId("ScriptComponent");
     public static readonly uint MotionPlayerComponent = TypeId("MotionPlayerComponent");

@@ -1,13 +1,11 @@
-#pragma once
+﻿#pragma once
 
 #include <DirectXMath.h>
 
 // TAA用モーションベクターのフレーム状態。
 //
-// メッシュ側は「前フレームの自分の姿勢」しか持っていないため、
-// 前フレームのビュー射影とジッター量はフレーム共通の値としてここから受け取る。
-// framework が render() の先頭で Frame() を更新し、
-// skinned_mesh / static_mesh が G-Buffer 描画時に参照する。
+// framework が render() の先頭で Frame() を更新し,b
+// skinned_mesh / static_mesh が G-Buffer 描画時に参照する。//
 namespace motion_vectors
 {
     // Shader\motion_vector_common.hlsli の

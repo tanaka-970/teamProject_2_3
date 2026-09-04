@@ -1,4 +1,5 @@
 #include "RigClip.h"
+#include "../Rendering/RenderStats.h"
 
 #include <fstream>
 #include <iomanip>
@@ -77,6 +78,7 @@ namespace ReplayEngine::Motion
     bool RigClip::LoadFromFile(const std::filesystem::path& path, RigClip& clip,
         std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/RigClip");
         std::ifstream file(path);
         file.imbue(std::locale::classic());
         if (!file)

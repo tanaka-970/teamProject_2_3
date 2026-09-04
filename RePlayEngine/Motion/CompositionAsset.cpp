@@ -1,4 +1,5 @@
 ﻿#include "CompositionAsset.h"
+#include "../Rendering/RenderStats.h"
 
 #include <algorithm>
 #include <fstream>
@@ -12,6 +13,7 @@ namespace ReplayEngine::Motion
     bool CompositionAsset::LoadFromFile(const std::filesystem::path& path,
         CompositionAsset& out, std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/Composition");
         std::ifstream file(path);
         if (!file)
         {

@@ -1,4 +1,5 @@
 ﻿#include "EffectPresetAsset.h"
+#include "../RenderStats.h"
 
 #include "../../Assets/AssetDatabase.h"
 #include "../../Components/UI/UIEffectStackComponent.h"
@@ -131,6 +132,7 @@ namespace ReplayEngine::Rendering::Effects
     bool EffectPresetAsset::LoadFromFile(const std::filesystem::path& path,
         std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/EffectPreset");
         std::ifstream stream(path, std::ios::binary);
         if (!stream)
         {

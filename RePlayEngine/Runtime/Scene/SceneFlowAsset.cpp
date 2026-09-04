@@ -1,4 +1,5 @@
 #include "SceneFlowAsset.h"
+#include "../../Rendering/RenderStats.h"
 
 #include <algorithm>
 #include <fstream>
@@ -264,6 +265,7 @@ namespace ReplayEngine::Runtime
     bool SceneFlowAsset::Load(SceneFlowAsset& asset,
         const std::filesystem::path& path, std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/SceneFlow");
         std::ifstream stream(path, std::ios::binary);
         if (!stream)
         {
