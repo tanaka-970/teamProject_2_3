@@ -352,6 +352,7 @@ private:
     float ui_button_scale{ 1.0f };      // ボタンとメニューの余白倍率
     float ui_font_scale{ 1.0f };        // 文字の大きさ倍率
     float ui_text_color[3]{ 1.0f, 1.0f, 1.0f };   // 文字色（既定は白）
+    float ui_texture_preview_scale{ 4.5f };  // マテリアルスロットの見本の大きさ（文字高の倍率）
     bool  ui_style_overridden{ false };  // 一度でも触ったか
     std::vector<ReplayEngine::Editor::EditorStylePreset> editor_style_presets;
     int active_editor_style_preset_index{ -1 };

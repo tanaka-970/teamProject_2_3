@@ -364,6 +364,7 @@ bool framework::build_dx12_static_scene(
 {
     using namespace ReplayEngine::Rendering;
     using namespace ReplayEngine::Rendering::DX12;
+    using ReplayEngine::Components::MeshMaterialSlot;
 
     // 呼出し側がフレームごとに選択した背景色とポストプロセス設定は、
     // Scene内の描画項目を集め直しても失ってはいけない。
@@ -552,17 +553,22 @@ bool framework::build_dx12_static_scene(
         return key;
     };
 
-    const auto add_material_texture = [&add_texture](
-        D3D12StaticDrawItem& draw, std::uint32_t slot,
-        const std::filesystem::path& input_path, std::uint32_t semantic_bit)
+    const auto add_material_texture_key = [](D3D12StaticDrawItem& draw,
+        std::uint32_t slot, const std::string& key, std::uint32_t semantic_bit)
     {
-        const std::string key = add_texture(input_path);
         if (key.empty()) return;
         D3D12StaticMaterialTexture mapped;
         mapped.slot = slot;
         mapped.texture_key = key;
         draw.material_textures.push_back(std::move(mapped));
         draw.material_texture_semantic_mask |= semantic_bit;
+    };
+
+    const auto add_material_texture = [&add_texture, &add_material_texture_key](
+        D3D12StaticDrawItem& draw, std::uint32_t slot,
+        const std::filesystem::path& input_path, std::uint32_t semantic_bit)
+    {
+        add_material_texture_key(draw, slot, add_texture(input_path), semantic_bit);
     };
 
     const auto add_asset_texture = [this, &add_texture](
@@ -573,6 +579,14 @@ bool framework::build_dx12_static_scene(
             asset_database.FindByGuid(asset_guid);
         if (record == nullptr) return {};
         return add_texture(content_path(record->source_path));
+    };
+
+    const auto add_model_texture = [&add_texture, &add_asset_texture](
+        const std::filesystem::path& model_texture,
+        const std::string* override_texture) -> std::string
+    {
+        return override_texture != nullptr && !override_texture->empty()
+            ? add_asset_texture(*override_texture) : add_texture(model_texture);
     };
 
     struct BaseTextureBinding final
@@ -904,6 +918,15 @@ bool framework::build_dx12_static_scene(
         if (material == nullptr) return nullptr;
         out_asset = candidate;
         return material;
+    };
+
+    const auto resolve_texture_slot = [](const RenderItem& source_item,
+        std::size_t subset_index) -> const MeshMaterialSlot*
+    {
+        if (source_item.material_slots == nullptr ||
+            subset_index >= static_cast<std::size_t>(source_item.material_slot_count))
+            return nullptr;
+        return &source_item.material_slots[subset_index];
     };
 
     const auto make_mesh_source = [&submission, &mesh_source_keys, this](
@@ -1626,6 +1649,8 @@ bool framework::build_dx12_static_scene(
                     const std::string* slot_asset = nullptr;
                     const MaterialAsset* slot_material =
                         resolve_material_slot(source_item, subset_index, slot_asset);
+                    const MeshMaterialSlot* material_slot =
+                        resolve_texture_slot(source_item, subset_index);
                     RenderItem slot_item;
                     const RenderItem* material_item = &item;
                     if (slot_material != nullptr && slot_asset != nullptr)
@@ -1696,7 +1721,8 @@ bool framework::build_dx12_static_scene(
                             if (!texture_path.empty() && texture_path.is_relative() &&
                                 !model_source.empty())
                                 texture_path = model_source.parent_path() / texture_path;
-                            draw.base_color_texture_key = add_texture(texture_path);
+                            draw.base_color_texture_key = add_model_texture(texture_path,
+                                material_slot != nullptr ? &material_slot->base_color_texture : nullptr);
                             const auto embedded_texture_path =
                                 [&material, &model_source](std::size_t slot)
                             {
@@ -1706,12 +1732,15 @@ bool framework::build_dx12_static_scene(
                                     path = model_source.parent_path() / path;
                                 return path;
                             };
-                            add_material_texture(draw, 41u, embedded_texture_path(1),
-                                kNormalMapSemantic);
-                            add_material_texture(draw, 42u, embedded_texture_path(2),
-                                kPackedOrmMapSemantic);
-                            add_material_texture(draw, 44u, embedded_texture_path(3),
-                                kEmissiveMapSemantic);
+                            add_material_texture_key(draw, 41u,
+                                add_model_texture(embedded_texture_path(1), material_slot != nullptr
+                                    ? &material_slot->normal_texture : nullptr), kNormalMapSemantic);
+                            add_material_texture_key(draw, 42u,
+                                add_model_texture(embedded_texture_path(2), material_slot != nullptr
+                                    ? &material_slot->orm_texture : nullptr), kPackedOrmMapSemantic);
+                            add_material_texture_key(draw, 44u,
+                                add_model_texture(embedded_texture_path(3), material_slot != nullptr
+                                    ? &material_slot->emissive_texture : nullptr), kEmissiveMapSemantic);
                             if (const skinned_mesh::gltf_material_info* gltf_material =
                                 mesh_asset->GltfMaterial(material_id))
                             {
@@ -1867,6 +1896,8 @@ bool framework::build_dx12_static_scene(
             {
                 gltf_model::StaticPrimitiveInfo info;
                 if (!gltf->StaticPrimitiveInfoAt(primitive_index, info)) continue;
+                const MeshMaterialSlot* material_slot =
+                    resolve_texture_slot(source_item, primitive_index);
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = item.mesh_asset + "#gltf:" +
                     std::to_string(primitive_index);
@@ -1890,13 +1921,20 @@ bool framework::build_dx12_static_scene(
                 {
                     draw.base_color = multiply_color(info.embedded_base_color,
                         source_item.tint);
-                    draw.base_color_texture_key = add_texture(
-                        info.embedded_base_color_texture);
-                    add_material_texture(draw, 41u, info.embedded_normal_texture,
-                        kNormalMapSemantic);
-                    add_material_texture(draw, 42u, info.embedded_orm_texture,
-                        kPackedOrmMapSemantic);
-                    if (!info.embedded_orm_texture.empty())
+                    draw.base_color_texture_key = add_model_texture(
+                        info.embedded_base_color_texture, material_slot != nullptr
+                            ? &material_slot->base_color_texture : nullptr);
+                    add_material_texture_key(draw, 41u,
+                        add_model_texture(info.embedded_normal_texture, material_slot != nullptr
+                            ? &material_slot->normal_texture : nullptr), kNormalMapSemantic);
+                    add_material_texture_key(draw, 42u,
+                        add_model_texture(info.embedded_orm_texture, material_slot != nullptr
+                            ? &material_slot->orm_texture : nullptr), kPackedOrmMapSemantic);
+                    if (material_slot != nullptr && !material_slot->emissive_texture.empty())
+                        add_material_texture_key(draw, 44u,
+                            add_asset_texture(material_slot->emissive_texture), kEmissiveMapSemantic);
+                    if (!info.embedded_orm_texture.empty() ||
+                        (material_slot != nullptr && !material_slot->orm_texture.empty()))
                     {
                         draw.metallic = 1.0f;
                         draw.roughness = 1.0f;
@@ -1944,6 +1982,8 @@ bool framework::build_dx12_static_scene(
                 const std::string* slot_asset = nullptr;
                 const MaterialAsset* slot_material =
                     resolve_material_slot(source_item, subset_index, slot_asset);
+                const MeshMaterialSlot* material_slot =
+                    resolve_texture_slot(source_item, subset_index);
                 RenderItem slot_item;
                 const RenderItem* material_item = &item;
                 if (slot_material != nullptr && slot_asset != nullptr)
@@ -1998,7 +2038,8 @@ bool framework::build_dx12_static_scene(
                         if (!texture_path.empty() && texture_path.is_relative() &&
                             !model_source.empty())
                             texture_path = model_source.parent_path() / texture_path;
-                        draw.base_color_texture_key = add_texture(texture_path);
+                        draw.base_color_texture_key = add_model_texture(texture_path,
+                            material_slot != nullptr ? &material_slot->base_color_texture : nullptr);
                         const auto embedded_texture_path =
                             [&material, &model_source](std::size_t slot)
                         {
@@ -2008,12 +2049,15 @@ bool framework::build_dx12_static_scene(
                                 path = model_source.parent_path() / path;
                             return path;
                         };
-                        add_material_texture(draw, 41u, embedded_texture_path(1),
-                            kNormalMapSemantic);
-                        add_material_texture(draw, 42u, embedded_texture_path(2),
-                            kPackedOrmMapSemantic);
-                        add_material_texture(draw, 44u, embedded_texture_path(3),
-                            kEmissiveMapSemantic);
+                        add_material_texture_key(draw, 41u,
+                            add_model_texture(embedded_texture_path(1), material_slot != nullptr
+                                ? &material_slot->normal_texture : nullptr), kNormalMapSemantic);
+                        add_material_texture_key(draw, 42u,
+                            add_model_texture(embedded_texture_path(2), material_slot != nullptr
+                                ? &material_slot->orm_texture : nullptr), kPackedOrmMapSemantic);
+                        add_material_texture_key(draw, 44u,
+                            add_model_texture(embedded_texture_path(3), material_slot != nullptr
+                                ? &material_slot->emissive_texture : nullptr), kEmissiveMapSemantic);
                         if (const skinned_mesh::gltf_material_info* gltf_material =
                             mesh_asset->GltfMaterial(material_id))
                         {

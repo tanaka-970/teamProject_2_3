@@ -11,6 +11,7 @@
 #include "../../RePlayEngine/Editor/ReorderableList.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 
+#include <functional>
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
@@ -68,7 +69,9 @@ namespace
     bool draw_material_asset_slot(const char* label,
         const ReplayEngine::Assets::AssetDatabase* database,
         const std::string& current, std::string& selected, bool editable,
-        const char* empty_preview)
+        const char* empty_preview,
+        ReplayEngine::Assets::AssetKind kind =
+            ReplayEngine::Assets::AssetKind::Material)
     {
         selected = current;
         const ReplayEngine::Assets::AssetRecord* record = database != nullptr && !current.empty()
@@ -93,7 +96,7 @@ namespace
             {
                 for (const ReplayEngine::Assets::AssetRecord& candidate : database->Records())
                 {
-                    if (candidate.kind != ReplayEngine::Assets::AssetKind::Material) continue;
+                    if (candidate.kind != kind) continue;
                     if (database->IsMissing(candidate.guid)) continue;
                     const bool is_selected = candidate.guid == current;
                     ImGui::PushID(candidate.guid.c_str());
@@ -111,10 +114,14 @@ namespace
         return changed;
     }
 
+    // テクスチャの見本を引く。Project ブラウザと同じ経路で、結果は向こうで持ち回される。
+    using SlotTexturePreview = std::function<void*(const std::filesystem::path&)>;
+
     template<class T>
     void draw_material_slot_rows(ReplayEngine::Editor::EditorContext& context,
         T& renderer, const std::vector<std::string>& default_names,
-        const char* title, bool has_fbx_fallback)
+        const char* title, bool has_fbx_fallback,
+        const SlotTexturePreview& texture_preview, float preview_scale)
     {
         using namespace ReplayEngine::Components;
         if (default_names.empty()) return;
@@ -183,6 +190,71 @@ namespace
             }
             if (current_asset.empty() && renderer.material_asset.empty() && has_fbx_fallback)
                 ImGui::TextDisabled(u8"共通も未設定なら FBX 材質");
+
+            // モデルが持つテクスチャの差し替え。空ならモデルのものをそのまま使う。
+            const struct
+            {
+                const char* label;
+                const char* id;
+                std::string ReplayEngine::Components::MeshMaterialSlot::* member;
+            } slot_texture_rows[] = {
+                { u8"ベースカラー（色）", "##SlotBaseColorTexture",
+                    &ReplayEngine::Components::MeshMaterialSlot::base_color_texture },
+                { u8"法線マップ（凹凸）", "##SlotNormalTexture",
+                    &ReplayEngine::Components::MeshMaterialSlot::normal_texture },
+                { u8"ORM（AO・粗さ・金属）", "##SlotOrmTexture",
+                    &ReplayEngine::Components::MeshMaterialSlot::orm_texture },
+                { u8"エミッシブ（発光）", "##SlotEmissiveTexture",
+                    &ReplayEngine::Components::MeshMaterialSlot::emissive_texture },
+            };
+            for (const auto& texture_row : slot_texture_rows)
+            {
+                const std::string current_texture = stored
+                    ? renderer.material_slots[index].*texture_row.member : std::string{};
+                std::string selected_texture;
+                // 選んだ画像を小さく出す。折りたたんだスロットはここまで来ない。
+                void* preview = nullptr;
+                if (!current_texture.empty() && texture_preview &&
+                    context.GetAssetDatabase() != nullptr)
+                {
+                    const ReplayEngine::Assets::AssetRecord* texture_record =
+                        context.GetAssetDatabase()->FindByGuid(current_texture);
+                    if (texture_record != nullptr)
+                        preview = texture_preview(texture_record->source_path);
+                }
+                const float preview_extent = ImGui::GetTextLineHeight() * preview_scale;
+                const ImVec2 preview_size(preview_extent, preview_extent);
+                ImGui::TextUnformatted(texture_row.label);
+                if (preview != nullptr)
+                {
+                    ImGui::Image(reinterpret_cast<ImTextureID>(preview), preview_size);
+                    // 柄を見分けたいので、乗せている間だけ大きく出す。
+                    if (ImGui::IsItemHovered())
+                    {
+                        ImGui::BeginTooltip();
+                        ImGui::Image(reinterpret_cast<ImTextureID>(preview),
+                            ImVec2(320.0f, 320.0f));
+                        ImGui::EndTooltip();
+                    }
+                }
+                else
+                {
+                    ImGui::Dummy(preview_size);
+                }
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(-1.0f);
+                if (draw_material_asset_slot(texture_row.id, context.GetAssetDatabase(),
+                    current_texture, selected_texture, editable, u8"(モデルのまま)",
+                    ReplayEngine::Assets::AssetKind::Image))
+                {
+                    context.BeginEdit(u8"スロットのテクスチャを変更");
+                    initialize_material_slots(renderer, default_names);
+                    renderer.material_slots[index].*texture_row.member =
+                        std::move(selected_texture);
+                    renderer.OnPropertyChanged(nullptr);
+                    context.CommitEdit();
+                }
+            }
             ImGui::Unindent();
             ImGui::PopID();
         }
@@ -243,7 +315,10 @@ void framework::draw_material_slot_inspector()
             {
                 const std::vector<std::string> names = material_subset_names(*mesh_asset);
                 draw_material_slot_rows(object_editor_context, *renderer, names,
-                    u8"Mesh Renderer マテリアルスロット", true);
+                    u8"Mesh Renderer マテリアルスロット", true,
+                    [this](const std::filesystem::path& texture_path)
+                    { return dx12_device_context.ImGuiTextureForPath(texture_path); },
+                    ui_texture_preview_scale);
             }
         }
     }
@@ -255,7 +330,10 @@ void framework::draw_material_slot_inspector()
             {
                 const std::vector<std::string> names = material_subset_names(*mesh_asset);
                 draw_material_slot_rows(object_editor_context, *renderer, names,
-                    u8"Skinned Mesh Renderer マテリアルスロット", true);
+                    u8"Skinned Mesh Renderer マテリアルスロット", true,
+                    [this](const std::filesystem::path& texture_path)
+                    { return dx12_device_context.ImGuiTextureForPath(texture_path); },
+                    ui_texture_preview_scale);
             }
         }
     }
@@ -263,7 +341,10 @@ void framework::draw_material_slot_inspector()
     {
         const std::vector<std::string> names(1);
         draw_material_slot_rows(object_editor_context, *renderer, names,
-            u8"Primitive Mesh Renderer マテリアルスロット", false);
+            u8"Primitive Mesh Renderer マテリアルスロット", false,
+            [this](const std::filesystem::path& texture_path)
+            { return dx12_device_context.ImGuiTextureForPath(texture_path); },
+            ui_texture_preview_scale);
     }
 }
 

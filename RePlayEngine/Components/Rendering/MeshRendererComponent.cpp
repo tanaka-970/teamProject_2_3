@@ -42,6 +42,7 @@ namespace ReplayEngine::Components
         out.mesh_asset = mesh_asset;
         out.material_asset = material_asset;
         out.material_slot_assets = nullptr;
+        out.material_slots = nullptr;
         out.material_slot_count = 0;
         const int slot_count = ClampedMaterialSlotCount(*this);
         if (slot_count > 0)
@@ -53,6 +54,8 @@ namespace ReplayEngine::Components
                     ? &material_slots[static_cast<std::size_t>(index)].asset : nullptr;
             }
             out.material_slot_assets = material_slot_asset_view.data();
+            if (material_slots.size() >= static_cast<std::size_t>(slot_count))
+                out.material_slots = material_slots.data();
             out.material_slot_count = static_cast<std::uint8_t>(slot_count);
         }
         constexpr float radians_per_degree = DirectX::XM_PI / 180.0f;

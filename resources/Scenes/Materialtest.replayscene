@@ -1,0 +1,69 @@
+REPLAY_SCENE 11
+SCENE "新しいシーン"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 1
+OBJECT
+  ID 76
+  NAME "GameObject"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 3.1939456462860107 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 48
+    PROPERTY "mesh_asset" asset "51d2c21479bff0a9bcc966ecb8530330"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 4
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 90 188.5 180
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+    PROPERTY "material_slots[0].name" string "衣"
+    PROPERTY "material_slots[0].asset" asset ""
+    PROPERTY "material_slots[0].base_color_texture" asset ""
+    PROPERTY "material_slots[0].normal_texture" asset ""
+    PROPERTY "material_slots[0].orm_texture" asset ""
+    PROPERTY "material_slots[0].emissive_texture" asset ""
+    PROPERTY "material_slots[1].name" string "颜"
+    PROPERTY "material_slots[1].asset" asset ""
+    PROPERTY "material_slots[1].base_color_texture" asset ""
+    PROPERTY "material_slots[1].normal_texture" asset ""
+    PROPERTY "material_slots[1].orm_texture" asset ""
+    PROPERTY "material_slots[1].emissive_texture" asset ""
+    PROPERTY "material_slots[2].name" string "衣2"
+    PROPERTY "material_slots[2].asset" asset ""
+    PROPERTY "material_slots[2].base_color_texture" asset ""
+    PROPERTY "material_slots[2].normal_texture" asset ""
+    PROPERTY "material_slots[2].orm_texture" asset ""
+    PROPERTY "material_slots[2].emissive_texture" asset ""
+    PROPERTY "material_slots[3].name" string "黑"
+    PROPERTY "material_slots[3].asset" asset ""
+    PROPERTY "material_slots[3].base_color_texture" asset ""
+    PROPERTY "material_slots[3].normal_texture" asset ""
+    PROPERTY "material_slots[3].orm_texture" asset ""
+    PROPERTY "material_slots[3].emissive_texture" asset ""
+  END_COMPONENT
+END_OBJECT

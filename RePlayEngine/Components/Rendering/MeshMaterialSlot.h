@@ -11,5 +11,10 @@ namespace ReplayEngine::Components
     {
         std::string name;
         std::string asset;
+        // 空ならモデルが持つテクスチャをそのまま使う。
+        std::string base_color_texture;
+        std::string normal_texture;
+        std::string orm_texture;
+        std::string emissive_texture;
     };
 }

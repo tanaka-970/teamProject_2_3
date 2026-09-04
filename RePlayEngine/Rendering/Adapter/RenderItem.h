@@ -12,6 +12,11 @@
 #include <string>
 #include <vector>
 
+namespace ReplayEngine::Components
+{
+    struct MeshMaterialSlot;
+}
+
 namespace ReplayEngine::Rendering
 {
     // Scene が「これを描いてほしい」と提出する 1 件ぶんの情報。
@@ -34,8 +39,9 @@ namespace ReplayEngine::Rendering
         // MaterialAssetのAssetGUID。空ならRendererのプロパティだけを使う。
         std::string material_asset;
 
-        // サブセット別 Material は Component 内の文字列を借用し、名前は描画へ運ばない。
+        // サブセット別 Material と Texture は Component 内の値を借用する。
         const std::string* const* material_slot_assets = nullptr;
+        const Components::MeshMaterialSlot* material_slots = nullptr;
         std::uint8_t material_slot_count = 0;
 
         // 旧 Scene 互換。Material が割り当てられているときは Shader と値を

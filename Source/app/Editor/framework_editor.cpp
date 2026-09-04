@@ -824,6 +824,15 @@ void framework::draw_editor_main_menu()
                 font_scale_editing = false;
             }
 
+            // マテリアルスロットのテクスチャ見本。文字高に対する倍率で持つ。
+            ImGui::SetNextItemWidth(180.0f);
+            if (ImGui::SliderFloat(u8"テクスチャ見本の大きさ",
+                &ui_texture_preview_scale, 1.5f, 12.0f, "x%.1f"))
+            {
+                style_changed = true;
+            }
+            if (ImGui::IsItemDeactivatedAfterEdit()) style_save_requested = true;
+
             ImGui::Separator();
             ImGui::TextDisabled(u8"文字色");
             ImGui::SetNextItemWidth(200.0f);
