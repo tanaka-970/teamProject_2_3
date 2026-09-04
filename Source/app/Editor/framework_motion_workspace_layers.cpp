@@ -28,6 +28,7 @@ using namespace framework_motion_workspace::Detail;
 
 void framework::draw_motion_layers()
 {
+    REPLAY_PROFILE_SCOPE("Editor/MotionLayers");
     if (!show_motion_layers_panel) return;
     ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
     if (!ImGui::Begin(u8"Motion レイヤー", &show_motion_layers_panel))
@@ -582,6 +583,7 @@ static std::filesystem::path browse_rig_pose_file(bool save)
 // Motion リグ。骨を選んでポーズを付ける。ポーズは .replayrig へ保存できる。
 void framework::draw_motion_rig()
 {
+    REPLAY_PROFILE_SCOPE("Editor/MotionRig");
     if (!show_motion_rig_panel) return;
     ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
     if (!ImGui::Begin(u8"Motion リグ", &show_motion_rig_panel))

@@ -25,6 +25,7 @@
 
 void framework::draw_scene_view_panel()
 {
+    REPLAY_PROFILE_SCOPE("Editor/SceneView");
     scene_view_hovered = false;
     scene_view_focused = false;
     if (!show_scene_view) return;
@@ -208,6 +209,7 @@ void framework::draw_scene_view_panel()
 
 void framework::draw_search_results()
 {
+    REPLAY_PROFILE_SCOPE("Editor/Search");
     if (editor_search_text[0] == '\0') return;
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -311,6 +313,7 @@ void framework::draw_search_results()
 
 void framework::draw_scene_hierarchy()
 {
+    REPLAY_PROFILE_SCOPE("Editor/Hierarchy");
     ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Scene");
     ImGui::Begin("階層");
     const auto item = [this](const char* label, editor_selection value)

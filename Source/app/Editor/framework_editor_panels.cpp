@@ -36,6 +36,7 @@
 #include <utility>
 void framework::draw_project_panel()
 {
+    REPLAY_PROFILE_SCOPE("Editor/Project");
     ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Core");
     ImGui::Begin("プロジェクト");
     // GameObject Scene (.replayscene) is the only authoring format.
@@ -789,6 +790,7 @@ void framework::draw_project_panel()
 }
 void framework::draw_console_panel()
 {
+    REPLAY_PROFILE_SCOPE("Editor/Console");
     ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Core");
     ImGui::Begin("コンソール");
     ImGui::SetNextItemWidth(-1.0f);
