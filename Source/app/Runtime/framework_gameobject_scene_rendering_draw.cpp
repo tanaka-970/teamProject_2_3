@@ -905,10 +905,37 @@ bool framework::build_dx12_static_scene(
         return material;
     };
 
-    const auto make_mesh_source = [&submission, &mesh_source_keys](
+    const auto make_mesh_source = [&submission, &mesh_source_keys, this](
         const std::string& key, auto vertex_begin, auto vertex_end,
         const std::vector<std::uint32_t>& indices)
     {
+        // 視錐台カリング用の境界。メッシュごとに一度だけ求めて残す。
+        if (static_mesh_bounds_cache.find(key) == static_mesh_bounds_cache.end())
+        {
+            ReplayEngine::Rendering::DX12::D3D12MeshLocalBounds bounds;
+            bool initialized = false;
+            for (auto it = vertex_begin; it != vertex_end; ++it)
+            {
+                const DirectX::XMFLOAT3& position = it->position;
+                if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+                    !std::isfinite(position.z)) continue;
+                if (!initialized)
+                {
+                    bounds.minimum = position;
+                    bounds.maximum = position;
+                    initialized = true;
+                    continue;
+                }
+                bounds.minimum.x = (std::min)(bounds.minimum.x, position.x);
+                bounds.minimum.y = (std::min)(bounds.minimum.y, position.y);
+                bounds.minimum.z = (std::min)(bounds.minimum.z, position.z);
+                bounds.maximum.x = (std::max)(bounds.maximum.x, position.x);
+                bounds.maximum.y = (std::max)(bounds.maximum.y, position.y);
+                bounds.maximum.z = (std::max)(bounds.maximum.z, position.z);
+            }
+            bounds.valid = initialized;
+            static_mesh_bounds_cache.emplace(key, bounds);
+        }
         if (!mesh_source_keys.insert(key).second) return;
         D3D12StaticMeshSource source;
         source.key = key;
@@ -1057,7 +1084,7 @@ bool framework::build_dx12_static_scene(
         return true;
     };
 
-    const auto add_ribbon_draw = [&submission](const std::string& key,
+    const auto add_ribbon_draw = [&submission, this](const std::string& key,
         const std::string& motion_key, const ReplayEngine::Rendering::LineStrokeStyle& style)
     {
         D3D12StaticDrawItem draw;
@@ -1068,6 +1095,10 @@ bool framework::build_dx12_static_scene(
         draw.cast_shadow = false;
         draw.receive_shadow = false;
         draw.double_sided = true;
+        // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+        if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+            found_bounds != static_mesh_bounds_cache.end())
+            draw.material_bounds = found_bounds->second;
         submission.draws.push_back(std::move(draw));
     };
 
@@ -1351,6 +1382,10 @@ bool framework::build_dx12_static_scene(
                 draw.receive_shadow = false;
                 draw.double_sided = true;
                 submission.mesh_sources.push_back(std::move(bucket.source));
+                // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+                if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+                    found_bounds != static_mesh_bounds_cache.end())
+                    draw.material_bounds = found_bounds->second;
                 submission.draws.push_back(std::move(draw));
             }
         }
@@ -1762,6 +1797,10 @@ bool framework::build_dx12_static_scene(
                 draw.world = item.world;
                 (void)fill_external_material(source_item, *material_item, draw, slot_material);
                 resolve_normal_adjust(source_item, draw, nullptr, nullptr);
+                // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+                if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+                    found_bounds != static_mesh_bounds_cache.end())
+                    draw.material_bounds = found_bounds->second;
                 submission.draws.push_back(std::move(draw));
                 continue;
             }
@@ -1782,6 +1821,10 @@ bool framework::build_dx12_static_scene(
             draw.world = item.world;
             (void)fill_external_material(source_item, *material_item, draw, slot_material);
             resolve_normal_adjust(source_item, draw, nullptr, nullptr);
+            // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+            if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+                found_bounds != static_mesh_bounds_cache.end())
+                draw.material_bounds = found_bounds->second;
             submission.draws.push_back(std::move(draw));
             continue;
         }
@@ -1862,6 +1905,10 @@ bool framework::build_dx12_static_scene(
                     draw.double_sided = item.double_sided;
                 }
                 resolve_normal_adjust(source_item, draw, nullptr, nullptr);
+                // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+                if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+                    found_bounds != static_mesh_bounds_cache.end())
+                    draw.material_bounds = found_bounds->second;
                 submission.draws.push_back(std::move(draw));
             }
             continue;
@@ -2143,6 +2190,10 @@ bool framework::build_dx12_static_scene(
                 draw.double_sided = true;
                 draw.cast_shadow = false;
                 draw.receive_shadow = false;
+                // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+                if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+                    found_bounds != static_mesh_bounds_cache.end())
+                    draw.material_bounds = found_bounds->second;
                 submission.draws.push_back(std::move(draw));
             }
         }
@@ -2192,6 +2243,10 @@ bool framework::build_dx12_static_scene(
             draw.cast_shadow = renderer->cast_shadow;
             draw.receive_shadow = renderer->receive_shadow;
             draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Pbr);
+            // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+            if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+                found_bounds != static_mesh_bounds_cache.end())
+                draw.material_bounds = found_bounds->second;
             submission.draws.push_back(std::move(draw));
         }
     }
