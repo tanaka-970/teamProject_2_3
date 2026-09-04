@@ -1628,16 +1628,16 @@ bool framework::build_dx12_static_scene(
                     RenderItem slot_item;
                     const RenderItem* material_item = &item;
                     if (slot_material != nullptr && slot_asset != nullptr)
-                    {
-                        slot_item = resolve_render_item_material(source_item, slot_asset, false);
-                        material_item = &slot_item;
-                    }
-                    D3D12SkinnedDrawItem skinned_draw;
-                    D3D12StaticDrawItem& draw = skinned_draw.surface;
-                    draw.mesh_key = mesh_key;
-                    draw.owner_id = source_item.owner.Value();
-                    draw.material_slot = static_cast<std::uint32_t>(subset_index);
-                    // 境界はバインドポーズ由来で不変。毎フレーム全インデックスを舐めない。
+                     {
+                         slot_item = resolve_render_item_material(source_item, slot_asset,  false);
+                         material_item =  &slot_item; 
+                     }
+                     D3D12SkinnedDrawItem  skinned_draw;
+                     D3D12StaticDrawItem& draw  = skinned_draw.surface;
+                     draw.mesh_key = mesh_key;
+                     draw.owner_id =  source_item.owner.Value();
+                     draw.material_slot = static_cast<std::uint32_t>(subset_index);
+                     // 境界はバインドポーズ由来で不変。毎フレーム全インデックスを舐めない。
                     {
                         auto& entries = material_subset_bounds_cache[mesh_key];
                         const auto found = std::find_if(entries.begin(), entries.end(),

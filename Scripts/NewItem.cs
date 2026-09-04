@@ -32,7 +32,7 @@ public sealed class NewItem : ScriptBehaviour
     [Tooltip("跳んでいる間の回転量（度／秒）。0 で回さない")]
     public float SpinSpeed = 0.0f;
 
-    // ---- Play 中に増えるのを見るためのもの ----
+    // Play 中に増えるのを見るためのもの
 
     public int JumpCount = 0;
     public int UsingMotor = 0;
@@ -108,7 +108,7 @@ public sealed class NewItem : ScriptBehaviour
             return;
         }
 
-        // 4t(1-t) は 0→1→0 を描く。頂点がちょうど JumpHeight になる。
+        
         var t = timer / duration;
         Height = JumpHeight * 4.0f * t * (1.0f - t);
         Transform.LocalPosition = new Vector3(origin.X, origin.Y + Height, origin.Z);
