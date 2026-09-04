@@ -84,6 +84,12 @@ namespace ReplayEngine::Core::Detail
                     .Display("最大落下速度").Range(0.0, 200.0).Step(1.0));
 
             PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("jump_requested", &CharacterMotorComponent::jump_requested)
+                    .Display("ジャンプ要求")
+                    .Tooltip("立てると次の更新で 1 回だけジャンプして自動で倒れる。"
+                        "C# から RequestJump = true で跳ばせる。"));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
                 MakeProperty("fallback_ground_y", &CharacterMotorComponent::fallback_ground_y)
                     .Display("地形が無い時の床の高さ").Step(0.05));
 

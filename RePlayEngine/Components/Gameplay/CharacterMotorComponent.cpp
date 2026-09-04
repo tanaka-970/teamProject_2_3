@@ -40,7 +40,7 @@ namespace ReplayEngine::Components
         velocity_ = { 0.0f, 0.0f, 0.0f };
         pending_move_ = { 0.0f, 0.0f, 0.0f };
         pending_speed_multiplier_ = 1.0f;
-        jump_requested_ = false;
+        jump_requested = false;
         grounded_ = true;
         last_ground_source_ = Scene::CollisionSourceInfo{};
         last_wall_source_ = Scene::CollisionSourceInfo{};
@@ -54,7 +54,7 @@ namespace ReplayEngine::Components
         velocity_ = { 0.0f, 0.0f, 0.0f };
         pending_move_ = { 0.0f, 0.0f, 0.0f };
         pending_speed_multiplier_ = 1.0f;
-        jump_requested_ = false;
+        jump_requested = false;
     }
 
     void CharacterMotorComponent::Move(const DirectX::XMFLOAT3& world_direction) noexcept
@@ -269,12 +269,12 @@ namespace ReplayEngine::Components
             // ジャンプ要求は接地している時だけ消費する。
             // フラグ方式なので、可変フレームで何度押されても 1 回、
             // FixedUpdate が複数回走っても 1 回しか実行されない。
-            if (jump_requested_ && grounded_)
+            if (jump_requested && grounded_)
             {
                 velocity_.y = jump_power;
                 grounded_ = false;
             }
-            jump_requested_ = false;
+            jump_requested = false;
 
             velocity_.y -= gravity * fixed_delta_time;
             if (velocity_.y < -maximum_fall_speed) velocity_.y = -maximum_fall_speed;
@@ -283,7 +283,7 @@ namespace ReplayEngine::Components
         {
             // 旧 Player と同じく、垂直物理を切っている間は常に接地扱い。
             velocity_.y = 0.0f;
-            jump_requested_ = false;
+            jump_requested = false;
             grounded_ = true;
         }
 
