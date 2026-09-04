@@ -232,7 +232,7 @@ framework::model_source_format framework::resolve_model_source(
         // AssetDatabase の source_path がファイル名を失っている記録。
         // どのファイルを指すか推測できないので、ここで原因を明示して止める。
         out_reason = "Asset の source がファイルではありません（拡張子なし）: " +
-            source.generic_string();
+            source.generic_u8string();
         return model_source_format::unsupported;
     }
 
@@ -241,14 +241,14 @@ framework::model_source_format framework::resolve_model_source(
     if (!gltf_source && !fbx_source)
     {
         out_reason = "この形式は GameObject の描画へ接続していません（" +
-            extension + "）: " + source.generic_string();
+            extension + "）: " + source.generic_u8string();
         return model_source_format::unsupported;
     }
 
     std::error_code filesystem_error;
     if (!std::filesystem::exists(source, filesystem_error) || filesystem_error)
     {
-        out_reason = "モデルファイルが見つかりません: " + source.generic_string();
+        out_reason = "モデルファイルが見つかりません: " + source.generic_u8string();
         return model_source_format::unsupported;
     }
 
@@ -260,7 +260,7 @@ framework::model_source_format framework::resolve_model_source(
         if (!std::filesystem::exists(cache, filesystem_error) || filesystem_error)
         {
             out_reason = "実行用の .cereal キャッシュが見つかりません: " +
-                cache.generic_string();
+                cache.generic_u8string();
             return model_source_format::unsupported;
         }
     }
@@ -303,7 +303,7 @@ gltf_model* framework::resolve_object_gltf(const std::string& asset_guid)
         {
             return give_up(loaded && !loaded->Error().empty()
                 ? "glTF/GLB の読み込みに失敗しました: " + loaded->Error()
-                : "glTF/GLB を構築できませんでした: " + source.generic_string());
+                : "glTF/GLB を構築できませんでした: " + source.generic_u8string());
         }
         return loaded.get();
     }
@@ -315,7 +315,7 @@ gltf_model* framework::resolve_object_gltf(const std::string& asset_guid)
     catch (...)
     {
         return give_up("glTF/GLB の読み込み中に不明なエラーが発生しました: " +
-            source.generic_string());
+            source.generic_u8string());
     }
 }
 
@@ -362,12 +362,12 @@ skinned_mesh* framework::resolve_object_mesh(const std::string& asset_guid)
     {
         // 既存プロジェクトは例外を前提にしていないため、ここで受け止めて
         // 「描けない Asset」として扱う。Scene 全体の描画は継続する。
-        return give_up("メッシュの読み込みに失敗しました: " + source.generic_string());
+        return give_up("メッシュの読み込みに失敗しました: " + source.generic_u8string());
     }
 
     if (!loaded)
     {
-        return give_up("メッシュを構築できませんでした: " + source.generic_string());
+        return give_up("メッシュを構築できませんでした: " + source.generic_u8string());
     }
 
     // 8) 成功したものだけをキャッシュへ入れる。

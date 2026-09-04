@@ -626,7 +626,7 @@ bool skinned_mesh::import_gltf(const std::filesystem::path& filename, float requ
                 rgba.data(), image.width, image.height, destination, format);
             if (!result.succeeded) return {};
         }
-        const std::string value = std::filesystem::absolute(destination).string();
+        const std::string value = std::filesystem::absolute(destination).u8string();
         cached_images.emplace(key, value);
         return value;
     };
