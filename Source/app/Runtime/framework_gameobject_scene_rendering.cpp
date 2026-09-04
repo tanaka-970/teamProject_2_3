@@ -296,7 +296,8 @@ gltf_model* framework::resolve_object_gltf(const std::string& asset_guid)
         // 参考実装の Repository と同じく、モデル本体を Object ごとに複製しない。
         const auto loaded = gltf_model_cache.Load(source, [this, source]
         {
-            return std::make_shared<gltf_model>(source.string());
+            // tinygltf は UTF-8 のパスを期待する。string() は ACP なので非ASCII名が壊れる。
+            return std::make_shared<gltf_model>(source.u8string());
         });
         if (!loaded || !loaded->IsLoaded())
         {

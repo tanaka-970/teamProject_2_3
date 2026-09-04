@@ -99,7 +99,8 @@ bool framework::prewarm_model_asset(const std::filesystem::path& path)
         {
             const auto model = gltf_model_cache.Load(path, [this, path]
             {
-                return std::make_shared<gltf_model>(path.string());
+                // tinygltf は UTF-8 のパスを期待する。string() は ACP なので壊れる。
+                return std::make_shared<gltf_model>(path.u8string());
             });
             return model && model->IsLoaded();
         }
@@ -137,7 +138,8 @@ bool framework::load_model_asset_async(const std::wstring& filename)
             {
                 auto candidate = gltf_model_cache.Load(path, [this, path]
                 {
-                    return std::make_shared<gltf_model>(path.string());
+                    // tinygltf は UTF-8 のパスを期待する。string() は ACP なので壊れる。
+                return std::make_shared<gltf_model>(path.u8string());
                 });
                 if (!candidate || !candidate->IsLoaded())
                     result.error = candidate ? candidate->Error() : "glTFモデルを生成できません";
@@ -185,7 +187,8 @@ bool framework::load_model_asset_now(const std::wstring& filename)
         {
             auto candidate = gltf_model_cache.Load(path, [this, path]
             {
-                return std::make_shared<gltf_model>(path.string());
+                // tinygltf は UTF-8 のパスを期待する。string() は ACP なので壊れる。
+                return std::make_shared<gltf_model>(path.u8string());
             });
             if (!candidate->IsLoaded())
             {
