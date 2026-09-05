@@ -169,6 +169,7 @@ namespace
 
 void framework::draw_motion_timeline()
 {
+    REPLAY_PROFILE_SCOPE("Editor/MotionTimeline");
     if (!show_motion_timeline_panel) return;
     ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
     if (!ImGui::Begin(u8"タイムライン", &show_motion_timeline_panel))
@@ -814,6 +815,7 @@ void framework::draw_motion_timeline()
 
 void framework::draw_motion_graph_editor()
 {
+    REPLAY_PROFILE_SCOPE("Editor/MotionGraph");
     if (!show_motion_graph_panel) return;
     ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
     if (!ImGui::Begin(u8"グラフエディター", &show_motion_graph_panel))

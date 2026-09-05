@@ -20,6 +20,9 @@ namespace ReplayEngine::Rendering::DX12
 {
     namespace
     {
+        // GBuffer 4 番はモーションベクター。分離したモデルの補完で参照する。
+        constexpr std::uint32_t kScene3DMotionVectorIndex = 4;
+
         constexpr DXGI_FORMAT kScene3DGBufferFormats[kScene3DGBufferCount] =
         {
             DXGI_FORMAT_R16G16B16A16_FLOAT, // BaseColorとシェーディングモデル
@@ -672,7 +675,7 @@ namespace ReplayEngine::Rendering::DX12
 
         const auto create_geometry_pso = [this](bool skinned, bool transparent,
             bool double_sided, const D3D12_INPUT_ELEMENT_DESC* input, UINT input_count,
-            ID3D12PipelineState** output) -> bool
+            ID3D12PipelineState** output, bool motion_only = false) -> bool
         {
             D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
             desc.pRootSignature = scene3d_geometry_root_signature_.Get();
@@ -703,6 +706,18 @@ namespace ReplayEngine::Rendering::DX12
             }
             desc.DSVFormat = kScene3DDepthDsvFormat;
             desc.SampleDesc.Count = 1;
+            if (motion_only)
+            {
+                // モーションベクター以外へは 1 bit も書かない。色は変わらない。
+                desc.BlendState.IndependentBlendEnable = TRUE;
+                for (UINT i = 0; i < kScene3DGBufferCount; ++i)
+                    desc.BlendState.RenderTarget[i].RenderTargetWriteMask =
+                        i == kScene3DMotionVectorIndex
+                            ? D3D12_COLOR_WRITE_ENABLE_ALL : 0u;
+                // 深度プリパスに居ないので EQUAL では落ちる。深度へも書かない。
+                desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+                desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+            }
             return SUCCEEDED(device_->CreateGraphicsPipelineState(&desc,
                 IID_PPV_ARGS(output)));
         };
@@ -854,6 +869,14 @@ namespace ReplayEngine::Rendering::DX12
                     static_cast<UINT>(std::size(skinned_input)),
                     scene3d_skinned_gbuffer_pipelines_[index].ReleaseAndGetAddressOf()))
                     return fail("Scene3D.PSO.SkinnedGBuffer");
+                if (!create_geometry_pso(false, false, sided != 0, static_input,
+                    static_cast<UINT>(std::size(static_input)),
+                    scene3d_static_motion_pipelines_[index].ReleaseAndGetAddressOf(), true))
+                    return fail("Scene3D.PSO.StaticMotionOnly");
+                if (!create_geometry_pso(true, false, sided != 0, skinned_input,
+                    static_cast<UINT>(std::size(skinned_input)),
+                    scene3d_skinned_motion_pipelines_[index].ReleaseAndGetAddressOf(), true))
+                    return fail("Scene3D.PSO.SkinnedMotionOnly");
             }
                 if (!create_geometry_pso(false, true, sided != 0, static_input,
                     static_cast<UINT>(std::size(static_input)),
@@ -2063,6 +2086,14 @@ namespace ReplayEngine::Rendering::DX12
         D3D12Scene3DDrawOptions options) noexcept
     {
         last_model_effect_stack_count_ = 0;
+        last_scene_draw_call_count_ = 0;
+        last_scene_triangle_count_ = 0;
+        last_visible_draw_call_count_ = 0;
+        last_visible_triangle_count_ = 0;
+        last_visible_vertex_count_ = 0;
+        counting_visible_ = false;
+        visible_frustum_.BuildFromViewProjection(current_frame_constants_.view_projection);
+        last_scene_vertex_count_ = 0;
         last_screen_effect_stack_count_ = 0;
         last_shadow_coverage_draw_count_ = 0;
         // どの前提で落ちたかを stderr から特定できるようにする。
@@ -2475,7 +2506,25 @@ namespace ReplayEngine::Rendering::DX12
             const std::uint32_t count = draw.index_count == 0
                 ? remaining : (std::min)(draw.index_count, remaining);
             if (count != 0)
+            {
                 command_list_->DrawIndexedInstanced(count, 1, start, 0, 0);
+                ++last_scene_draw_call_count_;
+                last_scene_triangle_count_ += count / 3u;
+                const std::uint64_t vertex_count = vb.StrideInBytes != 0
+                    ? vb.SizeInBytes / vb.StrideInBytes : 0u;
+                last_scene_vertex_count_ += vertex_count;
+                // 視錐台に入るぶんを別に数える。境界が無い物は入っている扱いにする。
+                if (counting_visible_ && visible_frustum_.Valid() &&
+                    (!draw.material_bounds.valid ||
+                        visible_frustum_.IntersectsTransformedAabb(
+                            draw.material_bounds.minimum, draw.material_bounds.maximum,
+                            draw.world)))
+                {
+                    ++last_visible_draw_call_count_;
+                    last_visible_triangle_count_ += count / 3u;
+                    last_visible_vertex_count_ += vertex_count;
+                }
+            }
         };
         const auto bind_surface = [this, &allocate_cb, scene_gpu, light_gpu, identity_bone_gpu,
             directional_shadow_srv, local_shadow_srv, ibl_diffuse_srv, ibl_specular_srv,
@@ -3017,9 +3066,12 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->ClearRenderTargetView(target.rtv.cpu, clear, 0, nullptr);
         command_list_->SetGraphicsRootSignature(scene3d_geometry_root_signature_.Get());
 
+        // ここから GBuffer。カメラ内の量はこのパスの数だけを見る。
+        counting_visible_ = true;
         for (const D3D12StaticDrawItem& draw : submission.draws)
         {
-            if (model_effect_isolated_from_scene(draw)) continue;
+            // 分離したモデルは色を書かず、モーションベクターだけ書く。
+            const bool motion_only = model_effect_isolated_from_scene(draw);
             if (draw.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = static_mesh_cache_.find(draw.mesh_key);
             if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -3032,7 +3084,9 @@ namespace ReplayEngine::Rendering::DX12
             }
             const UINT index = (draw.double_sided ? 3u : 0u) +
                 static_cast<UINT>(draw.alpha_mode);
-            command_list_->SetPipelineState(scene3d_static_gbuffer_pipelines_[index].Get());
+            command_list_->SetPipelineState(motion_only
+                ? scene3d_static_motion_pipelines_[index].Get()
+                : scene3d_static_gbuffer_pipelines_[index].Get());
             if (!bind_surface(draw, previous_world, identity_bone_gpu, identity_bone_gpu, 0.0f,
                 false))
                 return false;
@@ -3041,13 +3095,16 @@ namespace ReplayEngine::Rendering::DX12
         for (std::size_t i = 0; i < submission.skinned_draws.size(); ++i)
         {
             const D3D12SkinnedDrawItem& draw = submission.skinned_draws[i];
-            if (model_effect_isolated_from_scene(draw.surface)) continue;
+            // 分離したモデルは色を書かず、モーションベクターだけ書く。
+            const bool motion_only = model_effect_isolated_from_scene(draw.surface);
             if (draw.surface.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
             if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
             const UINT index = (draw.surface.double_sided ? 3u : 0u) +
                 static_cast<UINT>(draw.surface.alpha_mode);
-            command_list_->SetPipelineState(scene3d_skinned_gbuffer_pipelines_[index].Get());
+            command_list_->SetPipelineState(motion_only
+                ? scene3d_skinned_motion_pipelines_[index].Get()
+                : scene3d_skinned_gbuffer_pipelines_[index].Get());
             if (!bind_surface(draw.surface, prepared_skinned[i].previous_world,
                 prepared_skinned[i].current_bones, prepared_skinned[i].previous_bones,
                 draw.morph_weight, false))
@@ -3055,6 +3112,7 @@ namespace ReplayEngine::Rendering::DX12
             draw_mesh(*it->second, draw.surface);
         }
 
+        counting_visible_ = false;
         for (Scene3DTarget& target : scene3d_gbuffer_)
         {
             if (!resource_state_tracker_.Transition(command_list_.Get(), target.resource.Get(),

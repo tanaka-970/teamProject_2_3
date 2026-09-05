@@ -272,8 +272,9 @@ void framework::update_editor_camera(float elapsed_time)
     input.delta_time = elapsed_time;
 
     // Gizmo shortcut も preset の一部。Mayaなら W/E/R、Hybridなら Shift+W/E/R など。
-    const bool selected_game_object =
-        selected_editor_object == editor_selection::game_object &&
+    // selected_editor_object では縛らない。Project Browser を触るだけで asset へ
+    // 移り、Gizmo 切替が死ぬ。文字入力中だけ避ければよい。
+    const bool selected_game_object = !input.ui_text_input_active &&
         object_editor_context.Selection().Primary().Valid();
     // RMB+WASD で fly している最中に Unity の W/E/R tool shortcut が発火しないよう、
     // mouse navigation 中は Gizmo shortcut を開始しない。

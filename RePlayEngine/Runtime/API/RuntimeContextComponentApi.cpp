@@ -216,8 +216,9 @@ namespace ReplayEngine::Runtime
         if (status != RuntimeStatus::Ok) return status;
         if (component == nullptr) return RuntimeStatus::ComponentDestroyed;
 
+        // 動的プロパティも見る。Effect Stack の effects[i].* はこちらにしか無い。
         const Reflection::PropertyDesc* desc =
-            Reflection::PropertyRegistry::Find(component->TypeID(), property_name);
+            Reflection::PropertyRegistry::FindForComponent(*component, property_name);
         if (desc == nullptr) return RuntimeStatus::InvalidArgument;
         if (!desc->getter) return RuntimeStatus::UnsupportedOperation;
 
@@ -236,8 +237,9 @@ namespace ReplayEngine::Runtime
         if (status != RuntimeStatus::Ok) return status;
         if (component == nullptr) return RuntimeStatus::ComponentDestroyed;
 
+        // 動的プロパティも見る。Effect Stack の effects[i].* はこちらにしか無い。
         const Reflection::PropertyDesc* desc =
-            Reflection::PropertyRegistry::Find(component->TypeID(), property_name);
+            Reflection::PropertyRegistry::FindForComponent(*component, property_name);
         if (desc == nullptr) return RuntimeStatus::InvalidArgument;
         if (desc->read_only) return RuntimeStatus::UnsupportedOperation;
         if (!desc->setter) return RuntimeStatus::UnsupportedOperation;

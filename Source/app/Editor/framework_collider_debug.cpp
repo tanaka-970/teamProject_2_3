@@ -5,6 +5,10 @@
 
 #include "framework.h"
 
+#include "imgui/ImGuizmo.h"
+
+#include <cstdio>
+
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/EnemyBehaviourComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/StageGameplayComponents.h"
@@ -16,6 +20,7 @@
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Physics/CollisionLayers.h"
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 
@@ -23,22 +28,6 @@
 
 namespace
 {
-    bool ProjectToScreen(const DirectX::XMMATRIX& view_projection,
-        const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
-        ImVec2& out)
-    {
-        using namespace DirectX;
-        const XMVECTOR position = XMVectorSet(world.x, world.y, world.z, 1.0f);
-        const XMVECTOR clip = XMVector4Transform(position, view_projection);
-        const float w = XMVectorGetW(clip);
-        if (w <= 1.0e-4f) return false;
-        const float x = XMVectorGetX(clip) / w;
-        const float y = XMVectorGetY(clip) / w;
-        out.x = origin.x + (x * 0.5f + 0.5f) * size.x;
-        out.y = origin.y + (0.5f - y * 0.5f) * size.y;
-        return true;
-    }
-
     const char* SourceText(const ReplayEngine::Scene::CollisionSourceInfo& source)
     {
         return ReplayEngine::Scene::ToString(source.backend);
@@ -65,19 +54,6 @@ namespace
         ai_navigation_handle_state = {};
     }
 
-    float DistanceSquared(const ImVec2& a, const ImVec2& b) noexcept
-    {
-        const float dx = a.x - b.x;
-        const float dy = a.y - b.y;
-        return dx * dx + dy * dy;
-    }
-
-    bool ProjectLightPoint(const DirectX::XMMATRIX& view_projection,
-        const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
-        ImVec2& out)
-    {
-        return ProjectToScreen(view_projection, world, origin, size, out);
-    }
 }
 
 void framework::draw_collider_debug_overlay()
@@ -151,7 +127,8 @@ void framework::draw_collider_debug_overlay()
 
     if (object_collider_debug_lines.empty() && ai_frame.lines.empty() &&
         ai_frame.fills.empty() && ai_frame.labels.empty() && !has_stage_markers &&
-        light_range_object == nullptr && normal_adjust_object == nullptr) return;
+        light_range_object == nullptr && normal_adjust_object == nullptr &&
+        !show_rig_debug_draw) return;
 
     const DirectX::XMMATRIX view_projection =
         viewport_view_matrix() * viewport_projection_matrix();
@@ -164,8 +141,8 @@ void framework::draw_collider_debug_overlay()
     {
         ImVec2 start{};
         ImVec2 end{};
-        if (!ProjectToScreen(view_projection, line.start, main_origin, main_size, start)) continue;
-        if (!ProjectToScreen(view_projection, line.end, main_origin, main_size, end)) continue;
+        if (!project_world_to_screen(view_projection, line.start, main_origin, main_size, start)) continue;
+        if (!project_world_to_screen(view_projection, line.end, main_origin, main_size, end)) continue;
         draw_list->AddLine(start, end, line.color, 1.0f);
     }
 
@@ -191,8 +168,8 @@ void framework::draw_collider_debug_overlay()
         {
             ImVec2 screen_start{};
             ImVec2 screen_end{};
-            if (ProjectLightPoint(view_projection, start, main_origin, main_size, screen_start) &&
-                ProjectLightPoint(view_projection, end, main_origin, main_size, screen_end))
+            if (project_world_to_screen(view_projection, start, main_origin, main_size, screen_start) &&
+                project_world_to_screen(view_projection, end, main_origin, main_size, screen_end))
                 draw_list->AddLine(screen_start, screen_end, color, 1.5f);
         };
         const ReplayEngine::Core::GameObject* object = light_range_object;
@@ -262,8 +239,8 @@ void framework::draw_collider_debug_overlay()
         {
             ImVec2 screen_start{};
             ImVec2 screen_end{};
-            if (ProjectToScreen(view_projection, start, main_origin, main_size, screen_start) &&
-                ProjectToScreen(view_projection, end, main_origin, main_size, screen_end))
+            if (project_world_to_screen(view_projection, start, main_origin, main_size, screen_start) &&
+                project_world_to_screen(view_projection, end, main_origin, main_size, screen_end))
                 draw_list->AddLine(screen_start, screen_end, IM_COL32(80, 225, 240, 220), 1.5f);
         };
         for (const ReplayEngine::Components::NormalAdjustComponent* adjust :
@@ -302,7 +279,7 @@ void framework::draw_collider_debug_overlay()
         bool valid = true;
         for (std::size_t index = 0; index < polygon.points.size(); ++index)
         {
-            if (!ProjectToScreen(view_projection, polygon.points[index], main_origin,
+            if (!project_world_to_screen(view_projection, polygon.points[index], main_origin,
                 main_size, projected[index]))
             {
                 valid = false;
@@ -317,15 +294,79 @@ void framework::draw_collider_debug_overlay()
     {
         ImVec2 start{};
         ImVec2 end{};
-        if (!ProjectToScreen(view_projection, line.start, main_origin, main_size, start)) continue;
-        if (!ProjectToScreen(view_projection, line.end, main_origin, main_size, end)) continue;
+        if (!project_world_to_screen(view_projection, line.start, main_origin, main_size, start)) continue;
+        if (!project_world_to_screen(view_projection, line.end, main_origin, main_size, end)) continue;
         draw_list->AddLine(start, end, line.color, 1.5f);
+    }
+
+    if (show_rig_debug_draw && active_editor_view == editor_view::scene)
+    {
+        // 選択に関係なく、骨を持つモデルはすべて出す。選ばれた骨だけ強調する。
+        const ImU32 bone_color = ImGui::ColorConvertFloat4ToU32(
+            ImVec4(rig_bone_tint.x, rig_bone_tint.y, rig_bone_tint.z, rig_bone_tint.w));
+        const ImU32 picked_color = ImGui::ColorConvertFloat4ToU32(
+            ImVec4(rig_picked_tint.x, rig_picked_tint.y,
+                rig_picked_tint.z, rig_picked_tint.w));
+        const float picked_scale = (std::max)(1.0f, rig_picked_scale);
+        std::size_t rig_bone_total = 0;
+        for (const auto& entry : object_rig_debug_bones)
+        {
+            const std::vector<rig_debug_bone>& bones = entry.second;
+            rig_bone_total += bones.size();
+            for (const rig_debug_bone& bone : bones)
+            {
+                if (rig_max_depth > 0)
+                {
+                    // 根から数えた深さで間引く。指や髪まで出ると密になるため。
+                    int depth = 0;
+                    int walk = bone.parent;
+                    while (walk >= 0 && static_cast<std::size_t>(walk) < bones.size() &&
+                        depth <= rig_max_depth)
+                    {
+                        ++depth;
+                        walk = bones[static_cast<std::size_t>(walk)].parent;
+                    }
+                    if (depth > rig_max_depth) continue;
+                }
+                const bool picked = std::find(rig_selected_bones.begin(),
+                    rig_selected_bones.end(), bone.name) != rig_selected_bones.end();
+                ImVec2 joint{};
+                if (!project_world_to_screen(view_projection, bone.world,
+                    main_origin, main_size, joint))
+                    continue;
+                if (bone.parent >= 0 &&
+                    static_cast<std::size_t>(bone.parent) < bones.size())
+                {
+                    ImVec2 parent{};
+                    if (project_world_to_screen(view_projection,
+                        bones[static_cast<std::size_t>(bone.parent)].world,
+                        main_origin, main_size, parent))
+                        draw_list->AddLine(parent, joint,
+                            picked ? picked_color : bone_color,
+                            picked ? rig_bone_thickness * picked_scale : rig_bone_thickness);
+                }
+                draw_list->AddCircleFilled(joint,
+                    picked ? rig_joint_radius * picked_scale : rig_joint_radius,
+                    picked ? picked_color : bone_color, 8);
+                if (rig_show_names)
+                    draw_list->AddText({ joint.x + 4.0f, joint.y - 2.0f },
+                        picked ? picked_color : bone_color, bone.name.c_str());
+            }
+        }
+        // 骨が 1 本も来ていないのか、来ていて画面外なのかを切り分ける。
+        static std::size_t last_reported_total = static_cast<std::size_t>(-1);
+        if (rig_bone_total != last_reported_total)
+        {
+            last_reported_total = rig_bone_total;
+            std::fprintf(stderr, "[Rig] objects=%zu bones=%zu\n",
+                object_rig_debug_bones.size(), rig_bone_total);
+        }
     }
 
     for (const ReplayEngine::Editor::DebugWorldLabel& label : ai_frame.labels)
     {
         ImVec2 position{};
-        if (!ProjectToScreen(view_projection, label.position, main_origin, main_size, position))
+        if (!project_world_to_screen(view_projection, label.position, main_origin, main_size, position))
             continue;
         draw_list->AddText(position, label.color, label.text.c_str());
     }
@@ -340,7 +381,7 @@ void framework::draw_collider_debug_overlay()
                 continue;
             const DirectX::XMFLOAT3 center = object->GetTransform().WorldPosition();
             ImVec2 center_screen{};
-            if (!ProjectToScreen(view_projection, center, main_origin, main_size, center_screen))
+            if (!project_world_to_screen(view_projection, center, main_origin, main_size, center_screen))
                 continue;
             if (const auto* spawn = object->GetComponent<
                 ReplayEngine::Components::SpawnPointComponent>();
@@ -369,7 +410,7 @@ void framework::draw_collider_debug_overlay()
                 DirectX::XMStoreFloat3(&end, DirectX::XMVectorAdd(
                     DirectX::XMLoadFloat3(&center), direction));
                 ImVec2 end_screen{};
-                if (!ProjectToScreen(view_projection, end, main_origin, main_size, end_screen))
+                if (!project_world_to_screen(view_projection, end, main_origin, main_size, end_screen))
                     continue;
                 constexpr ImU32 color = IM_COL32(255, 185, 65, 240);
                 draw_list->AddCircleFilled(center_screen, 5.0f, color, 12);
@@ -400,14 +441,14 @@ void framework::draw_collider_debug_overlay()
                     center.x - (std::max)(0.05f, enemy->attack_range), center.y, center.z };
                 ImVec2 detection_screen{};
                 ImVec2 attack_screen{};
-                if (ProjectToScreen(view_projection, detection_world, main_origin, main_size,
+                if (project_world_to_screen(view_projection, detection_world, main_origin, main_size,
                     detection_screen))
                 {
                     draw_list->AddCircleFilled(detection_screen, 6.0f,
                         ReplayEngine::Editor::AINavigationDebugColors::detection);
                     draw_list->AddCircle(detection_screen, 8.0f, IM_COL32(255, 255, 255, 220));
                 }
-                if (ProjectToScreen(view_projection, attack_world, main_origin, main_size,
+                if (project_world_to_screen(view_projection, attack_world, main_origin, main_size,
                     attack_screen))
                 {
                     draw_list->AddCircleFilled(attack_screen, 6.0f,
@@ -450,99 +491,61 @@ bool framework::handle_ai_navigation_debug_edit()
         ClearAINavigationHandleState();
     }
 
-    const DirectX::XMMATRIX view_projection =
-        viewport_view_matrix() * viewport_projection_matrix();
-    // 描画と同じ投影規約を使う。ここだけ Scene View 矩形にすると、
-    // 線は正しい位置に出ているのにハンドルだけ掴めない状態になる。
-    const ImVec2 main_origin = ImGui::GetMainViewport()->Pos;
-    const ImVec2 main_size = ImGui::GetMainViewport()->Size;
+    ImGuiWindow* scene_window = ImGui::FindWindowByName("Scene View");
+    if (scene_window == nullptr) return false;
+    DirectX::XMFLOAT4X4 view{}, projection{};
+    DirectX::XMStoreFloat4x4(&view, viewport_view_matrix());
+    DirectX::XMStoreFloat4x4(&projection, viewport_projection_matrix());
+    const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+    ImGuizmo::SetDrawlist(scene_window->DrawList);
+    ImGuizmo::SetRect(main_viewport->Pos.x, main_viewport->Pos.y,
+        main_viewport->Size.x, main_viewport->Size.y);
     const DirectX::XMFLOAT3 center = selected_object->GetTransform().WorldPosition();
-    const DirectX::XMFLOAT3 detection_world{
-        center.x + (std::max)(0.05f, enemy->detection_range), center.y, center.z };
-    const DirectX::XMFLOAT3 attack_world{
-        center.x - (std::max)(0.05f, enemy->attack_range), center.y, center.z };
-    ImVec2 detection_screen{};
-    ImVec2 attack_screen{};
-    const bool detection_visible = ProjectToScreen(view_projection, detection_world,
-        main_origin, main_size, detection_screen);
-    const bool attack_visible = ProjectToScreen(view_projection, attack_world,
-        main_origin, main_size, attack_screen);
 
-    const ImVec2 mouse = ImGui::GetMousePos();
-    const bool inside_scene = mouse.x >= scene_view_min_x && mouse.x <= scene_view_max_x &&
-        mouse.y >= scene_view_min_y && mouse.y <= scene_view_max_y;
-
-    if (ai_navigation_handle_state.kind == AINavigationHandleKind::None &&
-        inside_scene && scene_view_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    // 半径は中心からの距離そのものなので、X 軸だけの移動ギズモがそのまま使える。
+    // 索敵は +X、攻撃は -X に置く。描いている円の見た目と掴む場所が一致する。
+    bool consumed = false;
+    bool over = false;
+    const auto edit_range = [&](AINavigationHandleKind kind, int gizmo_id, float sign,
+        float& range, const char* property, const char* edit_label)
     {
-        constexpr float PickRadiusSquared = 12.0f * 12.0f;
-        const float detection_distance = detection_visible
-            ? DistanceSquared(mouse, detection_screen) : PickRadiusSquared + 1.0f;
-        const float attack_distance = attack_visible
-            ? DistanceSquared(mouse, attack_screen) : PickRadiusSquared + 1.0f;
-        if (detection_distance <= PickRadiusSquared || attack_distance <= PickRadiusSquared)
+        DirectX::XMFLOAT4X4 world{};
+        DirectX::XMStoreFloat4x4(&world, DirectX::XMMatrixTranslation(
+            center.x + sign * (std::max)(0.05f, range), center.y, center.z));
+        ImGuizmo::SetHostHovered(
+            scene_view_hovered || ai_navigation_handle_state.dragging ? 1 : 0);
+        ImGuizmo::SetID(gizmo_id);
+        scene_window->DrawList->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
+            ImVec2(scene_view_max_x, scene_view_max_y), true);
+        ImGuizmo::Manipulate(&view._11, &projection._11,
+            ImGuizmo::TRANSLATE_X, ImGuizmo::WORLD, &world._11);
+        scene_window->DrawList->PopClipRect();
+        over = over || ImGuizmo::IsOver();
+        const bool using_now = ImGuizmo::IsUsingID(gizmo_id);
+        if (using_now && !ai_navigation_handle_state.dragging)
         {
             ai_navigation_handle_state.object = selected_object->ID();
-            ai_navigation_handle_state.kind = detection_distance <= attack_distance
-                ? AINavigationHandleKind::DetectionRange : AINavigationHandleKind::AttackRange;
-            ai_navigation_handle_state.dragging = false;
-            viewport_drag_selecting = false;
-            return true;
-        }
-    }
-
-    if (ai_navigation_handle_state.kind == AINavigationHandleKind::None) return false;
-
-    if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
-    {
-        if (!ai_navigation_handle_state.dragging &&
-            ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f))
-        {
-            object_editor_context.BeginEdit(ai_navigation_handle_state.kind ==
-                AINavigationHandleKind::DetectionRange
-                ? "AI 索敵範囲を変更" : "AI 攻撃範囲を変更");
+            ai_navigation_handle_state.kind = kind;
             ai_navigation_handle_state.dragging = true;
+            viewport_drag_selecting = false;
+            object_editor_context.BeginEdit(edit_label);
         }
-
-        if (ai_navigation_handle_state.dragging)
+        if (!ai_navigation_handle_state.dragging ||
+            ai_navigation_handle_state.kind != kind) return;
+        range = (std::max)(0.05f, sign * (world._41 - center.x));
+        enemy->OnPropertyChanged(property);
+        consumed = true;
+        if (!using_now)
         {
-            const float local_x = mouse.x - scene_view_min_x;
-            const float local_y = mouse.y - scene_view_min_y;
-            const auto ray = viewport_picking_ray(local_x, local_y);
-
-            // 水平面そのものとの交差だとカメラ角度によって不安定になるため、
-            // XZ 平面上で中心に最も近い Ray 上の点から半径を求める。
-            const float denominator = ray.direction.x * ray.direction.x +
-                ray.direction.z * ray.direction.z;
-            if (denominator > 1.0e-6f)
-            {
-                const float ox = ray.origin.x - center.x;
-                const float oz = ray.origin.z - center.z;
-                float t = -(ox * ray.direction.x + oz * ray.direction.z) / denominator;
-                t = (std::max)(0.0f, t);
-                const float px = ray.origin.x + ray.direction.x * t;
-                const float pz = ray.origin.z + ray.direction.z * t;
-                const float dx = px - center.x;
-                const float dz = pz - center.z;
-                const float radius = (std::max)(0.05f, std::sqrt(dx * dx + dz * dz));
-                if (ai_navigation_handle_state.kind == AINavigationHandleKind::DetectionRange)
-                {
-                    enemy->detection_range = radius;
-                    enemy->OnPropertyChanged("detection_range");
-                }
-                else
-                {
-                    enemy->attack_range = radius;
-                    enemy->OnPropertyChanged("attack_range");
-                }
-            }
+            object_editor_context.CommitEdit();
+            ClearAINavigationHandleState();
         }
-        return true;
-    }
-
-    if (ai_navigation_handle_state.dragging) object_editor_context.CommitEdit();
-    ClearAINavigationHandleState();
-    return true;
+    };
+    edit_range(AINavigationHandleKind::DetectionRange, gizmo_id_ai_detection, 1.0f,
+        enemy->detection_range, "detection_range", "AI 索敵範囲を変更");
+    edit_range(AINavigationHandleKind::AttackRange, gizmo_id_ai_attack, -1.0f,
+        enemy->attack_range, "attack_range", "AI 攻撃範囲を変更");
+    return consumed || over;
 }
 
 void framework::draw_collision_diagnostics_panel()
@@ -647,3 +650,20 @@ void framework::draw_collision_diagnostics_panel() {}
 bool framework::handle_ai_navigation_debug_edit() { return false; }
 
 #endif
+
+// 世界座標を画面へ落とす。リグの描画と当たり判定で同じ式を使う。
+bool framework::project_world_to_screen(const DirectX::XMMATRIX& view_projection,
+    const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
+    ImVec2& out) const noexcept
+{
+    using namespace DirectX;
+    const XMVECTOR position = XMVectorSet(world.x, world.y, world.z, 1.0f);
+    const XMVECTOR clip = XMVector4Transform(position, view_projection);
+    const float w = XMVectorGetW(clip);
+    if (w <= 1.0e-4f) return false;
+    const float x = XMVectorGetX(clip) / w;
+    const float y = XMVectorGetY(clip) / w;
+    out.x = origin.x + (x * 0.5f + 0.5f) * size.x;
+    out.y = origin.y + (0.5f - y * 0.5f) * size.y;
+    return true;
+}

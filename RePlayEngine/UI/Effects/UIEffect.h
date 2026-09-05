@@ -96,7 +96,13 @@ namespace ReplayEngine::UI
         ShapeWipe = 77,
         Blinds = 78,
         Checkerboard = 79,
-        Count = 80,
+        Petals = 80,
+        GodRays = 81,
+        LensFlare = 82,
+        Bokeh = 83,
+        TiltShift = 84,
+        FilmScratch = 85,
+        Count = 86,
 
         // 新規 kind は Count の直前へ追加する。既存 Scene の enum 値を変えない。
     };
@@ -120,7 +126,8 @@ namespace ReplayEngine::UI
             "IridescentFoil", "RadarSweep", "EnergyPulse", "CircuitFlow", "HeatHaze",
             "WaterCaustics", "VoronoiShatter", "InkBleed", "BurnReveal", "PortalVortex",
             "FrostCrack", "Bubble", "SpeedLines", "ClockWipe", "ShapeWipe",
-            "Blinds", "Checkerboard"
+            "Blinds", "Checkerboard", "Petals", "GodRays", "LensFlare",
+            "Bokeh", "TiltShift", "FilmScratch"
         };
         const int index = static_cast<int>(kind);
         if (index < 0 || index >= static_cast<int>(names.size())) return "";
@@ -216,6 +223,8 @@ namespace ReplayEngine::UI
         case UIEffectKind::PortalVortex:
         case UIEffectKind::FrostCrack:
         case UIEffectKind::SpeedLines:
+        case UIEffectKind::Petals:
+        case UIEffectKind::FilmScratch:
             return true;
         default:
             return false;
@@ -236,6 +245,12 @@ namespace ReplayEngine::UI
         case UIEffectKind::ShapeWipe:
         case UIEffectKind::Blinds:
         case UIEffectKind::Checkerboard:
+        case UIEffectKind::Petals:
+        case UIEffectKind::GodRays:
+        case UIEffectKind::LensFlare:
+        case UIEffectKind::Bokeh:
+        case UIEffectKind::TiltShift:
+        case UIEffectKind::FilmScratch:
         case UIEffectKind::Dissolve:
         case UIEffectKind::Distortion:
         case UIEffectKind::ChromaticAberration:

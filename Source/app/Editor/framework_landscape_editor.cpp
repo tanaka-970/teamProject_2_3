@@ -37,6 +37,42 @@ void framework::draw_landscape_editor_toolbar()
     ImGui::Separator();
     ImGui::PushID("LandscapeEditorToolbar");
 
+    // 既存のモデルを地形として取り込む。平面格子から始めなくてよい。
+    if (object_editor_context.CanEdit() &&
+        ImGui::CollapsingHeader(u8"モデルから作る"))
+    {
+        static std::array<char, 96> model_filter{};
+        ImGui::SetNextItemWidth(-1.0f);
+        ImGui::InputTextWithHint("##LandscapeModelFilter", u8"モデルを検索...",
+            model_filter.data(), model_filter.size());
+        ImGui::TextDisabled(u8"骨やアニメーションを持つモデルは取り込めません。");
+        if (ImGui::BeginChild("LandscapeModelList", ImVec2(0.0f, 120.0f), true))
+        {
+            for (const auto& record : asset_database.Records())
+            {
+                if (record.kind != ReplayEngine::Assets::AssetKind::Model) continue;
+                if (model_filter[0] != '\0' &&
+                    record.display_name.find(model_filter.data()) == std::string::npos)
+                    continue;
+                ImGui::PushID(record.guid.c_str());
+                if (ImGui::Button(record.display_name.c_str()))
+                {
+                    std::string message;
+                    object_editor_context.BeginEdit(u8"モデルから地形を作る");
+                    if (build_landscape_from_model(*object, record.guid, message))
+                    {
+                        object_editor_context.CommitEdit();
+                        landscape_selected_face = -1;
+                    }
+                    else object_editor_context.CancelEdit();
+                    object_editor_context.SetStatus(message);
+                }
+                ImGui::PopID();
+            }
+        }
+        ImGui::EndChild();
+    }
+
     // Landscape は普通の GameObject + Component のまま保ちつつ、
     // 見た目/衝突/Primitive 重複の状態を操作した場所で即座に説明・修復できるようにする。
     auto* landscape_renderer = object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>();

@@ -32,7 +32,7 @@
     };
     // DockBuilder の構成を変えたら上げる。
     // imgui.ini に残った古い split を再利用させず、次回起動時に再構築するための版。
-    static constexpr int editor_layout_version{ 3 };
+    static constexpr int editor_layout_version{ 4 };
     editor_selection selected_editor_object{ editor_selection::world };
     editor_workspace active_editor_workspace{ editor_workspace::general };
     editor_view active_editor_view{ editor_view::scene };
@@ -79,6 +79,7 @@
     bool show_motion_inspector_panel{ true };
     bool show_motion_timeline_panel{ true };
     bool show_motion_graph_panel{ true };
+    bool show_motion_rig_panel{ true };
     bool show_sprite_atlas_editor_panel{ false };
     bool show_easing_editor_panel{ false };
     ReplayEngine::Motion::EasingCurveAsset easing_editor_asset;
@@ -443,6 +444,12 @@ private:
     DirectX::XMFLOAT3 resolve_object_pivot_world(ReplayEngine::Core::GameObject& object,
         ReplayEngine::Scene::Scene& scene) const;
     float scene_grid_step{ 1.0f };
+    // ImGuizmo は状態を 1 つしか持たない。同じフレームに複数出すので ID で分ける。
+    enum : int
+    {
+        gizmo_id_object = 1, gizmo_id_bone = 2, gizmo_id_normal_adjust = 3,
+        gizmo_id_ai_detection = 4, gizmo_id_ai_attack = 5
+    };
     struct ObjectGizmoState
     {
         ReplayEngine::Core::ObjectID id;
@@ -450,23 +457,19 @@ private:
         DirectX::XMFLOAT3 local_rotation{};
         DirectX::XMFLOAT3 local_scale{ 1.0f, 1.0f, 1.0f };
         DirectX::XMFLOAT3 pivot_world{};
+        DirectX::XMFLOAT4X4 world_matrix{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
     };
     std::vector<ObjectGizmoState> object_gizmo_states;
     bool object_gizmo_dragging{ false };
-    int object_gizmo_axis{ -1 };
-    float object_gizmo_start_mouse_x{ 0.0f };
-    float object_gizmo_start_mouse_y{ 0.0f };
-    float object_gizmo_screen_axis_x{ 1.0f };
-    float object_gizmo_screen_axis_y{ 0.0f };
-    float object_gizmo_world_per_pixel{ 0.01f };
-    DirectX::XMFLOAT3 object_gizmo_world_axis{ 1.0f, 0.0f, 0.0f };
+    // ギズモへ渡す行列。掴んでいる間は前フレームの結果と開始時の姿を持ち回る。
+    DirectX::XMFLOAT4X4 object_gizmo_matrix{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
+    DirectX::XMFLOAT4X4 object_gizmo_start_matrix{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
     bool normal_adjust_gizmo_dragging{ false };
     ReplayEngine::Core::ObjectID normal_adjust_gizmo_object;
     ReplayEngine::Core::ComponentStableID normal_adjust_gizmo_component{ 0 };
     DirectX::XMFLOAT3 normal_adjust_gizmo_start_center{};
     DirectX::XMFLOAT3 normal_adjust_gizmo_start_world{};
     DirectX::XMFLOAT4X4 normal_adjust_gizmo_start_matrix{};
-    DirectX::XMFLOAT3 normal_adjust_gizmo_plane_normal{ 0.0f, 0.0f, 1.0f };
     // このフレームでImGui::NewFrame()を通したか。
     // ロード完了フレームのようにupdate()が早期returnした直後にeditor_modeが
     // 立つ場合があり、NewFrame無しでRender()するとImGuiがassertするため、

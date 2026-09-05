@@ -33,25 +33,21 @@ namespace ReplayEngine::Reflection
             return dynamic != nullptr ? *dynamic : EmptyList();
         }
 
-        // 静的な表を先に見て、無ければ動的分を見る。
-        //
-        // 静的を先にするのは、型が自分で宣言したプロパティの意味を
-        // インスタンス側の申告で上書きさせないため。
-        const PropertyDesc* FindForComponent(const Core::Component& component,
-            const std::string& name) noexcept
-        {
-            if (const PropertyDesc* found =
-                PropertyRegistry::Find(component.TypeID(), name))
-            {
-                return found;
-            }
+    }
 
-            for (const PropertyDesc& desc : DynamicList(component))
-            {
-                if (desc.name == name) return &desc;
-            }
-            return nullptr;
+    // 静的を先にするのは、型が自分で宣言したプロパティの意味を
+    // インスタンス側の申告で上書きさせないため。
+    const PropertyDesc* PropertyRegistry::FindForComponent(
+        const Core::Component& component, const std::string& name) noexcept
+    {
+        if (const PropertyDesc* found = Find(component.TypeID(), name))
+            return found;
+
+        for (const PropertyDesc& desc : DynamicList(component))
+        {
+            if (desc.name == name) return &desc;
         }
+        return nullptr;
     }
 
     bool PropertyRegistry::RegisterFor(Core::ComponentTypeID type_id, PropertyDesc desc)
