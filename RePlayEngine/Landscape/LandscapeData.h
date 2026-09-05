@@ -118,6 +118,9 @@ namespace ReplayEngine::Landscape
         void MarkAllDirty() noexcept;
         void MarkSampleDirty(int x, int z) noexcept;
         void RecalculateChunkBounds(LandscapeChunk& chunk) noexcept;
+        // そのチャンクの三角形だけで法線を作り直す。塗るたびの全走査を避ける。
+        void RecalculateChunkNormals(const LandscapeChunk& chunk) noexcept;
+        void RecalculateBoundsFromTouched(bool partial) noexcept;
 
         // ---- 保存 / Migration --------------------------------------------
         bool Save(const std::filesystem::path& path, std::string& error) const;

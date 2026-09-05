@@ -269,6 +269,7 @@ namespace ReplayEngine::Landscape
             chunk.revision = revision_;
             chunk.render_dirty = true;
             chunk.collision_dirty = true;
+            RecalculateChunkNormals(chunk);
             RecalculateChunkBounds(chunk);
         }
         touched_vertices_.clear();
@@ -276,9 +277,54 @@ namespace ReplayEngine::Landscape
 
     void LandscapeData::FinalizeGeometryEdit() noexcept
     {
-        RecalculateNormals();
-        RecalculateBounds();
+        // どこを触ったか分かっているときは、法線も境界もそのチャンクだけで済ませる。
+        // 全走査すると 1 ストロークごとに全頂点を 3 周することになる。
+        const bool partial = !touched_vertices_.empty() && !chunks_.empty();
+        if (!partial) RecalculateNormals();
+        RecalculateBoundsFromTouched(partial);
         TouchGeometry();
+    }
+
+    // 触った頂点だけで全体の境界を広げる。縮む方向は塗り終わりに任せる。
+    void LandscapeData::RecalculateBoundsFromTouched(bool partial) noexcept
+    {
+        if (!partial) { RecalculateBounds(); return; }
+        for (const std::size_t index : touched_vertices_)
+        {
+            if (index >= vertices_.size()) continue;
+            const DirectX::XMFLOAT3& p = vertices_[index].position;
+            bounds_min_.x = (std::min)(bounds_min_.x, p.x);
+            bounds_min_.y = (std::min)(bounds_min_.y, p.y);
+            bounds_min_.z = (std::min)(bounds_min_.z, p.z);
+            bounds_max_.x = (std::max)(bounds_max_.x, p.x);
+            bounds_max_.y = (std::max)(bounds_max_.y, p.y);
+            bounds_max_.z = (std::max)(bounds_max_.z, p.z);
+        }
+    }
+
+    void LandscapeData::RecalculateChunkNormals(const LandscapeChunk& chunk) noexcept
+    {
+        for (const std::uint32_t index : chunk.indices)
+            if (index < vertices_.size()) vertices_[index].normal = { 0.0f, 0.0f, 0.0f };
+
+        for (std::size_t offset = 0; offset + 2 < chunk.indices.size(); offset += 3)
+        {
+            const std::uint32_t ia = chunk.indices[offset];
+            const std::uint32_t ib = chunk.indices[offset + 1];
+            const std::uint32_t ic = chunk.indices[offset + 2];
+            if (ia >= vertices_.size() || ib >= vertices_.size() ||
+                ic >= vertices_.size()) continue;
+            const XMFLOAT3 edge1 = Sub(vertices_[ib].position, vertices_[ia].position);
+            const XMFLOAT3 edge2 = Sub(vertices_[ic].position, vertices_[ia].position);
+            const XMFLOAT3 face = Cross(edge1, edge2);
+            vertices_[ia].normal = Add(vertices_[ia].normal, face);
+            vertices_[ib].normal = Add(vertices_[ib].normal, face);
+            vertices_[ic].normal = Add(vertices_[ic].normal, face);
+        }
+
+        for (const std::uint32_t index : chunk.indices)
+            if (index < vertices_.size())
+                vertices_[index].normal = Normalize(vertices_[index].normal);
     }
 
     void LandscapeData::RecalculateNormals() noexcept
