@@ -337,6 +337,54 @@ namespace ReplayEngine::Runtime::Detail
             }
         }
 
+        {
+            LandscapeData raycast_landscape;
+            if (!raycast_landscape.Initialize(129, 129, 1.0f))
+            {
+                std::fprintf(stderr, "Landscape chunk raycast setup failed\n");
+                return 48;
+            }
+
+            const DirectX::XMFLOAT3 ray_origin{ 17.25f, 10.0f, 23.25f };
+            const DirectX::XMFLOAT3 ray_direction{ 0.0f, -1.0f, 0.0f };
+            LandscapeRayHit chunk_hit{};
+            if (!raycast_landscape.Raycast(ray_origin, ray_direction, 100.0f, chunk_hit))
+            {
+                std::fprintf(stderr, "Landscape chunk raycast produced no hit\n");
+                return 49;
+            }
+            const std::size_t tested_triangles =
+                raycast_landscape.LastRaycastTriangleTestCount();
+            const std::size_t all_triangles = raycast_landscape.FaceCount();
+
+            raycast_landscape.Chunks().clear();
+            LandscapeRayHit full_scan_hit{};
+            if (!raycast_landscape.Raycast(ray_origin, ray_direction, 100.0f, full_scan_hit) ||
+                raycast_landscape.LastRaycastTriangleTestCount() != all_triangles ||
+                chunk_hit.face_index != full_scan_hit.face_index ||
+                chunk_hit.distance != full_scan_hit.distance ||
+                chunk_hit.position.x != full_scan_hit.position.x ||
+                chunk_hit.position.y != full_scan_hit.position.y ||
+                chunk_hit.position.z != full_scan_hit.position.z ||
+                chunk_hit.normal.x != full_scan_hit.normal.x ||
+                chunk_hit.normal.y != full_scan_hit.normal.y ||
+                chunk_hit.normal.z != full_scan_hit.normal.z)
+            {
+                std::fprintf(stderr,
+                    "Landscape chunk raycast result differs from full scan\n");
+                return 50;
+            }
+
+            const std::size_t triangle_limit = all_triangles / 4u;
+            if (tested_triangles >= triangle_limit)
+            {
+                std::fprintf(stderr,
+                    "Landscape chunk raycast tested %zu of %zu triangles; limit is below %zu\n",
+                    tested_triangles, all_triangles, triangle_limit);
+                return 51;
+            }
+        }
+
         std::fprintf(stderr,
             "Landscape v2 OK: arbitrary mesh, sculpt+undo, topology+bridge, cave/tunnel, raycast, spatial collision cook, save/reload, v1 migration, Component Scene round-trip OK\n");
         return 0;

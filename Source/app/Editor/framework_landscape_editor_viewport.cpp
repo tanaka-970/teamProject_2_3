@@ -29,6 +29,7 @@ using namespace framework_landscape_editor_detail;
 bool framework::handle_landscape_viewport_edit()
 {
 #ifdef USE_IMGUI
+    REPLAY_PROFILE_SCOPE("Landscape/Viewport");
     // Stroke の終了だけは Viewport の外へ出ても受け取る。
     if (landscape_stroke_transaction && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
     {
@@ -136,9 +137,14 @@ bool framework::handle_landscape_viewport_edit()
         {
             if (landscape_edit_mode == 0)
             {
+                REPLAY_PROFILE_SCOPE("Landscape/Preview");
                 const auto& transform = object->GetTransform();
                 const int preview_mode = (std::max)(0,
                     (std::min)(landscape_brush_preview_mode, 4));
+                static TerrainRingCache terrain_ring_cache;
+                terrain_ring_cache.Prepare(data, hit.position,
+                    landscape_brush.radius, preview_mode);
+                std::size_t ring_cache_index = 0;
 
                 if (preview_mode != 0)
                 {
@@ -159,28 +165,33 @@ bool framework::handle_landscape_viewport_edit()
                     DrawTerrainRing(draw, data, transform, view, projection,
                         width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius * 0.25f,
-                        IM_COL32(255, 230, 130, 95), 1.0f);
+                        IM_COL32(255, 230, 130, 95), 1.0f,
+                        terrain_ring_cache, ring_cache_index++);
                     DrawTerrainRing(draw, data, transform, view, projection,
                         width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius * 0.5f,
-                        IM_COL32(255, 220, 100, 140), 1.0f);
+                        IM_COL32(255, 220, 100, 140), 1.0f,
+                        terrain_ring_cache, ring_cache_index++);
                     DrawTerrainRing(draw, data, transform, view, projection,
                         width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius * 0.75f,
-                        IM_COL32(255, 205, 75, 175), 1.0f);
+                        IM_COL32(255, 205, 75, 175), 1.0f,
+                        terrain_ring_cache, ring_cache_index++);
                 }
                 else if (preview_mode == 1)
                 {
                     DrawTerrainRing(draw, data, transform, view, projection,
                         width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius * 0.5f,
-                        IM_COL32(255, 230, 135, 135), 1.0f);
+                        IM_COL32(255, 230, 135, 135), 1.0f,
+                        terrain_ring_cache, ring_cache_index++);
                 }
 
                 DrawTerrainRing(draw, data, transform, view, projection,
                     width, height, projection_min_x, projection_min_y,
                     hit.position, landscape_brush.radius,
-                    IM_COL32(255, 190, 55, 245), 2.0f);
+                    IM_COL32(255, 190, 55, 245), 2.0f,
+                    terrain_ring_cache, ring_cache_index++);
 
                 // 穴/崖/洞窟では XZ terrain ring が途切れても、ブラシ自体は消さない。
                 // hit center と同じ投影で screen-space fallback を重ねる。

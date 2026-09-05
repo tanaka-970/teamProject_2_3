@@ -45,6 +45,36 @@ namespace ReplayEngine::Landscape
             distance = result;
             return true;
         }
+
+        bool RayBounds(const XMFLOAT3& origin, const XMFLOAT3& direction,
+            float max_distance, const XMFLOAT3& minimum,
+            const XMFLOAT3& maximum) noexcept
+        {
+            float near_distance = 0.0f;
+            float far_distance = max_distance;
+            const float origins[3] = { origin.x, origin.y, origin.z };
+            const float directions[3] = { direction.x, direction.y, direction.z };
+            const float minimums[3] = {
+                minimum.x - epsilon, minimum.y - epsilon, minimum.z - epsilon };
+            const float maximums[3] = {
+                maximum.x + epsilon, maximum.y + epsilon, maximum.z + epsilon };
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                if (directions[axis] == 0.0f)
+                {
+                    if (origins[axis] < minimums[axis] || origins[axis] > maximums[axis])
+                        return false;
+                    continue;
+                }
+                float first = (minimums[axis] - origins[axis]) / directions[axis];
+                float second = (maximums[axis] - origins[axis]) / directions[axis];
+                if (first > second) std::swap(first, second);
+                near_distance = (std::max)(near_distance, first);
+                far_distance = (std::min)(far_distance, second);
+                if (near_distance > far_distance) return false;
+            }
+            return true;
+        }
     }
 
     bool LandscapeData::IsFinite(const LandscapeVertex& vertex) noexcept
@@ -388,32 +418,64 @@ namespace ReplayEngine::Landscape
             bounds_max_.y = (std::max)(bounds_max_.y, vertex.position.y);
             bounds_max_.z = (std::max)(bounds_max_.z, vertex.position.z);
         }
-        for (LandscapeChunk& chunk : chunks_)
-        {
-            chunk.bounds_min = bounds_min_;
-            chunk.bounds_max = bounds_max_;
-        }
+        for (LandscapeChunk& chunk : chunks_) RecalculateChunkBounds(chunk);
     }
     bool LandscapeData::Raycast(const XMFLOAT3& origin, const XMFLOAT3& direction,
         float max_distance, LandscapeRayHit& hit) const noexcept
     {
         hit = LandscapeRayHit{};
+        last_raycast_triangle_test_count_ = 0;
         if (!Valid() || !Finite3(origin) || !Finite3(direction) ||
             !std::isfinite(max_distance) || max_distance <= 0.0f) return false;
         const XMFLOAT3 ray_direction = Normalize(direction);
         float best = max_distance;
         std::size_t best_face = static_cast<std::size_t>(-1);
-        for (std::size_t face = 0; face < FaceCount(); ++face)
+        const auto test_face = [&](std::size_t face, const std::uint32_t* triangle)
         {
-            const std::size_t offset = face * 3;
+            ++last_raycast_triangle_test_count_;
             float distance = 0.0f;
             if (!RayTriangle(origin, ray_direction,
-                vertices_[indices_[offset]].position,
-                vertices_[indices_[offset + 1]].position,
-                vertices_[indices_[offset + 2]].position, distance)) continue;
-            if (distance > best) continue;
+                vertices_[triangle[0]].position,
+                vertices_[triangle[1]].position,
+                vertices_[triangle[2]].position, distance)) return;
+            if (distance > best || (distance == best && best_face !=
+                static_cast<std::size_t>(-1) && face < best_face)) return;
             best = distance;
             best_face = face;
+        };
+
+        std::size_t chunk_face_count = 0;
+        bool chunks_valid = !chunks_.empty() && chunk_faces_.size() == chunks_.size();
+        if (chunks_valid)
+        {
+            for (std::size_t chunk_index = 0; chunk_index < chunks_.size(); ++chunk_index)
+            {
+                const LandscapeChunk& chunk = chunks_[chunk_index];
+                if (chunk.indices.size() != chunk_faces_[chunk_index].size() * 3u)
+                {
+                    chunks_valid = false;
+                    break;
+                }
+                chunk_face_count += chunk_faces_[chunk_index].size();
+            }
+        }
+        chunks_valid = chunks_valid && chunk_face_count == FaceCount();
+
+        if (chunks_valid)
+        {
+            for (std::size_t chunk_index = 0; chunk_index < chunks_.size(); ++chunk_index)
+            {
+                const LandscapeChunk& chunk = chunks_[chunk_index];
+                if (chunk.indices.empty() || !RayBounds(origin, ray_direction, max_distance,
+                    chunk.bounds_min, chunk.bounds_max)) continue;
+                for (std::size_t face = 0; face < chunk_faces_[chunk_index].size(); ++face)
+                    test_face(chunk_faces_[chunk_index][face], chunk.indices.data() + face * 3u);
+            }
+        }
+        else
+        {
+            for (std::size_t face = 0; face < FaceCount(); ++face)
+                test_face(face, indices_.data() + face * 3u);
         }
         if (best_face == static_cast<std::size_t>(-1)) return false;
         hit.hit = true;
@@ -439,6 +501,7 @@ namespace ReplayEngine::Landscape
     void LandscapeData::BuildChunks()
     {
         chunks_.clear();
+        chunk_faces_.clear();
         vertex_chunks_.clear();
         chunk_divisions_ = 1;
         if (vertices_.empty() || indices_.size() < 3) return;
@@ -454,6 +517,7 @@ namespace ReplayEngine::Landscape
         const float span_z = (std::max)(0.0001f, bounds_max_.z - bounds_min_.z);
 
         chunks_.resize(static_cast<std::size_t>(divisions) * divisions);
+        chunk_faces_.resize(chunks_.size());
         vertex_chunks_.resize(vertices_.size());
         for (int z = 0; z < divisions; ++z)
         {
@@ -486,6 +550,7 @@ namespace ReplayEngine::Landscape
             chunk.indices.push_back(indices_[offset]);
             chunk.indices.push_back(indices_[offset + 1]);
             chunk.indices.push_back(indices_[offset + 2]);
+            chunk_faces_[chunk_index].push_back(static_cast<std::uint32_t>(offset / 3u));
             for (int corner = 0; corner < 3; ++corner)
                 vertex_chunks_[indices_[offset + corner]].push_back(chunk_index);
         }
