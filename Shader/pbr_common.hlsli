@@ -59,10 +59,13 @@ float3 unpack_normal_map(float3 N, float3 T, float3 B, float2 uv)
 {
 #ifdef REPLAY_MATERIAL_PROPERTIES
     float3 n = NormalMap.Sample(pbr_sampler_linear, uv).xyz;
+    n = n * 2.0f - 1.0f;
+    // 接線方向だけを伸縮させる。0 で凹凸なし、1 でマップそのまま。
+    n.xy *= NormalStrength;
 #else
     float3 n = pbr_normal_map.Sample(pbr_sampler_linear, uv).xyz;
-#endif
     n = n * 2.0f - 1.0f;
+#endif
     return normalize(n.x * T + n.y * B + n.z * N);
 }
 #endif

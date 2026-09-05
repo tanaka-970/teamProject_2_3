@@ -137,7 +137,8 @@ namespace ReplayEngine::Components
         // Cook 時の XZ グリッドのセルサイズ（ローカル空間）。
         float cook_cell_size = 4.0f;
 
-        // 裏面にも当たるか。
+        // 判定は常に両面で行う。片面にすると裏から入った瞬間にすり抜けるため。
+        // 値は Cook の識別にだけ使っており、false にしても当たり方は変わらない。
         bool double_sided = true;
 
         // 既定表示は Bounds のみ。必要なときだけ三角形を出す。

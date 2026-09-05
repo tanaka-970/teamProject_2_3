@@ -216,6 +216,9 @@ namespace ReplayEngine::Components
 
         void ResolveGround(const MotionSphere& shape,
             const DirectX::XMFLOAT3& previous_position);
+
+        // 面の向きに関係なく、食い込みを解く。壁か床かの分類より前に成り立つ約束。
+        void ResolvePenetration(const MotionSphere& shape);
         void ResolveWalls(const MotionSphere& shape,
             const DirectX::XMFLOAT3& previous_position);
 

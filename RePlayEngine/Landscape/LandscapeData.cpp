@@ -193,6 +193,7 @@ namespace ReplayEngine::Landscape
             std::fabs(before.y - position.y) <= epsilon &&
             std::fabs(before.z - position.z) <= epsilon) return false;
         vertices_[index].position = position;
+        MarkVertexDirty(index);
         if (finalize) FinalizeGeometryEdit();
         return true;
     }
@@ -217,11 +218,51 @@ namespace ReplayEngine::Landscape
         return Mul(Add(Add(a, b), c), 1.0f / 3.0f);
     }
 
+    void LandscapeData::MarkVertexDirty(std::size_t index) noexcept
+    {
+        if (index < vertices_.size()) touched_vertices_.push_back(index);
+    }
+
     void LandscapeData::TouchGeometry() noexcept
     {
         ++revision_;
         if (revision_ == 0) revision_ = 1;
-        MarkAllDirty();
+
+        // どこを触ったか分からないときだけ全部を上げる。
+        if (touched_vertices_.empty() || chunks_.empty())
+        {
+            MarkAllDirty();
+            return;
+        }
+
+        const int divisions = chunk_divisions_;
+        const float span_x = (std::max)(0.0001f, bounds_max_.x - bounds_min_.x);
+        const float span_z = (std::max)(0.0001f, bounds_max_.z - bounds_min_.z);
+        for (const std::size_t index : touched_vertices_)
+        {
+            if (index >= vertices_.size()) continue;
+            const DirectX::XMFLOAT3& p = vertices_[index].position;
+            const int cx = static_cast<int>((p.x - bounds_min_.x) / span_x * divisions);
+            const int cz = static_cast<int>((p.z - bounds_min_.z) / span_z * divisions);
+
+            // 三角形は重心で振り分けているので、隣接チャンクもまとめて上げる。
+            for (int oz = -1; oz <= 1; ++oz)
+            {
+                for (int ox = -1; ox <= 1; ++ox)
+                {
+                    const int nx = cx + ox;
+                    const int nz = cz + oz;
+                    if (nx < 0 || nz < 0 || nx >= divisions || nz >= divisions) continue;
+                    LandscapeChunk& chunk =
+                        chunks_[static_cast<std::size_t>(nz) * divisions + nx];
+                    chunk.revision = revision_;
+                    chunk.render_dirty = true;
+                    chunk.collision_dirty = true;
+                    RecalculateChunkBounds(chunk);
+                }
+            }
+        }
+        touched_vertices_.clear();
     }
 
     void LandscapeData::FinalizeGeometryEdit() noexcept
@@ -311,17 +352,57 @@ namespace ReplayEngine::Landscape
         return nullptr;
     }
 
+    // 三角形を XZ で区切って束ねる。任意 topology なので格子は前提にせず、重心で振り分ける。
     void LandscapeData::BuildChunks()
     {
         chunks_.clear();
-        LandscapeChunk chunk;
-        chunk.coord = { 0, 0 };
-        chunk.bounds_min = bounds_min_;
-        chunk.bounds_max = bounds_max_;
-        chunk.revision = revision_;
-        chunk.render_dirty = true;
-        chunk.collision_dirty = true;
-        chunks_.push_back(chunk);
+        chunk_divisions_ = 1;
+        if (vertices_.empty() || indices_.size() < 3) return;
+
+        // 1 チャンクがおよそ chunk_target_vertices 頂点になる分割数を選ぶ。
+        const double estimated = static_cast<double>(vertices_.size()) /
+            static_cast<double>(chunk_target_vertices);
+        int divisions = static_cast<int>(std::ceil(std::sqrt((std::max)(1.0, estimated))));
+        divisions = (std::max)(1, (std::min)(divisions, chunk_maximum_divisions));
+        chunk_divisions_ = divisions;
+
+        const float span_x = (std::max)(0.0001f, bounds_max_.x - bounds_min_.x);
+        const float span_z = (std::max)(0.0001f, bounds_max_.z - bounds_min_.z);
+
+        chunks_.resize(static_cast<std::size_t>(divisions) * divisions);
+        for (int z = 0; z < divisions; ++z)
+        {
+            for (int x = 0; x < divisions; ++x)
+            {
+                LandscapeChunk& chunk = chunks_[static_cast<std::size_t>(z) * divisions + x];
+                chunk.coord = { x, z };
+                chunk.revision = revision_;
+                chunk.render_dirty = true;
+                chunk.collision_dirty = true;
+            }
+        }
+
+        // 三角形の重心が入るチャンクへ配る。境界の頂点は複数チャンクへ複製される。
+        for (std::size_t offset = 0; offset + 2 < indices_.size(); offset += 3)
+        {
+            const DirectX::XMFLOAT3& a = vertices_[indices_[offset]].position;
+            const DirectX::XMFLOAT3& b = vertices_[indices_[offset + 1]].position;
+            const DirectX::XMFLOAT3& c = vertices_[indices_[offset + 2]].position;
+            const float center_x = (a.x + b.x + c.x) / 3.0f;
+            const float center_z = (a.z + b.z + c.z) / 3.0f;
+
+            int cx = static_cast<int>((center_x - bounds_min_.x) / span_x * divisions);
+            int cz = static_cast<int>((center_z - bounds_min_.z) / span_z * divisions);
+            cx = (std::max)(0, (std::min)(cx, divisions - 1));
+            cz = (std::max)(0, (std::min)(cz, divisions - 1));
+
+            LandscapeChunk& chunk = chunks_[static_cast<std::size_t>(cz) * divisions + cx];
+            chunk.indices.push_back(indices_[offset]);
+            chunk.indices.push_back(indices_[offset + 1]);
+            chunk.indices.push_back(indices_[offset + 2]);
+        }
+
+        for (LandscapeChunk& chunk : chunks_) RecalculateChunkBounds(chunk);
     }
 
     void LandscapeData::MarkAllDirty() noexcept
@@ -343,9 +424,31 @@ namespace ReplayEngine::Landscape
         MarkAllDirty();
     }
 
+    // カリングに使うので、そのチャンクが実際に持つ三角形だけから求める。
     void LandscapeData::RecalculateChunkBounds(LandscapeChunk& chunk) noexcept
     {
-        chunk.bounds_min = bounds_min_;
-        chunk.bounds_max = bounds_max_;
+        if (chunk.indices.empty())
+        {
+            chunk.bounds_min = bounds_min_;
+            chunk.bounds_max = bounds_min_;
+            return;
+        }
+
+        constexpr float huge_value = (std::numeric_limits<float>::max)();
+        DirectX::XMFLOAT3 minimum{ huge_value, huge_value, huge_value };
+        DirectX::XMFLOAT3 maximum{ -huge_value, -huge_value, -huge_value };
+        for (const std::uint32_t index : chunk.indices)
+        {
+            if (index >= vertices_.size()) continue;
+            const DirectX::XMFLOAT3& p = vertices_[index].position;
+            minimum.x = (std::min)(minimum.x, p.x);
+            minimum.y = (std::min)(minimum.y, p.y);
+            minimum.z = (std::min)(minimum.z, p.z);
+            maximum.x = (std::max)(maximum.x, p.x);
+            maximum.y = (std::max)(maximum.y, p.y);
+            maximum.z = (std::max)(maximum.z, p.z);
+        }
+        chunk.bounds_min = minimum;
+        chunk.bounds_max = maximum;
     }
 }

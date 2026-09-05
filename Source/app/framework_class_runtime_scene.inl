@@ -201,6 +201,8 @@
     {
         const void* source = nullptr;
         std::uint64_t revision = 0;
+        // チャンクごとに載せた世代。触っていないチャンクは作り直さない。
+        std::vector<std::uint64_t> chunk_revisions;
     };
     std::unordered_map<std::uint64_t, landscape_gpu_cache_entry> landscape_gpu_mesh_cache;
 

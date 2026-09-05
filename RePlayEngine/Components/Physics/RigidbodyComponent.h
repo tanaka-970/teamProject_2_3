@@ -39,6 +39,8 @@ namespace ReplayEngine::Components
         DirectX::XMFLOAT3 freeze_position{ 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 freeze_rotation{ 0.0f, 0.0f, 0.0f };
         bool start_asleep = false;
+
+        // 常に掃引で判定するか。false でも 1 tick に自分の大きさ以上動けば掃引へ切り替わる。
         bool use_ccd = false;
 
         // ---- 実行時のみの値 -----------------------------------------------

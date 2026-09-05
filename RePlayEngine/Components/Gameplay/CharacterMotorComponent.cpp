@@ -338,6 +338,46 @@ namespace ReplayEngine::Components
         // 順序は旧 SceneGame と同じ「壁 -> 接地」。
         ResolveWalls(shape, previous_position);
         ResolveGround(shape, previous_position);
+
+        // 壁と床のどちらにも数えられなかった面が残っていても、ここで必ず追い出す。
+        ResolvePenetration(shape);
+    }
+
+    // どんな向きの面でも、球が食い込んでいれば外へ出す。
+    // 壁として押し戻すかどうかの判定に漏れた面でも、めり込みだけは必ず解消する。
+    void CharacterMotorComponent::ResolvePenetration(const MotionSphere& shape)
+    {
+        Core::GameObject* owner = Owner();
+        if (owner == nullptr || !shape.valid) return;
+
+        Scene::Scene* scene = GetScene();
+        if (scene == nullptr) return;
+        const Scene::IPhysicsQueryService* physics = scene->Services().Physics();
+        if (physics == nullptr || !physics->CollisionAvailable()) return;
+
+        Core::Transform& transform = owner->GetTransform();
+        const float skin = SanitizeNonNegative(shape.skin_width);
+
+        for (int iteration = 0; iteration < wall_resolution_iterations; ++iteration)
+        {
+            const DirectX::XMFLOAT3 position = transform.WorldPosition();
+            const DirectX::XMFLOAT3 center{
+                position.x + shape.wall_offset.x,
+                position.y + shape.wall_offset.y,
+                position.z + shape.wall_offset.z };
+
+            // 面の向きで絞らない。上限 1.0 で床も含めた全部を対象にする。
+            Scene::SphereSweepHit hit{};
+            if (!physics->SweepSphereFiltered(center, center, shape.radius,
+                1.0f, shape.filter, hit)) break;
+            if (!hit.started_overlapping) break;
+
+            const float push = shape.radius + skin;
+            transform.SetWorldPosition(DirectX::XMFLOAT3{
+                hit.position.x + hit.normal.x * push - shape.wall_offset.x,
+                hit.position.y + hit.normal.y * push - shape.wall_offset.y,
+                hit.position.z + hit.normal.z * push - shape.wall_offset.z });
+        }
     }
 
     void CharacterMotorComponent::ResolveWalls(const MotionSphere& shape,

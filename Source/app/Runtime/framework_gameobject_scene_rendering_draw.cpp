@@ -63,6 +63,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -2259,46 +2260,78 @@ bool framework::build_dx12_static_scene(
                 !renderer->ActiveInHierarchy() || !landscape->Data().Valid()) continue;
 
             const auto& data = landscape->Data();
-            const std::string mesh_key = "landscape:" +
+            const std::string object_key = "landscape:" +
                 std::to_string(object->ID().Value());
             auto& cache = landscape_gpu_mesh_cache[object->ID().Value()];
-            if (cache.source != &data || cache.revision != data.Revision() ||
-                !dx12_device_context.HasStaticMesh(mesh_key))
-            {
-                D3D12StaticMeshSource source;
-                source.key = mesh_key;
-                source.replace_existing = true;
-                source.vertices.reserve(data.Vertices().size());
-                for (const auto& input : data.Vertices())
-                {
-                    D3D12StaticVertex vertex;
-                    vertex.position = input.position;
-                    vertex.normal = input.normal;
-                    vertex.texcoord = input.uv;
-                    source.vertices.push_back(vertex);
-                }
-                source.indices = data.Indices();
-                submission.mesh_sources.push_back(std::move(source));
-                cache.source = &data;
-                cache.revision = data.Revision();
-            }
 
-            D3D12StaticDrawItem draw;
-            draw.mesh_key = mesh_key;
-            draw.owner_id = object->ID().Value();
-            draw.rendering_layer = 0;
-            draw.motion_key = std::to_string(object->ID().Value()) + ":" + mesh_key;
-            draw.world = object->GetTransform().WorldMatrixFloat4x4();
-            draw.base_color = renderer->tint;
-            draw.double_sided = renderer->double_sided;
-            draw.cast_shadow = renderer->cast_shadow;
-            draw.receive_shadow = renderer->receive_shadow;
-            draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Pbr);
-            // 境界はメッシュ単位で共有する。視錐台の判定に要る。
-            if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
-                found_bounds != static_mesh_bounds_cache.end())
-                draw.material_bounds = found_bounds->second;
-            submission.draws.push_back(std::move(draw));
+            // チャンクごとに別メッシュとして持つ。塗った所だけ載せ替えられ、
+            // 画面外のチャンクは視錐台で落とせる。
+            const bool source_changed = cache.source != &data;
+            cache.source = &data;
+            cache.revision = data.Revision();
+
+            const auto& chunks = data.Chunks();
+            if (source_changed || cache.chunk_revisions.size() != chunks.size())
+                cache.chunk_revisions.assign(chunks.size(), 0);
+            for (std::size_t chunk_index = 0; chunk_index < chunks.size(); ++chunk_index)
+            {
+                const auto& chunk = chunks[chunk_index];
+                if (chunk.indices.empty()) continue;
+
+                const std::string mesh_key = object_key + ":" + std::to_string(chunk_index);
+                if (cache.chunk_revisions[chunk_index] != chunk.revision ||
+                    !dx12_device_context.HasStaticMesh(mesh_key))
+                {
+                    // このチャンクが使う頂点だけを詰め直す。境界の頂点は隣とも重複する。
+                    std::unordered_map<std::uint32_t, std::uint32_t> remap;
+                    D3D12StaticMeshSource source;
+                    source.key = mesh_key;
+                    source.replace_existing = true;
+                    source.vertices.reserve(chunk.indices.size());
+                    source.indices.reserve(chunk.indices.size());
+                    for (const std::uint32_t global : chunk.indices)
+                    {
+                        if (global >= data.Vertices().size()) continue;
+                        const auto found = remap.find(global);
+                        if (found != remap.end())
+                        {
+                            source.indices.push_back(found->second);
+                            continue;
+                        }
+                        const std::uint32_t local =
+                            static_cast<std::uint32_t>(source.vertices.size());
+                        remap.emplace(global, local);
+                        const auto& input = data.Vertices()[global];
+                        D3D12StaticVertex vertex;
+                        vertex.position = input.position;
+                        vertex.normal = input.normal;
+                        vertex.texcoord = input.uv;
+                        source.vertices.push_back(vertex);
+                        source.indices.push_back(local);
+                    }
+                    if (source.vertices.empty() || source.indices.empty()) continue;
+                    submission.mesh_sources.push_back(std::move(source));
+                    cache.chunk_revisions[chunk_index] = chunk.revision;
+                }
+
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = mesh_key;
+                draw.owner_id = object->ID().Value();
+                draw.rendering_layer = 0;
+                draw.motion_key = std::to_string(object->ID().Value()) + ":" + mesh_key;
+                draw.world = object->GetTransform().WorldMatrixFloat4x4();
+                draw.base_color = renderer->tint;
+                draw.double_sided = renderer->double_sided;
+                draw.cast_shadow = renderer->cast_shadow;
+                draw.receive_shadow = renderer->receive_shadow;
+                draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Pbr);
+
+                // 境界はチャンク自身のものを使う。これが視錐台カリングの効き目になる。
+                draw.material_bounds.minimum = chunk.bounds_min;
+                draw.material_bounds.maximum = chunk.bounds_max;
+                draw.material_bounds.valid = true;
+                submission.draws.push_back(std::move(draw));
+            }
         }
     }
 

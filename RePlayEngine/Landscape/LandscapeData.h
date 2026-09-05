@@ -112,6 +112,9 @@ namespace ReplayEngine::Landscape
         std::vector<LandscapeChunk>& Chunks() noexcept { return chunks_; }
         LandscapeChunk* FindChunk(LandscapeChunkCoord coord) noexcept;
         const LandscapeChunk* FindChunk(LandscapeChunkCoord coord) const noexcept;
+        int ChunkDivisions() const noexcept { return chunk_divisions_; }
+        // 編集で動いた頂点の周りだけを更新対象にする。空なら全チャンクを見る。
+        void MarkVertexDirty(std::size_t index) noexcept;
         void MarkAllDirty() noexcept;
         void MarkSampleDirty(int x, int z) noexcept;
         void RecalculateChunkBounds(LandscapeChunk& chunk) noexcept;
@@ -138,6 +141,11 @@ namespace ReplayEngine::Landscape
         std::vector<LandscapeVertex> vertices_;
         std::vector<std::uint32_t> indices_;
         std::vector<LandscapeChunk> chunks_;
+        // 1 チャンクの目安と、実際に使った分割数（XZ とも同じ数で割る）。
+        static constexpr std::size_t chunk_target_vertices = 2048;
+        static constexpr int chunk_maximum_divisions = 32;
+        int chunk_divisions_ = 1;
+        std::vector<std::size_t> touched_vertices_;
         std::uint64_t revision_ = 1;
         DirectX::XMFLOAT3 bounds_min_{};
         DirectX::XMFLOAT3 bounds_max_{};
