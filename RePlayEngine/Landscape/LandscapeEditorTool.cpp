@@ -30,6 +30,38 @@ namespace ReplayEngine::Landscape
         mode_ = mode;
         brush_ = brush;
         command_ = std::make_unique<LandscapeUndoCommand>();
+        const auto& vertices = data.Vertices();
+        const auto& indices = data.Indices();
+        candidate_marks_.assign(vertices.size(), 0);
+        unindexed_vertices_.clear();
+        candidate_generation_ = 0;
+
+        for (const std::uint32_t index : indices)
+            if (index < candidate_marks_.size()) candidate_marks_[index] = 1;
+        for (std::size_t index = 0; index < candidate_marks_.size(); ++index)
+            if (candidate_marks_[index] == 0)
+                unindexed_vertices_.push_back(static_cast<std::uint32_t>(index));
+        std::fill(candidate_marks_.begin(), candidate_marks_.end(), 0);
+
+        adjacency_.clear();
+        if (mode_ == LandscapeBrushMode::Smooth)
+        {
+            adjacency_.resize(vertices.size());
+            for (std::size_t i = 0; i + 2 < indices.size(); i += 3)
+            {
+                const std::uint32_t tri[3]{ indices[i], indices[i + 1], indices[i + 2] };
+                for (int e = 0; e < 3; ++e)
+                {
+                    const std::uint32_t from = tri[e];
+                    const std::uint32_t to = tri[(e + 1) % 3];
+                    if (from < adjacency_.size() && to < adjacency_.size())
+                    {
+                        adjacency_[from].push_back(to);
+                        adjacency_[to].push_back(from);
+                    }
+                }
+            }
+        }
         return true;
     }
 
@@ -40,34 +72,57 @@ namespace ReplayEngine::Landscape
         const auto& vertices = data_->Vertices();
         if (vertices.empty()) return false;
 
-        // Smooth は「この sample の変更前」の隣接平均を使う。
-        std::vector<std::vector<std::uint32_t>> adjacency;
-        if (mode_ == LandscapeBrushMode::Smooth)
+        if (++candidate_generation_ == 0)
         {
-            adjacency.resize(vertices.size());
-            const auto& indices = data_->Indices();
-            for (std::size_t i = 0; i + 2 < indices.size(); i += 3)
+            std::fill(candidate_marks_.begin(), candidate_marks_.end(), 0);
+            candidate_generation_ = 1;
+        }
+
+        std::vector<std::uint32_t> candidates;
+        const float radius_sq = brush_.radius * brush_.radius;
+        std::vector<const LandscapeChunk*> brush_chunks;
+        for (const LandscapeChunk& chunk : data_->Chunks())
+        {
+            if (chunk.indices.empty()) continue;
+            const float dx = center.x < chunk.bounds_min.x ? chunk.bounds_min.x - center.x
+                : (center.x > chunk.bounds_max.x ? center.x - chunk.bounds_max.x : 0.0f);
+            const float dy = center.y < chunk.bounds_min.y ? chunk.bounds_min.y - center.y
+                : (center.y > chunk.bounds_max.y ? center.y - chunk.bounds_max.y : 0.0f);
+            const float dz = center.z < chunk.bounds_min.z ? chunk.bounds_min.z - center.z
+                : (center.z > chunk.bounds_max.z ? center.z - chunk.bounds_max.z : 0.0f);
+            const float bounds_distance_sq = brush_.direction == LandscapeSculptDirection::LocalY
+                ? dx * dx + dz * dz : dx * dx + dy * dy + dz * dz;
+            if (bounds_distance_sq > radius_sq) continue;
+            brush_chunks.push_back(&chunk);
+        }
+
+        if (data_->Chunks().empty() || brush_chunks.size() * 2 > data_->Chunks().size())
+        {
+            candidates.reserve(vertices.size());
+            for (std::size_t index = 0; index < vertices.size(); ++index)
+                candidates.push_back(static_cast<std::uint32_t>(index));
+        }
+        else
+        {
+            for (const LandscapeChunk* chunk : brush_chunks)
             {
-                const std::uint32_t a = indices[i], b = indices[i + 1], c = indices[i + 2];
-                const std::uint32_t tri[3]{ a, b, c };
-                for (int e = 0; e < 3; ++e)
+                for (const std::uint32_t index : chunk->indices)
                 {
-                    const std::uint32_t from = tri[e];
-                    const std::uint32_t to = tri[(e + 1) % 3];
-                    if (from < adjacency.size() && to < adjacency.size())
-                    {
-                        adjacency[from].push_back(to);
-                        adjacency[to].push_back(from);
-                    }
+                    if (index >= candidate_marks_.size() ||
+                        candidate_marks_[index] == candidate_generation_) continue;
+                    candidate_marks_[index] = candidate_generation_;
+                    candidates.push_back(index);
                 }
             }
+            candidates.insert(candidates.end(), unindexed_vertices_.begin(), unindexed_vertices_.end());
+            std::sort(candidates.begin(), candidates.end());
         }
 
         struct Change { std::size_t index; DirectX::XMFLOAT3 before; DirectX::XMFLOAT3 after; };
         std::vector<Change> changes;
-        changes.reserve(vertices.size() / 8 + 1);
+        changes.reserve(candidates.size() / 8 + 1);
 
-        for (std::size_t index = 0; index < vertices.size(); ++index)
+        for (const std::uint32_t index : candidates)
         {
             const LandscapeVertex& vertex = vertices[index];
             const float dx = vertex.position.x - center.x;
@@ -122,10 +177,10 @@ namespace ReplayEngine::Landscape
                 break;
             case LandscapeBrushMode::Smooth:
             {
-                if (index >= adjacency.size() || adjacency[index].empty()) break;
+                if (index >= adjacency_.size() || adjacency_[index].empty()) break;
                 DirectX::XMFLOAT3 average = before;
                 int count = 1;
-                for (std::uint32_t neighbor : adjacency[index])
+                for (std::uint32_t neighbor : adjacency_[index])
                 {
                     if (neighbor >= vertices.size()) continue;
                     average.x += vertices[neighbor].position.x;
@@ -170,6 +225,9 @@ namespace ReplayEngine::Landscape
     std::unique_ptr<LandscapeUndoCommand> LandscapeEditorTool::EndStroke()
     {
         data_ = nullptr;
+        adjacency_.clear();
+        candidate_marks_.clear();
+        unindexed_vertices_.clear();
         if (command_ != nullptr && command_->Empty()) command_.reset();
         if (command_ != nullptr) command_->Seal();
         return std::move(command_);
@@ -179,6 +237,9 @@ namespace ReplayEngine::Landscape
     {
         if (data_ != nullptr && command_ != nullptr) command_->Undo(*data_);
         data_ = nullptr;
+        adjacency_.clear();
+        candidate_marks_.clear();
+        unindexed_vertices_.clear();
         command_.reset();
     }
 }

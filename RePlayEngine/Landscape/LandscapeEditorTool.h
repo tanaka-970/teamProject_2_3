@@ -4,7 +4,9 @@
 #include "LandscapeUndoCommand.h"
 
 #include <DirectXMath.h>
+#include <cstdint>
 #include <memory>
+#include <vector>
 
 namespace ReplayEngine::Landscape
 {
@@ -31,5 +33,9 @@ namespace ReplayEngine::Landscape
         LandscapeBrushMode mode_ = LandscapeBrushMode::Raise;
         LandscapeBrush brush_;
         std::unique_ptr<LandscapeUndoCommand> command_;
+        std::vector<std::vector<std::uint32_t>> adjacency_;
+        std::vector<std::uint32_t> candidate_marks_;
+        std::vector<std::uint32_t> unindexed_vertices_;
+        std::uint32_t candidate_generation_ = 0;
     };
 }

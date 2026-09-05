@@ -235,21 +235,21 @@ namespace ReplayEngine::Landscape
             return;
         }
 
-        const int divisions = chunk_divisions_;
-        const float span_x = (std::max)(0.0001f, bounds_max_.x - bounds_min_.x);
-        const float span_z = (std::max)(0.0001f, bounds_max_.z - bounds_min_.z);
-
         // 触った頂点ごとに境界を作り直すと、同じチャンクを何度も舐めることになる。
         // どれを上げるかを先に決めてから、1 チャンクにつき 1 回だけ計算する。
         chunk_dirty_marks_.assign(chunks_.size(), 0);
+        const int divisions = chunk_divisions_;
+        const float span_x = (std::max)(0.0001f, bounds_max_.x - bounds_min_.x);
+        const float span_z = (std::max)(0.0001f, bounds_max_.z - bounds_min_.z);
         for (const std::size_t index : touched_vertices_)
         {
-            if (index >= vertices_.size()) continue;
+            if (index >= vertices_.size() || index >= vertex_chunks_.size()) continue;
+            for (const std::uint32_t chunk_index : vertex_chunks_[index])
+                if (chunk_index < chunk_dirty_marks_.size()) chunk_dirty_marks_[chunk_index] = 1;
+
             const DirectX::XMFLOAT3& p = vertices_[index].position;
             const int cx = static_cast<int>((p.x - bounds_min_.x) / span_x * divisions);
             const int cz = static_cast<int>((p.z - bounds_min_.z) / span_z * divisions);
-
-            // 三角形は重心で振り分けているので、隣接チャンクもまとめて上げる。
             for (int oz = -1; oz <= 1; ++oz)
             {
                 for (int ox = -1; ox <= 1; ++ox)
@@ -277,12 +277,40 @@ namespace ReplayEngine::Landscape
 
     void LandscapeData::FinalizeGeometryEdit() noexcept
     {
+        if (topology_batch_depth_ > 0)
+        {
+            topology_batch_dirty_ = true;
+            return;
+        }
+
+        std::size_t chunk_index_count = 0;
+        for (const LandscapeChunk& chunk : chunks_) chunk_index_count += chunk.indices.size();
+        if (chunk_index_count != indices_.size())
+        {
+            RecalculateNormals();
+            RecalculateBounds();
+            TouchGeometry();
+            BuildChunks();
+            return;
+        }
+
         // どこを触ったか分かっているときは、法線も境界もそのチャンクだけで済ませる。
         // 全走査すると 1 ストロークごとに全頂点を 3 周することになる。
         const bool partial = !touched_vertices_.empty() && !chunks_.empty();
         if (!partial) RecalculateNormals();
         RecalculateBoundsFromTouched(partial);
         TouchGeometry();
+    }
+
+    void LandscapeData::EndTopologyBatch() noexcept
+    {
+        if (topology_batch_depth_ <= 0) return;
+        --topology_batch_depth_;
+        if (topology_batch_depth_ == 0 && topology_batch_dirty_)
+        {
+            topology_batch_dirty_ = false;
+            FinalizeGeometryEdit();
+        }
     }
 
     // 触った頂点だけで全体の境界を広げる。縮む方向は塗り終わりに任せる。
@@ -411,6 +439,7 @@ namespace ReplayEngine::Landscape
     void LandscapeData::BuildChunks()
     {
         chunks_.clear();
+        vertex_chunks_.clear();
         chunk_divisions_ = 1;
         if (vertices_.empty() || indices_.size() < 3) return;
 
@@ -425,6 +454,7 @@ namespace ReplayEngine::Landscape
         const float span_z = (std::max)(0.0001f, bounds_max_.z - bounds_min_.z);
 
         chunks_.resize(static_cast<std::size_t>(divisions) * divisions);
+        vertex_chunks_.resize(vertices_.size());
         for (int z = 0; z < divisions; ++z)
         {
             for (int x = 0; x < divisions; ++x)
@@ -451,12 +481,20 @@ namespace ReplayEngine::Landscape
             cx = (std::max)(0, (std::min)(cx, divisions - 1));
             cz = (std::max)(0, (std::min)(cz, divisions - 1));
 
-            LandscapeChunk& chunk = chunks_[static_cast<std::size_t>(cz) * divisions + cx];
+            const std::uint32_t chunk_index = static_cast<std::uint32_t>(cz * divisions + cx);
+            LandscapeChunk& chunk = chunks_[chunk_index];
             chunk.indices.push_back(indices_[offset]);
             chunk.indices.push_back(indices_[offset + 1]);
             chunk.indices.push_back(indices_[offset + 2]);
+            for (int corner = 0; corner < 3; ++corner)
+                vertex_chunks_[indices_[offset + corner]].push_back(chunk_index);
         }
 
+        for (auto& memberships : vertex_chunks_)
+        {
+            std::sort(memberships.begin(), memberships.end());
+            memberships.erase(std::unique(memberships.begin(), memberships.end()), memberships.end());
+        }
         for (LandscapeChunk& chunk : chunks_) RecalculateChunkBounds(chunk);
     }
 
@@ -468,8 +506,6 @@ namespace ReplayEngine::Landscape
             chunk.revision = revision_;
             chunk.render_dirty = true;
             chunk.collision_dirty = true;
-            chunk.bounds_min = bounds_min_;
-            chunk.bounds_max = bounds_max_;
         }
     }
 

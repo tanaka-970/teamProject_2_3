@@ -85,6 +85,8 @@ namespace ReplayEngine::Landscape
         DirectX::XMFLOAT3 BoundsMax() const noexcept { return bounds_max_; }
 
         // ---- 任意 Topology 編集 ------------------------------------------
+        void BeginTopologyBatch() noexcept { ++topology_batch_depth_; }
+        void EndTopologyBatch() noexcept;
         bool SubdivideFace(std::size_t face_index);
         bool DeleteFace(std::size_t face_index);
         bool ExtrudeFace(std::size_t face_index, float distance);
@@ -144,12 +146,15 @@ namespace ReplayEngine::Landscape
         std::vector<LandscapeVertex> vertices_;
         std::vector<std::uint32_t> indices_;
         std::vector<LandscapeChunk> chunks_;
+        std::vector<std::vector<std::uint32_t>> vertex_chunks_;
         // 1 チャンクの目安と、実際に使った分割数（XZ とも同じ数で割る）。
         static constexpr std::size_t chunk_target_vertices = 2048;
         static constexpr int chunk_maximum_divisions = 32;
         int chunk_divisions_ = 1;
         std::vector<std::size_t> touched_vertices_;
         std::vector<std::uint8_t> chunk_dirty_marks_;
+        int topology_batch_depth_ = 0;
+        bool topology_batch_dirty_ = false;
         std::uint64_t revision_ = 1;
         DirectX::XMFLOAT3 bounds_min_{};
         DirectX::XMFLOAT3 bounds_max_{};
