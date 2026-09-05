@@ -2017,7 +2017,12 @@ namespace ReplayEngine::Rendering::DX12
             if (source.replace_existing && allow_static_mesh_cache_replacement)
             {
                 const auto existing = static_mesh_cache_.find(source.key);
-                if (existing != static_mesh_cache_.end()) static_mesh_cache_.erase(existing);
+                if (existing != static_mesh_cache_.end())
+                {
+                    // 直前のフレームがまだ GPU で読んでいる。Fence を越えてから解放する。
+                    RetireStaticMesh(std::move(existing->second));
+                    static_mesh_cache_.erase(existing);
+                }
             }
             if (static_mesh_cache_.find(source.key) == static_mesh_cache_.end() &&
                 !EnsureStaticMesh(source))
@@ -2135,7 +2140,11 @@ namespace ReplayEngine::Rendering::DX12
             {
                 const auto existing = static_mesh_cache_.find(source.key);
                 if (existing != static_mesh_cache_.end())
+                {
+                    // 直前のフレームがまだ GPU で読んでいる。Fence を越えてから解放する。
+                    RetireStaticMesh(std::move(existing->second));
                     static_mesh_cache_.erase(existing);
+                }
             }
             if (static_mesh_cache_.find(source.key) == static_mesh_cache_.end() &&
                 !EnsureStaticMesh(source))

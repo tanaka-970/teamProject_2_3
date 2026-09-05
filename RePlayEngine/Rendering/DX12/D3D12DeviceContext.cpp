@@ -3345,6 +3345,36 @@ namespace ReplayEngine::Rendering::DX12
         }
         resource_descriptor_allocator_.ReleaseCompleted(completed);
         sampler_descriptor_allocator_.ReleaseCompleted(completed);
+        ReleaseRetiredStaticMeshes(completed);
+    }
+
+    // 置換で外した静的メッシュは、次に Signal する Fence を越えるまで解放しない。
+    void D3D12DeviceContext::RetireStaticMesh(std::unique_ptr<D3D12MeshBuffer> mesh) noexcept
+    {
+        if (mesh == nullptr) return;
+        try
+        {
+            retired_static_meshes_.emplace_back(next_fence_value_, std::move(mesh));
+        }
+        catch (...)
+        {
+        }
+    }
+
+    void D3D12DeviceContext::ReleaseRetiredStaticMeshes(
+        std::uint64_t completed_fence_value) noexcept
+    {
+        std::size_t index = 0;
+        while (index < retired_static_meshes_.size())
+        {
+            if (retired_static_meshes_[index].first > completed_fence_value)
+            {
+                ++index;
+                continue;
+            }
+            retired_static_meshes_.erase(retired_static_meshes_.begin() +
+                static_cast<std::ptrdiff_t>(index));
+        }
     }
 
     bool D3D12DeviceContext::WaitForFrame(std::uint32_t frame_index) noexcept

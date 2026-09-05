@@ -1071,6 +1071,8 @@ namespace ReplayEngine::Rendering::DX12
         void ReleaseBackBufferCapture() noexcept;
         std::uint64_t SignalQueue() noexcept;
         void ReclaimDeferredDescriptors() noexcept;
+        void RetireStaticMesh(std::unique_ptr<D3D12MeshBuffer> mesh) noexcept;
+        void ReleaseRetiredStaticMeshes(std::uint64_t completed_fence_value) noexcept;
         void ReportDeviceRemoved(HRESULT trigger) noexcept;
         void WriteDeviceRemovedReport(HRESULT trigger, HRESULT reason,
             bool forced_validation) noexcept;
@@ -1269,6 +1271,8 @@ namespace ReplayEngine::Rendering::DX12
         std::uint64_t scene3d_history_write_serial_ = 0;
         D3D12DescriptorAllocation static_samplers_[3]{};
         std::unordered_map<std::string, std::unique_ptr<D3D12MeshBuffer>> static_mesh_cache_;
+        // 置換で外したメッシュは GPU が読み終わるまで捨てない。
+        std::vector<std::pair<std::uint64_t, std::unique_ptr<D3D12MeshBuffer>>> retired_static_meshes_;
         std::unordered_map<std::string, D3D12MeshLocalBounds> static_mesh_bounds_cache_;
         std::unordered_map<std::string, StaticTextureResource> texture_cache_;
         std::unordered_map<std::string, SkyCubeCpuData> sky_cpu_cubes_;
