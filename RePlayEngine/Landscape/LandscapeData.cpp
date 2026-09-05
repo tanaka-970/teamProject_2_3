@@ -8,6 +8,7 @@
 #include "LandscapeData.h"
 #include "LandscapeDataInternal.h"
 
+#include <DirectXCollision.h>
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -222,6 +223,8 @@ namespace ReplayEngine::Landscape
         if (std::fabs(before.x - position.x) <= epsilon &&
             std::fabs(before.y - position.y) <= epsilon &&
             std::fabs(before.z - position.z) <= epsilon) return false;
+        horizontal_travel_ = (std::max)(horizontal_travel_,
+            (std::max)(std::fabs(before.x - position.x), std::fabs(before.z - position.z)));
         vertices_[index].position = position;
         MarkVertexDirty(index);
         if (finalize) FinalizeGeometryEdit();
@@ -265,30 +268,43 @@ namespace ReplayEngine::Landscape
             return;
         }
 
-        // 触った頂点ごとに境界を作り直すと、同じチャンクを何度も舐めることになる。
-        // どれを上げるかを先に決めてから、1 チャンクにつき 1 回だけ計算する。
+        // Recompute affected normals from every incident face, including other chunks.
         chunk_dirty_marks_.assign(chunks_.size(), 0);
-        const int divisions = chunk_divisions_;
-        const float span_x = (std::max)(0.0001f, bounds_max_.x - bounds_min_.x);
-        const float span_z = (std::max)(0.0001f, bounds_max_.z - bounds_min_.z);
-        for (const std::size_t index : touched_vertices_)
+        normal_vertices_.clear();
+        if (normal_marks_.size() != vertices_.size()) normal_marks_.assign(vertices_.size(), 0);
+        if (++normal_generation_ == 0)
         {
-            if (index >= vertices_.size() || index >= vertex_chunks_.size()) continue;
-            for (const std::uint32_t chunk_index : vertex_chunks_[index])
-                if (chunk_index < chunk_dirty_marks_.size()) chunk_dirty_marks_[chunk_index] = 1;
-
-            const DirectX::XMFLOAT3& p = vertices_[index].position;
-            const int cx = static_cast<int>((p.x - bounds_min_.x) / span_x * divisions);
-            const int cz = static_cast<int>((p.z - bounds_min_.z) / span_z * divisions);
-            for (int oz = -1; oz <= 1; ++oz)
-            {
-                for (int ox = -1; ox <= 1; ++ox)
+            std::fill(normal_marks_.begin(), normal_marks_.end(), 0);
+            normal_generation_ = 1;
+        }
+        for (const auto moved : touched_vertices_)
+        {
+            for (const auto face : AdjacentFaces(moved))
+                for (int corner = 0; corner < 3; ++corner)
                 {
-                    const int nx = cx + ox;
-                    const int nz = cz + oz;
-                    if (nx < 0 || nz < 0 || nx >= divisions || nz >= divisions) continue;
-                    chunk_dirty_marks_[static_cast<std::size_t>(nz) * divisions + nx] = 1;
+                    const auto vertex = indices_[face * 3 + corner];
+                    if (normal_marks_[vertex] == normal_generation_) continue;
+                    normal_marks_[vertex] = normal_generation_;
+                    normal_vertices_.push_back(vertex);
                 }
+            if (moved < vertex_chunks_.size())
+                for (const auto chunk : vertex_chunks_[moved]) chunk_dirty_marks_[chunk] = 1;
+        }
+        for (const auto vertex : normal_vertices_)
+        {
+            XMFLOAT3 normal{};
+            for (const auto face : AdjacentFaces(vertex))
+            {
+                const auto* triangle = indices_.data() + face * 3;
+                normal = Add(normal, Cross(
+                    Sub(vertices_[triangle[1]].position, vertices_[triangle[0]].position),
+                    Sub(vertices_[triangle[2]].position, vertices_[triangle[0]].position)));
+            }
+            vertices_[vertex].normal = Normalize(normal);
+            for (const auto chunk_index : vertex_chunks_[vertex])
+            {
+                chunks_[chunk_index].render_dirty = true;
+                chunks_[chunk_index].revision = revision_;
             }
         }
 
@@ -299,7 +315,6 @@ namespace ReplayEngine::Landscape
             chunk.revision = revision_;
             chunk.render_dirty = true;
             chunk.collision_dirty = true;
-            RecalculateChunkNormals(chunk);
             RecalculateChunkBounds(chunk);
         }
         touched_vertices_.clear();
@@ -362,27 +377,17 @@ namespace ReplayEngine::Landscape
 
     void LandscapeData::RecalculateChunkNormals(const LandscapeChunk& chunk) noexcept
     {
-        for (const std::uint32_t index : chunk.indices)
-            if (index < vertices_.size()) vertices_[index].normal = { 0.0f, 0.0f, 0.0f };
-
-        for (std::size_t offset = 0; offset + 2 < chunk.indices.size(); offset += 3)
+        for (const auto vertex : chunk.vertex_map)
         {
-            const std::uint32_t ia = chunk.indices[offset];
-            const std::uint32_t ib = chunk.indices[offset + 1];
-            const std::uint32_t ic = chunk.indices[offset + 2];
-            if (ia >= vertices_.size() || ib >= vertices_.size() ||
-                ic >= vertices_.size()) continue;
-            const XMFLOAT3 edge1 = Sub(vertices_[ib].position, vertices_[ia].position);
-            const XMFLOAT3 edge2 = Sub(vertices_[ic].position, vertices_[ia].position);
-            const XMFLOAT3 face = Cross(edge1, edge2);
-            vertices_[ia].normal = Add(vertices_[ia].normal, face);
-            vertices_[ib].normal = Add(vertices_[ib].normal, face);
-            vertices_[ic].normal = Add(vertices_[ic].normal, face);
+            XMFLOAT3 normal{};
+            for (const auto face : AdjacentFaces(vertex))
+            {
+                const auto* t = indices_.data() + face * 3;
+                normal = Add(normal, Cross(Sub(vertices_[t[1]].position, vertices_[t[0]].position),
+                    Sub(vertices_[t[2]].position, vertices_[t[0]].position)));
+            }
+            vertices_[vertex].normal = Normalize(normal);
         }
-
-        for (const std::uint32_t index : chunk.indices)
-            if (index < vertices_.size())
-                vertices_[index].normal = Normalize(vertices_[index].normal);
     }
 
     void LandscapeData::RecalculateNormals() noexcept
@@ -418,7 +423,23 @@ namespace ReplayEngine::Landscape
             bounds_max_.y = (std::max)(bounds_max_.y, vertex.position.y);
             bounds_max_.z = (std::max)(bounds_max_.z, vertex.position.z);
         }
-        for (LandscapeChunk& chunk : chunks_) RecalculateChunkBounds(chunk);
+        // The local index layout is immutable until repartition/topology changes.
+        std::vector<std::uint32_t> remap(vertices_.size(), UINT32_MAX);
+        for (LandscapeChunk& chunk : chunks_)
+        {
+            for (const auto vertex : chunk.indices)
+            {
+                if (remap[vertex] == UINT32_MAX)
+                {
+                    remap[vertex] = static_cast<std::uint32_t>(chunk.vertex_map.size());
+                    chunk.vertex_map.push_back(vertex);
+                }
+                chunk.local_indices.push_back(remap[vertex]);
+            }
+            for (const auto vertex : chunk.vertex_map) remap[vertex] = UINT32_MAX;
+            RecalculateChunkBounds(chunk);
+        }
+        horizontal_travel_ = 0.0f;
     }
     bool LandscapeData::Raycast(const XMFLOAT3& origin, const XMFLOAT3& direction,
         float max_distance, LandscapeRayHit& hit) const noexcept
@@ -503,6 +524,7 @@ namespace ReplayEngine::Landscape
         chunks_.clear();
         chunk_faces_.clear();
         vertex_chunks_.clear();
+        vertex_faces_.clear();
         chunk_divisions_ = 1;
         if (vertices_.empty() || indices_.size() < 3) return;
 
@@ -519,6 +541,7 @@ namespace ReplayEngine::Landscape
         chunks_.resize(static_cast<std::size_t>(divisions) * divisions);
         chunk_faces_.resize(chunks_.size());
         vertex_chunks_.resize(vertices_.size());
+        vertex_faces_.resize(vertices_.size());
         for (int z = 0; z < divisions; ++z)
         {
             for (int x = 0; x < divisions; ++x)
@@ -552,7 +575,10 @@ namespace ReplayEngine::Landscape
             chunk.indices.push_back(indices_[offset + 2]);
             chunk_faces_[chunk_index].push_back(static_cast<std::uint32_t>(offset / 3u));
             for (int corner = 0; corner < 3; ++corner)
+            {
                 vertex_chunks_[indices_[offset + corner]].push_back(chunk_index);
+                vertex_faces_[indices_[offset + corner]].push_back(static_cast<std::uint32_t>(offset / 3));
+            }
         }
 
         for (auto& memberships : vertex_chunks_)
@@ -560,7 +586,102 @@ namespace ReplayEngine::Landscape
             std::sort(memberships.begin(), memberships.end());
             memberships.erase(std::unique(memberships.begin(), memberships.end()), memberships.end());
         }
-        for (LandscapeChunk& chunk : chunks_) RecalculateChunkBounds(chunk);
+        // The local index layout is immutable until repartition/topology changes.
+        std::vector<std::uint32_t> remap(vertices_.size(), UINT32_MAX);
+        for (LandscapeChunk& chunk : chunks_)
+        {
+            for (const auto vertex : chunk.indices)
+            {
+                if (remap[vertex] == UINT32_MAX)
+                {
+                    remap[vertex] = static_cast<std::uint32_t>(chunk.vertex_map.size());
+                    chunk.vertex_map.push_back(vertex);
+                }
+                chunk.local_indices.push_back(remap[vertex]);
+            }
+            for (const auto vertex : chunk.vertex_map) remap[vertex] = UINT32_MAX;
+            RecalculateChunkBounds(chunk);
+        }
+        horizontal_travel_ = 0.0f;
+    }
+
+    const std::vector<std::uint32_t>& LandscapeData::AdjacentFaces(std::size_t vertex) const noexcept
+    {
+        static const std::vector<std::uint32_t> empty;
+        return vertex < vertex_faces_.size() ? vertex_faces_[vertex] : empty;
+    }
+
+    void LandscapeData::QuerySurface(const XMFLOAT3& center, float radius,
+        std::size_t seed_face, SurfaceRegion& region) const
+    {
+        region.faces.clear(); region.vertices.clear();
+        if (seed_face >= FaceCount() || !Finite3(center) || !std::isfinite(radius) || radius <= 0) return;
+        // resize initializes only newly added marks after subdivision.
+        region.face_marks.resize(FaceCount(), 0);
+        region.vertex_marks.resize(VertexCount(), 0);
+        if (++region.generation == 0)
+        {
+            std::fill(region.face_marks.begin(), region.face_marks.end(), 0);
+            std::fill(region.vertex_marks.begin(), region.vertex_marks.end(), 0);
+            region.generation = 1;
+        }
+        const BoundingSphere sphere(center, radius);
+        const auto visit = [&](std::uint32_t face)
+        {
+            if (region.face_marks[face] == region.generation) return;
+            region.face_marks[face] = region.generation;
+            const auto* t = indices_.data() + face * 3;
+            const auto a = XMLoadFloat3(&vertices_[t[0]].position);
+            const auto b = XMLoadFloat3(&vertices_[t[1]].position);
+            const auto c = XMLoadFloat3(&vertices_[t[2]].position);
+            if (XMVectorGetX(XMVector3LengthSq(XMVector3Cross(b-a,c-a))) <= 1.0e-12f) return;
+            if (sphere.Intersects(a, b, c)) region.faces.push_back(face);
+        };
+        visit(static_cast<std::uint32_t>(seed_face));
+        for (std::size_t cursor = 0; cursor < region.faces.size(); ++cursor)
+        {
+            const auto face = region.faces[cursor];
+            for (int corner = 0; corner < 3; ++corner)
+            {
+                const auto vertex = indices_[face * 3 + corner];
+                if (region.vertex_marks[vertex] == region.generation) continue;
+                region.vertex_marks[vertex] = region.generation;
+                const auto offset = Sub(vertices_[vertex].position, center);
+                if (Dot(offset, offset) <= radius * radius) region.vertices.push_back(vertex);
+                for (const auto adjacent : AdjacentFaces(vertex)) visit(adjacent);
+            }
+        }
+    }
+
+    bool LandscapeData::ProjectSurface(const XMFLOAT3& point, const XMFLOAT3& normal,
+        float distance, const SurfaceRegion& region, LandscapeRayHit& hit) const
+    {
+        hit = {};
+        float nearest = distance;
+        const auto direction = Normalize(normal);
+        for (const auto face : region.faces)
+        {
+            if (face >= FaceCount()) continue;
+            const auto* t = indices_.data() + face * 3;
+            for (const float sign : { -1.0f, 1.0f })
+            {
+                const auto ray = Mul(direction, sign);
+                float d = 0.0f;
+                if (!RayTriangle(point, ray, vertices_[t[0]].position,
+                    vertices_[t[1]].position, vertices_[t[2]].position, d) || d > nearest) continue;
+                nearest = d;
+                hit.hit = true; hit.distance = d; hit.face_index = face;
+                hit.position = Add(point, Mul(ray, d)); hit.normal = FaceNormal(face);
+            }
+        }
+        return hit.hit;
+    }
+
+    void LandscapeData::FinishSculpt()
+    {
+        RecalculateBounds();
+        // Repartition only when horizontal deformation has actually occurred.
+        if (horizontal_travel_ > 1.0e-5f) BuildChunks();
     }
 
     void LandscapeData::MarkAllDirty() noexcept

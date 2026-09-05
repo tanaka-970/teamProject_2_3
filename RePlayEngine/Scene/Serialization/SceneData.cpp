@@ -1,4 +1,4 @@
-﻿// SceneData のうち「参照の付け替え」と「Scene の取り込み」だけを持つ。
+// SceneData のうち「参照の付け替え」と「Scene の取り込み」だけを持つ。
 //
 //   SceneData.cpp           … 参照の付け替えと Scene の取り込み（このファイル）
 //   SceneDataInternal.h     … 分割内部で共有する適用ヘルパの宣言
@@ -15,6 +15,7 @@
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Reflection/Registry/PropertyRegistry.h"
 
+#include <atomic>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -148,9 +149,13 @@ namespace ReplayEngine::Scene::Serialization
         }
     }
 
+    namespace { std::atomic<std::uint64_t> scene_capture_count{ 0 }; }
+    std::uint64_t SceneCaptureCount() noexcept { return scene_capture_count.load(std::memory_order_relaxed); }
+
     void CaptureScene(const Scene& scene, SceneData& output)
     {
         REPLAY_PROFILE_SCOPE("Scene/Capture");
+        scene_capture_count.fetch_add(1, std::memory_order_relaxed);
         output.Clear();
         output.scene_name = scene.Name();
 

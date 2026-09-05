@@ -79,7 +79,8 @@
     bool show_motion_inspector_panel{ true };
     bool show_motion_timeline_panel{ true };
     bool show_motion_graph_panel{ true };
-    bool show_motion_rig_panel{ true };
+    bool show_motion_rig_panel{ false };
+    bool motion_rig_panel_visible{ false };
     bool show_sprite_atlas_editor_panel{ false };
     bool show_easing_editor_panel{ false };
     ReplayEngine::Motion::EasingCurveAsset easing_editor_asset;

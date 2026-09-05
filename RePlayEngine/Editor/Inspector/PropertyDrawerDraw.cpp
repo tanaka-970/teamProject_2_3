@@ -1,4 +1,4 @@
-﻿// PropertyDrawer のうち「1 Property の型別描画 switch」だけを持つ。
+// PropertyDrawer のうち「1 Property の型別描画 switch」だけを持つ。
 //
 // PropertyRegistry から受け取った PropertyDesc を既存の共通描画経路へ通す。
 
@@ -161,7 +161,8 @@ namespace ReplayEngine::Editor
     using namespace Detail;
 
     bool PropertyDrawer::Draw(const PropertyDesc& desc, Core::Component& component,
-        const Assets::AssetDatabase* assets, const Scene::Scene* scene, bool mixed)
+        const Assets::AssetDatabase* assets, const Scene::Scene* scene, bool mixed,
+        const std::function<void()>& before_change)
     {
         if (!desc.editor_visible || !desc.getter) return false;
 
@@ -181,6 +182,12 @@ namespace ReplayEngine::Editor
 
         const PropertyValue current = desc.Capture(component);
         bool changed = false;
+        // Widgets edit local values. Capture Undo immediately before the first setter.
+        const auto apply_value = [&](const PropertyValue& value)
+        {
+            if (before_change) before_change();
+            desc.Apply(component, value);
+        };
 
         switch (desc.type)
         {
@@ -190,7 +197,7 @@ namespace ReplayEngine::Editor
             if (mixed) ImGui::PushItemFlag(ImGuiItemFlags_MixedValue, true);
             if (ImGui::Checkbox(label.c_str(), &value))
             {
-                desc.Apply(component, PropertyValue::MakeBool(value));
+                apply_value( PropertyValue::MakeBool(value));
                 changed = true;
             }
             if (mixed) ImGui::PopItemFlag();
@@ -204,7 +211,7 @@ namespace ReplayEngine::Editor
                 static_cast<int>(MinimumOrDefault(desc, 0.0f)),
                 static_cast<int>(MaximumOrDefault(desc, 0.0f))))
             {
-                desc.Apply(component, PropertyValue::MakeInt(value));
+                apply_value( PropertyValue::MakeInt(value));
                 changed = true;
             }
             break;
@@ -215,7 +222,7 @@ namespace ReplayEngine::Editor
             if (ImGui::DragFloat(label.c_str(), &value, StepOrDefault(desc, 0.01f),
                 MinimumOrDefault(desc, 0.0f), MaximumOrDefault(desc, 0.0f), "%.4f"))
             {
-                desc.Apply(component, PropertyValue::MakeFloat(value));
+                apply_value( PropertyValue::MakeFloat(value));
                 changed = true;
             }
             break;
@@ -225,7 +232,7 @@ namespace ReplayEngine::Editor
             double value = current.AsDouble();
             if (ImGui::InputDouble(label.c_str(), &value, desc.step, desc.step * 10.0, "%.6f"))
             {
-                desc.Apply(component, PropertyValue::MakeDouble(value));
+                apply_value( PropertyValue::MakeDouble(value));
                 changed = true;
             }
             break;
@@ -244,7 +251,7 @@ namespace ReplayEngine::Editor
                     if (ImGui::Selectable("（未設定）", value.empty()))
                     {
                         value.clear();
-                        desc.Apply(component, PropertyValue::MakeString(value));
+                        apply_value( PropertyValue::MakeString(value));
                         changed = true;
                     }
                     for (const std::string& key : keys)
@@ -253,7 +260,7 @@ namespace ReplayEngine::Editor
                         if (ImGui::Selectable(key.c_str(), selected))
                         {
                             value = key;
-                            desc.Apply(component, PropertyValue::MakeString(value));
+                            apply_value( PropertyValue::MakeString(value));
                             changed = true;
                         }
                         if (selected) ImGui::SetItemDefaultFocus();
@@ -264,7 +271,7 @@ namespace ReplayEngine::Editor
             }
             if (DrawTextField(label.c_str(), value, desc.read_only))
             {
-                desc.Apply(component, PropertyValue::MakeString(std::move(value)));
+                apply_value( PropertyValue::MakeString(std::move(value)));
                 changed = true;
             }
             break;
@@ -277,7 +284,7 @@ namespace ReplayEngine::Editor
             if (DrawAssetReference(label.c_str(), assets, value, desc.read_only,
                 AssetKindFromTypeName(desc.asset_type)))
             {
-                desc.Apply(component, PropertyValue::MakeAssetPath(std::move(value)));
+                apply_value( PropertyValue::MakeAssetPath(std::move(value)));
                 changed = true;
             }
             break;
@@ -288,7 +295,7 @@ namespace ReplayEngine::Editor
             if (ImGui::DragFloat2(label.c_str(), &value.x, StepOrDefault(desc, 0.01f),
                 MinimumOrDefault(desc, 0.0f), MaximumOrDefault(desc, 0.0f), "%.4f"))
             {
-                desc.Apply(component, PropertyValue::MakeVector2(value));
+                apply_value( PropertyValue::MakeVector2(value));
                 changed = true;
             }
             break;
@@ -299,7 +306,7 @@ namespace ReplayEngine::Editor
             if (ImGui::DragFloat3(label.c_str(), &value.x, StepOrDefault(desc, 0.01f),
                 MinimumOrDefault(desc, 0.0f), MaximumOrDefault(desc, 0.0f), "%.4f"))
             {
-                desc.Apply(component, PropertyValue::MakeVector3(value));
+                apply_value( PropertyValue::MakeVector3(value));
                 changed = true;
             }
             break;
@@ -311,7 +318,7 @@ namespace ReplayEngine::Editor
             if (ImGui::DragFloat4(label.c_str(), &value.x, StepOrDefault(desc, 0.01f),
                 MinimumOrDefault(desc, 0.0f), MaximumOrDefault(desc, 0.0f), "%.4f"))
             {
-                desc.Apply(component, desc.type == PropertyType::Quaternion
+                apply_value( desc.type == PropertyType::Quaternion
                     ? PropertyValue::MakeQuaternion(value)
                     : PropertyValue::MakeVector4(value));
                 changed = true;
@@ -323,7 +330,7 @@ namespace ReplayEngine::Editor
             DirectX::XMFLOAT4 value = current.AsVector4();
             if (ImGui::ColorEdit4(label.c_str(), &value.x))
             {
-                desc.Apply(component, PropertyValue::MakeColor(value));
+                apply_value( PropertyValue::MakeColor(value));
                 changed = true;
             }
             break;
@@ -369,7 +376,7 @@ namespace ReplayEngine::Editor
                         if (ImGui::Selectable(option.c_str(), selected,
                             ImGuiSelectableFlags_DontClosePopups))
                         {
-                            desc.Apply(component, PropertyValue::MakeEnum(static_cast<int>(i)));
+                            apply_value( PropertyValue::MakeEnum(static_cast<int>(i)));
                             RecordEffectKindUsage(i);
                             changed = true;
                         }
@@ -417,7 +424,7 @@ namespace ReplayEngine::Editor
                         const bool selected = static_cast<int>(i) == value;
                         if (ImGui::Selectable(desc.enum_labels[i].c_str(), selected))
                         {
-                            desc.Apply(component, PropertyValue::MakeEnum(static_cast<int>(i)));
+                            apply_value( PropertyValue::MakeEnum(static_cast<int>(i)));
                             changed = true;
                         }
                         if (selected) ImGui::SetItemDefaultFocus();
@@ -434,7 +441,7 @@ namespace ReplayEngine::Editor
             {
                 if (DrawObjectPicker(label.c_str(), *scene, value))
                 {
-                    desc.Apply(component, PropertyValue::MakeObjectReference(value));
+                    apply_value( PropertyValue::MakeObjectReference(value));
                     changed = true;
                 }
             }
@@ -455,7 +462,7 @@ namespace ReplayEngine::Editor
                     const bool selected = layer == value;
                     if (ImGui::Selectable(Physics::CollisionLayers::Name(layer), selected))
                     {
-                        desc.Apply(component, PropertyValue::MakeCollisionLayer(layer));
+                        apply_value( PropertyValue::MakeCollisionLayer(layer));
                         changed = true;
                     }
                     if (selected) ImGui::SetItemDefaultFocus();
@@ -477,13 +484,13 @@ namespace ReplayEngine::Editor
             {
                 if (ImGui::Selectable("すべて", false))
                 {
-                    desc.Apply(component, PropertyValue::MakeCollisionMask(
+                    apply_value( PropertyValue::MakeCollisionMask(
                         Physics::CollisionLayers::all_layers_mask));
                     changed = true;
                 }
                 if (ImGui::Selectable("なし", false))
                 {
-                    desc.Apply(component, PropertyValue::MakeCollisionMask(0));
+                    apply_value( PropertyValue::MakeCollisionMask(0));
                     changed = true;
                 }
                 ImGui::Separator();
@@ -495,7 +502,7 @@ namespace ReplayEngine::Editor
                     if (ImGui::Checkbox(Physics::CollisionLayers::Name(layer), &enabled))
                     {
                         const int updated = enabled ? (value | bit) : (value & ~bit);
-                        desc.Apply(component, PropertyValue::MakeCollisionMask(updated));
+                        apply_value( PropertyValue::MakeCollisionMask(updated));
                         changed = true;
                     }
                 }
@@ -523,7 +530,7 @@ namespace ReplayEngine::Editor
             {
                 if (ImGui::Selectable("(未設定)", value <= 0))
                 {
-                    desc.Apply(component, PropertyValue::MakeColliderReference(0));
+                    apply_value( PropertyValue::MakeColliderReference(0));
                     changed = true;
                 }
                 if (owner != nullptr)
@@ -542,7 +549,7 @@ namespace ReplayEngine::Editor
                         const bool is_selected = collider->collider_key == value;
                         if (ImGui::Selectable(ColliderLabel(*collider).c_str(), is_selected))
                         {
-                            desc.Apply(component, PropertyValue::MakeColliderReference(
+                            apply_value( PropertyValue::MakeColliderReference(
                                 collider->collider_key));
                             changed = true;
                         }
@@ -574,7 +581,7 @@ namespace ReplayEngine::Editor
             std::int64_t value = current.AsInt64();
             if (ImGui::InputScalar(label.c_str(), ImGuiDataType_S64, &value))
             {
-                desc.Apply(component, PropertyValue::MakeInt64(value));
+                apply_value( PropertyValue::MakeInt64(value));
                 changed = true;
             }
             break;
@@ -584,7 +591,7 @@ namespace ReplayEngine::Editor
             std::uint64_t value = current.AsUInt64();
             if (ImGui::InputScalar(label.c_str(), ImGuiDataType_U64, &value))
             {
-                desc.Apply(component, PropertyValue::MakeUInt64(value));
+                apply_value( PropertyValue::MakeUInt64(value));
                 changed = true;
             }
             break;
@@ -612,7 +619,7 @@ namespace ReplayEngine::Editor
                     : AssetKindFromTypeName(desc.asset_type);
             if (DrawAssetReference(label.c_str(), assets, guid, desc.read_only, kind_filter))
             {
-                desc.Apply(component, desc.type == PropertyType::AssetReference
+                apply_value( desc.type == PropertyType::AssetReference
                     ? PropertyValue::MakeAssetReference(guid)
                     : PropertyValue::MakeSceneReference(guid));
                 changed = true;
@@ -646,7 +653,7 @@ namespace ReplayEngine::Editor
                 // 所有 GameObject を変えたら Component の指定は外す。
                 // 別の GameObject の同じ番号は、まったく無関係な Component。
                 reference.component = Core::invalid_component_stable_id;
-                desc.Apply(component, PropertyValue::MakeComponentReference(reference));
+                apply_value( PropertyValue::MakeComponentReference(reference));
                 changed = true;
             }
 
@@ -682,7 +689,7 @@ namespace ReplayEngine::Editor
                         reference.component == Core::invalid_component_stable_id))
                     {
                         reference.component = Core::invalid_component_stable_id;
-                        desc.Apply(component,
+                        apply_value(
                             PropertyValue::MakeComponentReference(reference));
                         changed = true;
                     }
@@ -707,7 +714,7 @@ namespace ReplayEngine::Editor
                         if (ImGui::Selectable(entry.c_str(), selected))
                         {
                             reference.component = candidate->StableID();
-                            desc.Apply(component,
+                            apply_value(
                                 PropertyValue::MakeComponentReference(reference));
                             changed = true;
                         }
@@ -838,7 +845,7 @@ namespace ReplayEngine::Editor
 
             if (array_changed)
             {
-                desc.Apply(component,
+                apply_value(
                     PropertyValue::MakeArray(element_type, std::move(elements)));
                 changed = true;
             }

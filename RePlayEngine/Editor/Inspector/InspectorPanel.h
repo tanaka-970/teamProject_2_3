@@ -49,6 +49,10 @@ namespace ReplayEngine::Editor
         }
 
     private:
+        void BeginPropertyEdit(EditorContext& context, const std::string& label);
+        void FinishPropertyEdit(EditorContext& context);
+        bool property_edit_owned_ = false;
+        unsigned int property_edit_item_ = 0;
         void DrawGameObjectHeader(EditorContext& context, Core::GameObject& object);
         void DrawPrefabHeader(EditorContext& context, Core::GameObject& object);
         void DrawMultiSelection(EditorContext& context,

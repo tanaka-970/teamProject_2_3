@@ -70,6 +70,18 @@ namespace ReplayEngine::Landscape
         std::size_t VertexCount() const noexcept { return vertices_.size(); }
         std::size_t FaceCount() const noexcept { return indices_.size() / 3; }
         std::uint64_t Revision() const noexcept { return revision_; }
+        struct SurfaceRegion
+        {
+            std::vector<std::uint32_t> faces, vertices, face_marks, vertex_marks;
+            std::uint32_t generation = 0;
+        };
+        // Only triangles connected to the picked face and intersecting the brush sphere.
+        void QuerySurface(const DirectX::XMFLOAT3& center, float radius,
+            std::size_t seed_face, SurfaceRegion& region) const;
+        bool ProjectSurface(const DirectX::XMFLOAT3& point, const DirectX::XMFLOAT3& normal,
+            float distance, const SurfaceRegion& region, LandscapeRayHit& hit) const;
+        const std::vector<std::uint32_t>& AdjacentFaces(std::size_t vertex) const noexcept;
+        void FinishSculpt();
 
         DirectX::XMFLOAT3 VertexPosition(std::size_t index) const noexcept;
         bool SetVertexPosition(std::size_t index, const DirectX::XMFLOAT3& position,
@@ -155,6 +167,10 @@ namespace ReplayEngine::Landscape
         std::vector<LandscapeChunk> chunks_;
         std::vector<std::vector<std::uint32_t>> chunk_faces_;
         std::vector<std::vector<std::uint32_t>> vertex_chunks_;
+        std::vector<std::vector<std::uint32_t>> vertex_faces_;
+        std::vector<std::uint32_t> normal_marks_, normal_vertices_;
+        std::uint32_t normal_generation_ = 0;
+        float horizontal_travel_ = 0.0f;
         // 1 チャンクの目安と、実際に使った分割数（XZ とも同じ数で割る）。
         static constexpr std::size_t chunk_target_vertices = 2048;
         static constexpr int chunk_maximum_divisions = 32;

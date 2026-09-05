@@ -1,4 +1,4 @@
-﻿// GameObject / Component 基盤のうち「Object / Landscape 描画」を持つ。
+// GameObject / Component 基盤のうち「Object / Landscape 描画」を持つ。
 // 描画パス、Material binding、Depth/GBuffer 分岐は関数本体のまま移動している。
 #include "framework.h"
 #include "../../../RePlayEngine/Components/Rendering/ModelEffectStackComponent.h"
@@ -1515,7 +1515,7 @@ bool framework::build_dx12_static_scene(
                 std::vector<DirectX::XMFLOAT4X4> bone_globals;
                 bool bone_globals_ready = false;
 
-                if ((show_rig_debug_draw || show_motion_rig_panel || has_pose) &&
+                if ((show_rig_debug_draw || (show_motion_rig_panel && motion_rig_panel_visible) || has_pose) &&
                     !mesh.bind_pose.bones.empty())
                 {
                     REPLAY_PROFILE_SCOPE("Item/RigPose");
@@ -1619,7 +1619,7 @@ bool framework::build_dx12_static_scene(
                     }
                 }
 
-                if ((show_rig_debug_draw || show_motion_rig_panel) && bone_globals_ready)
+                if ((show_rig_debug_draw || (show_motion_rig_panel && motion_rig_panel_visible)) && bone_globals_ready)
                 {
                     // 上で組んだ行列をそのまま使う。ポーズも表示へ反映される。
                     const DirectX::XMMATRIX object_world =

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
 #include "../../Core/ObjectID/RuntimeIdentity.h"
@@ -212,6 +212,7 @@ namespace ReplayEngine::Scene::Serialization
     // 削除予約中の GameObject / Component は保存しない。
     // ComponentRegistry で serializable=false の型も保存しない
     // （TransformComponent は GameObject 側の transform として保存済みのため）。
+    std::uint64_t SceneCaptureCount() noexcept;
     void CaptureScene(const Scene& scene, SceneData& output);
 
     // 生きている GameObject が持つ ObjectID 参照を付け替える。

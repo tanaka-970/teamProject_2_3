@@ -1,4 +1,4 @@
-﻿// InspectorPanel のうち「Component 単体の表示・診断・削除」だけを持つ。
+// InspectorPanel のうち「Component 単体の表示・診断・削除」だけを持つ。
 //
 // 単体選択のヘッダー・Prefab 表示は InspectorPanel.cpp、
 // 複数選択の一括編集は InspectorPanelMultiSelection.cpp に置く。
@@ -452,15 +452,6 @@ namespace ReplayEngine::Editor
 
         if (Reflection::PropertyRegistry::HasProperties(component.TypeID()) || has_dynamic)
         {
-            const bool had_transaction = context.History().InTransaction();
-            // BeginEdit の Snapshot は Scene 全体を写す。Inspector は毎フレーム
-            // ここを通るので、無条件に取ると選択しているだけで重くなる。
-            const ImGuiIO& edit_io = ImGui::GetIO();
-            const bool may_change_now = ImGui::IsAnyItemActive() ||
-                ImGui::IsAnyMouseDown() || edit_io.MouseWheel != 0.0f ||
-                edit_io.WantTextInput || edit_io.WantCaptureKeyboard;
-            if (editable && !had_transaction && may_change_now)
-                context.BeginEdit(title + " の設定を変更");
             if (!editable)
             {
                 ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
@@ -468,7 +459,10 @@ namespace ReplayEngine::Editor
             }
 
             const bool changed = PropertyDrawer::DrawAll(component,
-                context.GetAssetDatabase(), context.GetScene());
+                context.GetAssetDatabase(), context.GetScene(), [&]()
+                {
+                    if (editable) BeginPropertyEdit(context, title + " の設定を変更");
+                });
 
             if (!editable)
             {
@@ -481,33 +475,7 @@ namespace ReplayEngine::Editor
                 prefab_cache_valid_ = false;
             }
 
-            // Draw の前に Snapshot を取るため、最初の変更も Undo へ正しく入る。
-            // Drag 中は transaction を保持し、マウスを離した Frame で 1 操作として確定する。
-            if (editable && context.History().InTransaction() && !ImGui::IsAnyItemActive())
-            {
-                if (changed || had_transaction)
-                {
-                    // 編集が確定したこの瞬間に、型へ変更を知らせる。
-                    //
-                    // ここへ置く理由:
-                    //   DrawAll が回している最中に呼ぶと、DynamicProperties() が
-                    //   返した配列を型が作り直した場合に、走査中のコンテナが
-                    //   入れ替わる。ここは「どの入力欄も掴まれていないフレーム」なので、
-                    //   走査はすべて終わっている。
-                    //
-                    //   Drag 中は毎フレーム呼ばれない。掴んでいる間は
-                    //   IsAnyItemActive() が true のままで、この分岐へ来ない。
-                    //
-                    //   Script では、これによって Script Asset を選び替えた直後に
-                    //   Field の顔ぶれが入れ替わる。
-                    component.OnPropertyChanged(nullptr);
-                    context.CommitEdit();
-                }
-                else
-                {
-                    context.CancelEdit();
-                }
-            }
+            FinishPropertyEdit(context);
         }
         else
         {

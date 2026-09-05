@@ -1,4 +1,4 @@
-﻿// InspectorPanel の責務を 3 つのファイルへ分けている:
+// InspectorPanel の責務を 3 つのファイルへ分けている:
 //   InspectorPanel.cpp                 … 単体選択のヘッダー・Prefab 表示（このファイル）
 //   InspectorPanelMultiSelection.cpp   … 複数選択と共通 Component の一括編集
 //   InspectorPanelComponents.cpp       … Component 単体の表示・診断・削除
@@ -79,6 +79,25 @@ namespace ReplayEngine::Editor
 
     }
 
+    void InspectorPanel::FinishPropertyEdit(EditorContext& context)
+    {
+        if (!property_edit_owned_) return;
+        if (!context.History().InTransaction()) { property_edit_owned_ = false; return; }
+        if (property_edit_item_ != 0 && GImGui->ActiveId == property_edit_item_) return;
+        context.CommitEdit();
+        property_edit_owned_ = false;
+        property_edit_item_ = 0;
+    }
+
+    void InspectorPanel::BeginPropertyEdit(EditorContext& context, const std::string& label)
+    {
+        FinishPropertyEdit(context);
+        if (!context.CanEdit() || context.History().InTransaction()) return;
+        context.BeginEdit(label);
+        property_edit_owned_ = context.History().InTransaction();
+        property_edit_item_ = GImGui->ActiveId;
+    }
+
     void InspectorPanel::Draw(EditorContext& context)
     {
         PanelTabColorScope panel_tab_color("Editor");
@@ -96,6 +115,7 @@ namespace ReplayEngine::Editor
     bool InspectorPanel::DrawContents(EditorContext& context,
         bool& show_game_template_components)
     {
+        FinishPropertyEdit(context);
         Scene::Scene* scene = context.GetScene();
         if (scene == nullptr)
         {

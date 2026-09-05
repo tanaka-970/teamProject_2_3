@@ -85,7 +85,8 @@ bool framework::handle_landscape_viewport_edit()
     }
     if (!landscape_stroke_transaction &&
         (ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyAlt)) return false;
-    if (!scene_view_hovered || editor_camera_consumed_input) return false;
+    if (!scene_view_hovered || editor_camera_consumed_input)
+    { landscape_editor_tool.BreakStrokeSampling(); return false; }
 
     // Scene View is only the interactive/clip rect. The 3D scene underneath is rendered to
     // the full client viewport, so ray creation and world->screen projection must use that
@@ -387,9 +388,8 @@ bool framework::handle_landscape_viewport_edit()
                 REPLAY_PROFILE_SCOPE("Landscape/Brush");
                 if (landscape_editor_tool.StrokeActive())
                 {
-                    const float dt = (std::max)(1.0f / 240.0f,
-                        (std::min)(ImGui::GetIO().DeltaTime, 1.0f / 15.0f));
-                    landscape_editor_tool.ApplySample(hit.position, dt);
+                    const float dt = ImGui::GetIO().DeltaTime;
+                    landscape_editor_tool.ApplyStrokeSample(hit, dt);
                 }
                 else landscape_subdivide_stroke_changed =
                     ReplayEngine::Landscape::LandscapeEditorTool::ApplySubdivideSample(
@@ -397,6 +397,7 @@ bool framework::handle_landscape_viewport_edit()
                     landscape_subdivide_stroke_changed;
             }
         }
+        if (!has_hit) landscape_editor_tool.BreakStrokeSampling();
         return true;
     }
     return false;

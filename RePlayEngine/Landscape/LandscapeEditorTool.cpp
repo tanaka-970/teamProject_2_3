@@ -74,113 +74,102 @@ namespace ReplayEngine::Landscape
             !data.Valid() || brush.radius <= 0.0f ||
             brush.strength < 0.0f || !std::isfinite(brush.radius) ||
             !std::isfinite(brush.strength)) return false;
+        previous_hit_valid_ = false;
         data_ = &data;
         mode_ = mode;
         brush_ = brush;
         command_ = std::make_unique<LandscapeUndoCommand>();
-        const auto& vertices = data.Vertices();
-        const auto& indices = data.Indices();
-        candidate_marks_.assign(vertices.size(), 0);
-        unindexed_vertices_.clear();
-        candidate_generation_ = 0;
-
-        for (const std::uint32_t index : indices)
-            if (index < candidate_marks_.size()) candidate_marks_[index] = 1;
-        for (std::size_t index = 0; index < candidate_marks_.size(); ++index)
-            if (candidate_marks_[index] == 0)
-                unindexed_vertices_.push_back(static_cast<std::uint32_t>(index));
-        std::fill(candidate_marks_.begin(), candidate_marks_.end(), 0);
-
         adjacency_.clear();
         if (mode_ == LandscapeBrushMode::Smooth)
         {
-            adjacency_.resize(vertices.size());
-            for (std::size_t i = 0; i + 2 < indices.size(); i += 3)
+            adjacency_.resize(data.VertexCount());
+            for (std::size_t vertex = 0; vertex < data.VertexCount(); ++vertex)
             {
-                const std::uint32_t tri[3]{ indices[i], indices[i + 1], indices[i + 2] };
-                for (int e = 0; e < 3; ++e)
-                {
-                    const std::uint32_t from = tri[e];
-                    const std::uint32_t to = tri[(e + 1) % 3];
-                    if (from < adjacency_.size() && to < adjacency_.size())
+                auto& neighbors = adjacency_[vertex];
+                for (const auto face : data.AdjacentFaces(vertex))
+                    for (int corner = 0; corner < 3; ++corner)
                     {
-                        adjacency_[from].push_back(to);
-                        adjacency_[to].push_back(from);
+                        const auto neighbor = data.Indices()[face * 3 + corner];
+                        if (neighbor != vertex) neighbors.push_back(neighbor);
                     }
-                }
+                std::sort(neighbors.begin(), neighbors.end());
+                neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
             }
         }
         return true;
     }
 
-    bool LandscapeEditorTool::ApplySample(const DirectX::XMFLOAT3& center,
-        float delta_time)
+    bool LandscapeEditorTool::ApplySample(const DirectX::XMFLOAT3& center, float delta_time)
     {
-        if (data_ == nullptr || command_ == nullptr || delta_time <= 0.0f) return false;
-        const auto& vertices = data_->Vertices();
-        if (vertices.empty()) return false;
-
-        if (++candidate_generation_ == 0)
+        if (!data_) return false;
+        // Compatibility callers supply only a point. Resolve the nearest surface using bounded rays.
+        LandscapeRayHit best{};
+        float nearest = brush_.radius;
+        for (const DirectX::XMFLOAT3 direction : { DirectX::XMFLOAT3{0,1,0}, {0,-1,0},
+            {1,0,0}, {-1,0,0}, {0,0,1}, {0,0,-1} })
         {
-            std::fill(candidate_marks_.begin(), candidate_marks_.end(), 0);
-            candidate_generation_ = 1;
+            LandscapeRayHit hit;
+            if (data_->Raycast(center, direction, nearest, hit)) { best = hit; nearest = hit.distance; }
         }
+        if (!best.hit) return false;
+        best.position = center;
+        return ApplySurfaceSample(best, delta_time);
+    }
 
-        std::vector<std::uint32_t> candidates;
-        const float radius_sq = brush_.radius * brush_.radius;
-        std::vector<const LandscapeChunk*> brush_chunks;
-        for (const LandscapeChunk& chunk : data_->Chunks())
-        {
-            if (chunk.indices.empty()) continue;
-            const float dx = center.x < chunk.bounds_min.x ? chunk.bounds_min.x - center.x
-                : (center.x > chunk.bounds_max.x ? center.x - chunk.bounds_max.x : 0.0f);
-            const float dy = center.y < chunk.bounds_min.y ? chunk.bounds_min.y - center.y
-                : (center.y > chunk.bounds_max.y ? center.y - chunk.bounds_max.y : 0.0f);
-            const float dz = center.z < chunk.bounds_min.z ? chunk.bounds_min.z - center.z
-                : (center.z > chunk.bounds_max.z ? center.z - chunk.bounds_max.z : 0.0f);
-            const float bounds_distance_sq = brush_.direction == LandscapeSculptDirection::LocalY
-                ? dx * dx + dz * dz : dx * dx + dy * dy + dz * dz;
-            if (bounds_distance_sq > radius_sq) continue;
-            brush_chunks.push_back(&chunk);
-        }
-
-        if (data_->Chunks().empty() || brush_chunks.size() * 2 > data_->Chunks().size())
-        {
-            candidates.reserve(vertices.size());
-            for (std::size_t index = 0; index < vertices.size(); ++index)
-                candidates.push_back(static_cast<std::uint32_t>(index));
-        }
+    bool LandscapeEditorTool::ApplyStrokeSample(const LandscapeRayHit& hit, float delta_time)
+    {
+        if (!data_ || !hit.hit || !std::isfinite(delta_time) || delta_time <= 0) return false;
+        bool changed = false;
+        const auto previous = previous_hit_;
+        if (!previous_hit_valid_) changed = ApplySurfaceSample(hit, delta_time);
         else
         {
-            for (const LandscapeChunk* chunk : brush_chunks)
+            const auto delta = DirectX::XMVectorSubtract(DirectX::XMLoadFloat3(&hit.position),
+                DirectX::XMLoadFloat3(&previous.position));
+            const float distance = DirectX::XMVectorGetX(DirectX::XMVector3Length(delta));
+            const float spacing = (std::max)(0.001f, brush_.radius * 0.15f);
+            const int steps = (std::max)(1, static_cast<int>(std::ceil(distance / spacing)));
+            data_->QuerySurface(previous.position, distance + brush_.radius,
+                previous.face_index, interpolation_region_);
+            const bool connected = hit.face_index < interpolation_region_.face_marks.size() &&
+                interpolation_region_.face_marks[hit.face_index] == interpolation_region_.generation &&
+                std::find(interpolation_region_.faces.begin(), interpolation_region_.faces.end(),
+                    hit.face_index) != interpolation_region_.faces.end();
+            if (!connected) changed = ApplySurfaceSample(hit, delta_time);
+            else for (int sample = 1; sample <= steps; ++sample)
             {
-                for (const std::uint32_t index : chunk->indices)
-                {
-                    if (index >= candidate_marks_.size() ||
-                        candidate_marks_[index] == candidate_generation_) continue;
-                    candidate_marks_[index] = candidate_generation_;
-                    candidates.push_back(index);
-                }
+                const float t = static_cast<float>(sample) / steps;
+                DirectX::XMFLOAT3 point{}, normal{};
+                DirectX::XMStoreFloat3(&point, DirectX::XMVectorLerp(
+                    DirectX::XMLoadFloat3(&previous.position), DirectX::XMLoadFloat3(&hit.position), t));
+                DirectX::XMStoreFloat3(&normal, DirectX::XMVector3Normalize(DirectX::XMVectorLerp(
+                    DirectX::XMLoadFloat3(&previous.normal), DirectX::XMLoadFloat3(&hit.normal), t)));
+                LandscapeRayHit projected;
+                if (sample == steps) projected = hit;
+                else if (!data_->ProjectSurface(point, normal, brush_.radius,
+                    interpolation_region_, projected)) continue;
+                changed = ApplySurfaceSample(projected, delta_time / steps) || changed;
             }
-            candidates.insert(candidates.end(), unindexed_vertices_.begin(), unindexed_vertices_.end());
-            std::sort(candidates.begin(), candidates.end());
         }
+        previous_hit_ = hit; previous_hit_valid_ = true;
+        return changed;
+    }
 
-        struct Change { std::size_t index; DirectX::XMFLOAT3 before; DirectX::XMFLOAT3 after; };
-        std::vector<Change> changes;
-        changes.reserve(candidates.size() / 8 + 1);
-
-        for (const std::uint32_t index : candidates)
+    bool LandscapeEditorTool::ApplySurfaceSample(const LandscapeRayHit& hit, float delta_time)
+    {
+        if (!data_ || !command_ || !std::isfinite(delta_time) || delta_time <= 0) return false;
+        const auto& center = hit.position;
+        const auto& vertices = data_->Vertices();
+        data_->QuerySurface(center, brush_.radius, hit.face_index, region_);
+        auto& changes = changes_;
+        changes.clear();
+        for (const std::uint32_t index : region_.vertices)
         {
             const LandscapeVertex& vertex = vertices[index];
             const float dx = vertex.position.x - center.x;
             const float dy = vertex.position.y - center.y;
             const float dz = vertex.position.z - center.z;
-            // LocalY は Landscape ローカル上面の従来操作感を維持し XZ 円で拾う。
-            // VertexNormal は洞窟壁を想定し 3D sphere で拾う。
-            const float distance = brush_.direction == LandscapeSculptDirection::LocalY
-                ? std::sqrt(dx * dx + dz * dz)
-                : std::sqrt(dx * dx + dy * dy + dz * dz);
+            const float distance = std::sqrt(dx * dx + dy * dy + dz * dz);
             if (distance > brush_.radius) continue;
 
             const float normalized = 1.0f - distance / brush_.radius;
@@ -346,6 +335,8 @@ namespace ReplayEngine::Landscape
 
     std::unique_ptr<LandscapeUndoCommand> LandscapeEditorTool::EndStroke()
     {
+        if (data_ != nullptr) data_->FinishSculpt();
+        previous_hit_valid_ = false;
         data_ = nullptr;
         adjacency_.clear();
         candidate_marks_.clear();
@@ -358,6 +349,8 @@ namespace ReplayEngine::Landscape
     void LandscapeEditorTool::CancelStroke()
     {
         if (data_ != nullptr && command_ != nullptr) command_->Undo(*data_);
+        if (data_ != nullptr) data_->FinishSculpt();
+        previous_hit_valid_ = false;
         data_ = nullptr;
         adjacency_.clear();
         candidate_marks_.clear();
