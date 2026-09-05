@@ -96,6 +96,13 @@ bool framework::handle_landscape_viewport_edit()
     ReplayEngine::Landscape::LandscapeRayHit hit{};
     const bool has_hit = landscape->Data().Raycast(ray_origin, ray_direction,
         1000000.0f, hit);
+    landscape_brush_hover_valid = has_hit && landscape_edit_mode == 0;
+    if (landscape_brush_hover_valid)
+    {
+        landscape_brush_hover_position = hit.position;
+        landscape_brush_hover_face = hit.face_index;
+        landscape_brush_hover_object = object->ID();
+    }
     const auto& data = landscape->Data();
     const auto view = viewport_view_matrix();
     const auto projection = viewport_projection_matrix();

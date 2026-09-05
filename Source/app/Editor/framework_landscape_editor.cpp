@@ -20,6 +20,8 @@
 #include <limits>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "framework_landscape_editorInternal.h"
 
@@ -38,42 +40,6 @@ void framework::draw_landscape_editor_toolbar()
     ImGui::Separator();
     ImGui::PushID("LandscapeEditorToolbar");
 
-    // 既存のモデルを地形として取り込む。平面格子から始めなくてよい。
-    if (object_editor_context.CanEdit() &&
-        ImGui::CollapsingHeader(u8"モデルから作る"))
-    {
-        static std::array<char, 96> model_filter{};
-        ImGui::SetNextItemWidth(-1.0f);
-        ImGui::InputTextWithHint("##LandscapeModelFilter", u8"モデルを検索...",
-            model_filter.data(), model_filter.size());
-        ImGui::TextDisabled(u8"骨やアニメーションを持つモデルは取り込めません。");
-        if (ImGui::BeginChild("LandscapeModelList", ImVec2(0.0f, 120.0f), true))
-        {
-            for (const auto& record : asset_database.Records())
-            {
-                if (record.kind != ReplayEngine::Assets::AssetKind::Model) continue;
-                if (model_filter[0] != '\0' &&
-                    record.display_name.find(model_filter.data()) == std::string::npos)
-                    continue;
-                ImGui::PushID(record.guid.c_str());
-                if (ImGui::Button(record.display_name.c_str()))
-                {
-                    std::string message;
-                    object_editor_context.BeginEdit(u8"モデルから地形を作る");
-                    if (build_landscape_from_model(*object, record.guid, message))
-                    {
-                        object_editor_context.CommitEdit();
-                        landscape_selected_face = -1;
-                    }
-                    else object_editor_context.CancelEdit();
-                    object_editor_context.SetStatus(message);
-                }
-                ImGui::PopID();
-            }
-        }
-        ImGui::EndChild();
-    }
-
     // Landscape は普通の GameObject + Component のまま保ちつつ、
     // 見た目/衝突/Primitive 重複の状態を操作した場所で即座に説明・修復できるようにする。
     auto* landscape_renderer = object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>();
@@ -82,17 +48,17 @@ void framework::draw_landscape_editor_toolbar()
     if (landscape_renderer == nullptr)
     {
         ImGui::TextColored(ImVec4(1.0f, 0.42f, 0.32f, 1.0f),
-            u8"Landscape Renderer が無いため地形は表示されません。");
+            u8"地形の描画機能が無いため表示されません。");
         if (object_editor_context.CanEdit())
         {
             ImGui::SameLine();
-            if (ImGui::SmallButton(u8"Rendererを追加"))
+            if (ImGui::SmallButton(u8"描画機能を追加"))
             {
-                object_editor_context.BeginEdit("Landscape Renderer を追加");
+                object_editor_context.BeginEdit(u8"地形の描画機能を追加");
                 if (object->AddComponent<ReplayEngine::Components::LandscapeRendererComponent>() != nullptr)
                 {
                     object_editor_context.CommitEdit();
-                    object_editor_context.SetStatus("Landscape Renderer を追加しました");
+                    object_editor_context.SetStatus(u8"地形の描画機能を追加しました");
                 }
                 else object_editor_context.CancelEdit();
             }
@@ -102,17 +68,17 @@ void framework::draw_landscape_editor_toolbar()
     if (landscape_collider == nullptr)
     {
         ImGui::TextColored(ImVec4(1.0f, 0.72f, 0.30f, 1.0f),
-            u8"Landscape Collider が無いため地形に衝突判定はありません。");
+            u8"地形の衝突判定機能が無いため当たり判定はありません。");
         if (object_editor_context.CanEdit())
         {
             ImGui::SameLine();
-            if (ImGui::SmallButton(u8"Colliderを追加"))
+            if (ImGui::SmallButton(u8"衝突判定を追加"))
             {
-                object_editor_context.BeginEdit("Landscape Collider を追加");
+                object_editor_context.BeginEdit(u8"地形の衝突判定を追加");
                 if (object->AddComponent<ReplayEngine::Components::LandscapeColliderComponent>() != nullptr)
                 {
                     object_editor_context.CommitEdit();
-                    object_editor_context.SetStatus("Landscape Collider を追加しました");
+                    object_editor_context.SetStatus(u8"地形の衝突判定を追加しました");
                 }
                 else object_editor_context.CancelEdit();
             }
@@ -122,27 +88,27 @@ void framework::draw_landscape_editor_toolbar()
     if (primitive_renderer != nullptr && primitive_renderer->visible)
     {
         ImGui::TextColored(ImVec4(1.0f, 0.60f, 0.22f, 1.0f),
-            u8"Primitive と Landscape が同時表示されています。見た目が重なる可能性があります。");
+            u8"基本形状と地形が同時表示されています。見た目が重なる可能性があります。");
         if (object_editor_context.CanEdit())
         {
             ImGui::SameLine();
-            if (ImGui::SmallButton(u8"Primitive表示をOFF"))
+            if (ImGui::SmallButton(u8"基本形状を非表示"))
             {
-                object_editor_context.BeginEdit("Primitive 表示を無効化");
+                object_editor_context.BeginEdit(u8"基本形状を非表示");
                 primitive_renderer->visible = false;
                 primitive_renderer->OnPropertyChanged("visible");
                 object_editor_context.CommitEdit();
-                object_editor_context.SetStatus("Primitive 表示をOFFにしました。Landscape Component はそのままです");
+                object_editor_context.SetStatus(u8"基本形状を非表示にしました。地形はそのままです");
             }
             ReplayEngine::Editor::EditorHelp::Item("button.landscape.disable_primitive");
         }
     }
 
-    ImGui::Checkbox(u8"Landscape 編集", &landscape_edit_enabled);
+    ImGui::Checkbox(u8"地形を編集", &landscape_edit_enabled);
     if (!landscape_edit_enabled)
     {
         ImGui::SameLine();
-        ImGui::TextDisabled(u8"Ground を通常の GameObject として選択中");
+        ImGui::TextDisabled(u8"地形を通常のオブジェクトとして選択中");
         ImGui::PopID();
         return;
     }
@@ -154,38 +120,38 @@ void framework::draw_landscape_editor_toolbar()
 
     auto& data = landscape->Data();
     ImGui::SameLine();
-    ImGui::TextDisabled("V:%zu  F:%zu", data.VertexCount(), data.FaceCount());
+    ImGui::TextDisabled(u8"頂点:%zu  面:%zu", data.VertexCount(), data.FaceCount());
 
     if (landscape_edit_mode == 0)
     {
         const char* brush_modes[] = {
-            "Raise", "Lower", "Smooth", "Flatten", "Noise"
+            u8"盛り上げる", u8"掘り下げる", u8"なめらかにする", u8"平らにする", u8"でこぼこにする"
         };
         ImGui::SetNextItemWidth(110.0f);
         ImGui::Combo(u8"ブラシ", &landscape_brush_mode,
             brush_modes, IM_ARRAYSIZE(brush_modes));
         ImGui::SameLine();
         ImGui::SetNextItemWidth(100.0f);
-        ImGui::DragFloat(u8"ローカル半径", &landscape_brush.radius, 0.1f, 0.1f, 256.0f, "%.2f");
+        ImGui::DragFloat(u8"ブラシの半径", &landscape_brush.radius, 0.1f, 0.1f, 256.0f, "%.2f");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(100.0f);
         ImGui::DragFloat(u8"強さ", &landscape_brush.strength, 0.05f, 0.0f, 100.0f, "%.2f");
         ImGui::SameLine();
         ImGui::SetNextItemWidth(90.0f);
-        ImGui::DragFloat(u8"Falloff", &landscape_brush.falloff, 0.02f, 0.0f, 1.0f, "%.2f");
+        ImGui::DragFloat(u8"減衰（ふちのなだらかさ）", &landscape_brush.falloff, 0.02f, 0.0f, 1.0f, "%.2f");
         ImGui::SameLine();
         const char* preview_modes[] = {
-            "Ring", "Falloff", "Grid", "Contour", "Grid + Contour"
+            u8"外周のみ", u8"減衰も表示", u8"格子", u8"等高線", u8"格子と等高線"
         };
         landscape_brush_preview_mode = (std::max)(0,
             (std::min)(landscape_brush_preview_mode,
                 static_cast<int>(IM_ARRAYSIZE(preview_modes)) - 1));
         ImGui::SetNextItemWidth(130.0f);
-        ImGui::Combo("Preview", &landscape_brush_preview_mode,
+        ImGui::Combo(u8"ブラシの見え方", &landscape_brush_preview_mode,
             preview_modes, IM_ARRAYSIZE(preview_modes));
 
         int direction = static_cast<int>(landscape_brush.direction);
-        const char* directions[] = { "Local Y", "Vertex Normal" };
+        const char* directions[] = { u8"真上へ（ローカル Y）", u8"面の向きへ（法線）" };
         ImGui::SetNextItemWidth(130.0f);
         if (ImGui::Combo(u8"方向", &direction, directions, IM_ARRAYSIZE(directions)))
         {
@@ -196,20 +162,94 @@ void framework::draw_landscape_editor_toolbar()
         {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(100.0f);
-            ImGui::DragFloat(u8"ローカル高さ", &landscape_brush.flatten_height, 0.05f);
+            ImGui::DragFloat(u8"平らにする高さ", &landscape_brush.flatten_height, 0.05f);
         }
         if (landscape_brush_mode == static_cast<int>(ReplayEngine::Landscape::LandscapeBrushMode::Noise))
         {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(100.0f);
-            ImGui::DragFloat(u8"Noise Scale", &landscape_brush.noise_scale,
+            ImGui::DragFloat(u8"でこぼこの細かさ", &landscape_brush.noise_scale,
                 0.01f, 0.001f, 100.0f, "%.3f");
         }
-        ImGui::TextDisabled(u8"左ドラッグ: 編集 | Ctrl/Alt+左クリック: 通常選択 | Esc: Landscape編集終了 | 値はLocal空間");
+
+        constexpr std::size_t maximum_brush_subdivide_faces = 256;
+        const std::size_t subdivision_capacity = (std::min)({
+            maximum_brush_subdivide_faces,
+            (ReplayEngine::Landscape::LandscapeData::maximum_vertices - data.VertexCount()) / 3,
+            (ReplayEngine::Landscape::LandscapeData::maximum_indices - data.Indices().size()) / 9 });
+        const bool can_subdivide_brush = object_editor_context.CanEdit() &&
+            !landscape_editor_tool.StrokeActive() && landscape_brush_hover_valid &&
+            landscape_brush_hover_object == object->ID() && subdivision_capacity > 0;
+        {
+            DisabledScope disabled(!can_subdivide_brush);
+            if (ImGui::Button(u8"ブラシ範囲を細かくする") && can_subdivide_brush)
+            {
+                std::vector<std::pair<float, std::size_t>> faces;
+                const float radius_sq = landscape_brush.radius * landscape_brush.radius;
+                for (std::size_t face = 0; face < data.FaceCount(); ++face)
+                {
+                    float nearest_sq = (std::numeric_limits<float>::max)();
+                    const std::size_t offset = face * 3;
+                    for (int corner = 0; corner < 3; ++corner)
+                    {
+                        const auto& position = data.Vertices()[data.Indices()[offset + corner]].position;
+                        const float dx = position.x - landscape_brush_hover_position.x;
+                        const float dy = position.y - landscape_brush_hover_position.y;
+                        const float dz = position.z - landscape_brush_hover_position.z;
+                        const float distance_sq = landscape_brush.direction ==
+                            ReplayEngine::Landscape::LandscapeSculptDirection::LocalY
+                            ? dx * dx + dz * dz : dx * dx + dy * dy + dz * dz;
+                        nearest_sq = (std::min)(nearest_sq, distance_sq);
+                    }
+                    if (face == landscape_brush_hover_face) nearest_sq = -1.0f;
+                    if (nearest_sq <= radius_sq) faces.emplace_back(nearest_sq, face);
+                }
+
+                const std::size_t found_faces = faces.size();
+                if (faces.size() > subdivision_capacity)
+                {
+                    std::nth_element(faces.begin(), faces.begin() + subdivision_capacity, faces.end());
+                    faces.resize(subdivision_capacity);
+                }
+                std::sort(faces.begin(), faces.end(), [](const auto& left, const auto& right)
+                { return left.second < right.second; });
+
+                if (faces.empty())
+                {
+                    object_editor_context.SetStatus(u8"ブラシ範囲に分割できる面がありません");
+                }
+                else
+                {
+                    object_editor_context.BeginEdit(u8"地形のブラシ範囲を分割");
+                    data.BeginTopologyBatch();
+                    bool succeeded = true;
+                    for (const auto& face : faces)
+                        if (!data.SubdivideFace(face.second)) { succeeded = false; break; }
+                    data.EndTopologyBatch();
+                    if (succeeded)
+                    {
+                        object_editor_context.CommitEdit();
+                        std::string status = u8"ブラシ範囲の面を " +
+                            std::to_string(faces.size()) + u8" 枚分割しました";
+                        if (found_faces > faces.size()) status += u8"（1回の上限まで）";
+                        object_editor_context.SetStatus(status);
+                        landscape_brush_hover_valid = false;
+                    }
+                    else
+                    {
+                        object_editor_context.CancelEdit();
+                        object_editor_context.SetStatus(u8"ブラシ範囲の分割に失敗しました");
+                    }
+                }
+            }
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled(u8"1回につき最大256面。カーソルを地形に合わせて押します");
+        ImGui::TextDisabled(u8"左ドラッグ: 編集 | Ctrl/Alt+左クリック: 通常選択 | Esc: 地形編集を終了 | 値は地形内の座標");
     }
     else
     {
-        const char* selection_modes[] = { "Face", "Edge / Bridge" };
+        const char* selection_modes[] = { u8"面", u8"辺をつなぐ" };
         ImGui::SetNextItemWidth(130.0f);
         ImGui::Combo(u8"選択", &landscape_topology_selection_mode,
             selection_modes, IM_ARRAYSIZE(selection_modes));
@@ -218,18 +258,17 @@ void framework::draw_landscape_editor_toolbar()
         {
             const bool face_selected = landscape_selected_face < data.FaceCount();
             if (face_selected)
-                ImGui::TextDisabled(u8"選択 Face: %zu", landscape_selected_face);
+                ImGui::TextDisabled(u8"選択中の面: %zu", landscape_selected_face);
             else
-                ImGui::TextDisabled(u8"Scene View で Face をクリックして選択");
+                ImGui::TextDisabled(u8"シーン画面で面をクリックして選択");
 
-            const auto edit = [&](const char* label, const char* history_label, auto&& operation)
+            const auto edit = [&](const char* label, const char* history_label,
+                const char* help_key, auto&& operation)
             {
                 const bool enabled = face_selected && object_editor_context.CanEdit();
                 DisabledScope disabled(!enabled);
                 const bool clicked = ImGui::Button(label);
-                const std::string help_key = std::string("button.landscape.operation.") +
-                    history_label;
-                ReplayEngine::Editor::EditorHelp::Item(help_key.c_str());
+                ReplayEngine::Editor::EditorHelp::Item(help_key);
                 if (!clicked || !enabled) return;
 
                 object_editor_context.BeginEdit(history_label);
@@ -241,60 +280,66 @@ void framework::draw_landscape_editor_toolbar()
                 else
                 {
                     object_editor_context.CancelEdit();
-                    object_editor_context.SetStatus(std::string(history_label) + " に失敗しました");
+                    object_editor_context.SetStatus(std::string(history_label) + u8" に失敗しました");
                 }
             };
 
-            edit("Subdivide", "Landscape Face を分割", [&] { return data.SubdivideFace(landscape_selected_face); });
+            edit(u8"面を分割", u8"地形の面を分割",
+                "button.landscape.operation.Landscape Face を分割",
+                [&] { return data.SubdivideFace(landscape_selected_face); });
             ImGui::SameLine();
             ImGui::SetNextItemWidth(85.0f);
             ImGui::DragFloat("##ExtrudeDistance", &landscape_extrude_distance, 0.05f, -100.0f, 100.0f, "%.2f");
             ImGui::SameLine();
-            edit("Extrude", "Landscape Face を押し出し", [&] {
+            edit(u8"面を押し出す", u8"地形の面を押し出し",
+                "button.landscape.operation.Landscape Face を押し出し", [&] {
                 return data.ExtrudeFace(landscape_selected_face, landscape_extrude_distance);
             });
             ImGui::SameLine();
             ImGui::SetNextItemWidth(75.0f);
             ImGui::DragFloat("##InsetAmount", &landscape_inset_amount, 0.01f, 0.01f, 0.95f, "%.2f");
             ImGui::SameLine();
-            edit("Inset", "Landscape Face をInset", [&] {
+            edit(u8"面の内側を分ける", u8"地形の面の内側を分ける",
+                "button.landscape.operation.Landscape Face をInset", [&] {
                 return data.InsetFace(landscape_selected_face, landscape_inset_amount);
             });
             ImGui::SameLine();
-            edit("Cut Hole", "Landscape に穴を開ける", [&] {
+            edit(u8"面を消して穴を開ける", u8"地形に穴を開ける",
+                "button.landscape.operation.Landscape に穴を開ける", [&] {
                 return data.DeleteFace(landscape_selected_face);
             });
 
             ImGui::SetNextItemWidth(90.0f);
-            ImGui::DragFloat(u8"Tunnel 深さ", &landscape_tunnel_depth, 0.1f, 0.1f, 500.0f, "%.1f");
+            ImGui::DragFloat(u8"トンネルの深さ", &landscape_tunnel_depth, 0.1f, 0.1f, 500.0f, "%.1f");
             ImGui::SameLine();
             ImGui::SetNextItemWidth(80.0f);
             ImGui::DragInt(u8"分割", &landscape_tunnel_segments, 0.1f, 1, 64);
             ImGui::SameLine();
             ImGui::SetNextItemWidth(80.0f);
-            ImGui::DragFloat(u8"終端Scale", &landscape_tunnel_end_scale, 0.01f, 0.05f, 4.0f, "%.2f");
+            ImGui::DragFloat(u8"奥の広さ", &landscape_tunnel_end_scale, 0.01f, 0.05f, 4.0f, "%.2f");
             ImGui::SameLine();
-            edit("Cave / Tunnel", "Landscape Tunnel を生成", [&] {
+            edit(u8"洞窟・トンネルを作る", u8"地形にトンネルを作る",
+                "button.landscape.operation.Landscape Tunnel を生成", [&] {
                 return data.CreateTunnelFromFace(landscape_selected_face,
                     landscape_tunnel_depth, landscape_tunnel_segments,
                     landscape_tunnel_end_scale);
             });
-            ImGui::TextDisabled(u8"Cut Hole / Extrude / Tunnel は Height Field 制約なし。張り出し・床と天井を同一XZに保持可能");
+            ImGui::TextDisabled(u8"穴開け・押し出し・トンネルでは、張り出しや同じ位置の床と天井も作れます");
         }
         else
         {
             const bool first = landscape_bridge_a0 != no_vertex && landscape_bridge_a1 != no_vertex;
             const bool second = landscape_bridge_b0 != no_vertex && landscape_bridge_b1 != no_vertex;
             if (first)
-                ImGui::TextDisabled("Edge A: %u-%u", landscape_bridge_a0, landscape_bridge_a1);
+                ImGui::TextDisabled(u8"1本目の辺: %u-%u", landscape_bridge_a0, landscape_bridge_a1);
             else
-                ImGui::TextDisabled(u8"Scene View で 1 本目の Edge を選択");
+                ImGui::TextDisabled(u8"シーン画面で1本目の辺を選択");
             if (second)
-                ImGui::TextDisabled("Edge B: %u-%u", landscape_bridge_b0, landscape_bridge_b1);
+                ImGui::TextDisabled(u8"2本目の辺: %u-%u", landscape_bridge_b0, landscape_bridge_b1);
             else if (first)
-                ImGui::TextDisabled(u8"次に離れた 2 本目の Edge を選択");
+                ImGui::TextDisabled(u8"次に離れた2本目の辺を選択");
 
-            if (ImGui::Button(u8"Edge 選択をクリア"))
+            if (ImGui::Button(u8"辺の選択を消す"))
             {
                 landscape_bridge_a0 = landscape_bridge_a1 = no_vertex;
                 landscape_bridge_b0 = landscape_bridge_b1 = no_vertex;
@@ -303,26 +348,26 @@ void framework::draw_landscape_editor_toolbar()
             ImGui::SameLine();
             const bool can_bridge = first && second && object_editor_context.CanEdit();
             DisabledScope disabled(!can_bridge);
-            const bool bridge_clicked = ImGui::Button("Bridge");
+            const bool bridge_clicked = ImGui::Button(u8"2本の辺をつなぐ");
             ReplayEngine::Editor::EditorHelp::Item("button.landscape.bridge_edges");
             if (bridge_clicked && can_bridge)
             {
-                object_editor_context.BeginEdit("Landscape Edge をBridge");
+                object_editor_context.BeginEdit(u8"地形の辺をつなぐ");
                 if (data.BridgeEdges(landscape_bridge_a0, landscape_bridge_a1,
                     landscape_bridge_b0, landscape_bridge_b1))
                 {
                     object_editor_context.CommitEdit();
                     landscape_bridge_a0 = landscape_bridge_a1 = no_vertex;
                     landscape_bridge_b0 = landscape_bridge_b1 = no_vertex;
-                    object_editor_context.SetStatus("Landscape Edge をBridgeしました");
+                    object_editor_context.SetStatus(u8"地形の辺をつなぎました");
                 }
                 else
                 {
                     object_editor_context.CancelEdit();
-                    object_editor_context.SetStatus("Bridge に失敗しました。共有頂点のない2本のEdgeを選んでください");
+                    object_editor_context.SetStatus(u8"辺をつなげませんでした。頂点を共有しない2本の辺を選んでください");
                 }
             }
-            ImGui::TextDisabled(u8"Bridge は離れた2本のEdgeを2三角形で接続。洞窟の開口・アーチ・継ぎ目作成に利用");
+            ImGui::TextDisabled(u8"離れた2本の辺を2枚の三角形でつなぎ、洞窟の入口・アーチ・継ぎ目を作ります");
         }
     }
     ImGui::PopID();
@@ -359,6 +404,9 @@ void framework::reset_landscape_editor_state(bool rollback_stroke)
         landscape_stroke_object = ReplayEngine::Core::ObjectID::Invalid();
     }
     landscape_edit_enabled = false;
+    landscape_brush_hover_valid = false;
+    landscape_brush_hover_face = no_face;
+    landscape_brush_hover_object = ReplayEngine::Core::ObjectID::Invalid();
     landscape_selected_face = no_face;
     landscape_bridge_a0 = landscape_bridge_a1 = no_vertex;
     landscape_bridge_b0 = landscape_bridge_b1 = no_vertex;

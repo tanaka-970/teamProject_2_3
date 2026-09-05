@@ -7,10 +7,12 @@
 #include "../../RePlayEngine/Components/Rendering/MeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../RePlayEngine/Components/Rendering/SkinnedMeshRendererComponent.h"
+#include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Editor/ReorderableList.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 
+#include <array>
 #include <functional>
 #include <algorithm>
 #include <cstddef>
@@ -298,6 +300,51 @@ namespace
     }
 }
 
+// 地形をモデルから作る入口。編集パレットではなくコンポーネント側に置く。
+void framework::draw_landscape_model_inspector()
+{
+    ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
+    if (scene == nullptr || object_editor_context.Selection().Count() != 1) return;
+    ReplayEngine::Core::GameObject* object =
+        object_editor_context.Selection().ResolvePrimary(*scene);
+    if (object == nullptr) return;
+    if (object->GetComponent<ReplayEngine::Components::LandscapeComponent>() == nullptr) return;
+    if (!object_editor_context.CanEdit()) return;
+
+    if (!ImGui::CollapsingHeader(u8"地形をモデルから作る")) return;
+
+    static std::array<char, 96> model_filter{};
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::InputTextWithHint("##LandscapeModelFilter", u8"モデルを検索...",
+        model_filter.data(), model_filter.size());
+    ImGui::TextDisabled(u8"選ぶとこの地形をそのモデルの形で作り直します。骨やアニメーションを持つモデルは使えません。");
+    if (ImGui::BeginChild("LandscapeModelList", ImVec2(0.0f, 120.0f), true))
+    {
+        for (const auto& record : asset_database.Records())
+        {
+            if (record.kind != ReplayEngine::Assets::AssetKind::Model) continue;
+            if (model_filter[0] != '\0' &&
+                record.display_name.find(model_filter.data()) == std::string::npos)
+                continue;
+            ImGui::PushID(record.guid.c_str());
+            if (ImGui::Button(record.display_name.c_str()))
+            {
+                std::string message;
+                object_editor_context.BeginEdit(u8"モデルから地形を作る");
+                if (build_landscape_from_model(*object, record.guid, message))
+                {
+                    object_editor_context.CommitEdit();
+                    landscape_selected_face = -1;
+                }
+                else object_editor_context.CancelEdit();
+                object_editor_context.SetStatus(message);
+            }
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+}
+
 void framework::draw_material_slot_inspector()
 {
     using namespace ReplayEngine::Components;
@@ -484,6 +531,7 @@ void framework::draw_inspector()
             save_project_settings();
         }
         draw_material_slot_inspector();
+        draw_landscape_model_inspector();
         break;
     }
 
