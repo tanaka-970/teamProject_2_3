@@ -574,6 +574,8 @@ namespace GameInput
             if (kind == "action")
             {
                 ActionBinding binding{};
+                const auto existing = actions_.find(name);
+                if (existing != actions_.end()) binding = existing->second;
                 unsigned int pad_button = 0;
                 if (row >> binding.keyboard_primary >> binding.keyboard_secondary >> pad_button)
                 {
@@ -584,6 +586,8 @@ namespace GameInput
             else if (kind == "axis")
             {
                 AxisBinding binding{};
+                const auto existing = axes_.find(name);
+                if (existing != axes_.end()) binding = existing->second;
                 int gamepad_axis = 0;
                 if (row >> binding.negative_primary >> binding.negative_secondary >>
                     binding.positive_primary >> binding.positive_secondary >>

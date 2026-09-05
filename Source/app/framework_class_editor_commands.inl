@@ -6,11 +6,20 @@
         // WM_IME_* をここから横取りせず、Editor / Runtime の入力所有者で分岐する。
         const bool keyboard_message = msg == WM_KEYDOWN || msg == WM_KEYUP ||
             msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP || msg == WM_CHAR;
+        if (editor_mode && input_binding_capture_active && msg == WM_CHAR) return 0;
+        if (editor_mode && input_binding_capture_active &&
+            (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN))
+        {
+            if ((lparam & 0x40000000) == 0)
+                input_binding_capture_key = static_cast<int>(wparam);
+            return 0;
+        }
         if (ImGui::GetCurrentContext() &&
             (editor_mode || (standalone_game_mode && show_render_stats)))
         {
             ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam);
         }
+        if (editor_mode && input_binding_capture_active && keyboard_message) return 0;
         if (editor_mode)
         {
             const bool control_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;

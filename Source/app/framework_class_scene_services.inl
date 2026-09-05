@@ -171,6 +171,7 @@ private:
     void draw_editor_camera_settings();
     void draw_editor_camera_preset_manager();
     void draw_ui_focus_style_manager();
+    void draw_input_bindings_panel();
     void draw_editor_camera_top_menu();
 
     // Camera preset lifecycle。active 選択だけは local Saved へ保存する。

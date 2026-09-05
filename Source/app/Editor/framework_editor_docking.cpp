@@ -166,6 +166,7 @@ void framework::draw_editor()
         if (show_console_panel) draw_console_panel();
         draw_search_results();
         draw_ui_focus_style_manager();
+        draw_input_bindings_panel();
         if (active_editor_view == editor_view::scene) handle_viewport_selection();
         draw_collider_debug_overlay();
         draw_dx12_debug_panel();
@@ -246,6 +247,7 @@ void framework::draw_editor()
         if (show_console_panel) draw_console_panel();
         draw_search_results();
         draw_ui_focus_style_manager();
+        draw_input_bindings_panel();
         if (active_editor_view == editor_view::scene) handle_viewport_selection();
         draw_collider_debug_overlay();
         draw_dx12_debug_panel();
@@ -262,6 +264,7 @@ void framework::draw_editor()
     draw_scene_flow_panel();
     draw_editor_camera_preset_manager();
     draw_ui_focus_style_manager();
+    draw_input_bindings_panel();
     draw_shader_catalog_panel();
     {
         shader_composer_editor.Draw(content_root_path(), shader_library, asset_database);

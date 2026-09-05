@@ -14,12 +14,14 @@
 #include "../../RePlayEngine/Object/Registry/ComponentRegistry.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <iterator>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -121,6 +123,122 @@ void framework::reset_editor_values()
 namespace
 {
     constexpr const char* builtin_editor_style_id = "builtin-replay-default";
+
+    enum class BindingKeyTarget
+    {
+        None,
+        ActionPrimary,
+        ActionSecondary,
+        AxisNegativePrimary,
+        AxisNegativeSecondary,
+        AxisPositivePrimary,
+        AxisPositiveSecondary,
+    };
+
+    struct BindingKeyCapture final
+    {
+        BindingKeyTarget target = BindingKeyTarget::None;
+        std::string name;
+    };
+
+    struct PendingBindingEdit final
+    {
+        bool ready = false;
+        bool action = false;
+        std::string name;
+        GameInput::ActionBinding action_binding{};
+        GameInput::AxisBinding axis_binding{};
+    };
+
+    struct GamepadButtonOption final
+    {
+        WORD value;
+        const char* label;
+    };
+
+    constexpr GamepadButtonOption gamepad_button_options[] = {
+        { 0, "None" },
+        { XINPUT_GAMEPAD_DPAD_UP, "D-Pad Up" },
+        { XINPUT_GAMEPAD_DPAD_DOWN, "D-Pad Down" },
+        { XINPUT_GAMEPAD_DPAD_LEFT, "D-Pad Left" },
+        { XINPUT_GAMEPAD_DPAD_RIGHT, "D-Pad Right" },
+        { XINPUT_GAMEPAD_START, "Start" },
+        { XINPUT_GAMEPAD_BACK, "Back" },
+        { XINPUT_GAMEPAD_LEFT_THUMB, "Left Stick" },
+        { XINPUT_GAMEPAD_RIGHT_THUMB, "Right Stick" },
+        { XINPUT_GAMEPAD_LEFT_SHOULDER, "Left Shoulder" },
+        { XINPUT_GAMEPAD_RIGHT_SHOULDER, "Right Shoulder" },
+        { XINPUT_GAMEPAD_A, "A" },
+        { XINPUT_GAMEPAD_B, "B" },
+        { XINPUT_GAMEPAD_X, "X" },
+        { XINPUT_GAMEPAD_Y, "Y" },
+    };
+
+    constexpr const char* gamepad_axis_names[] = {
+        "None", "Left X", "Left Y", "Right X", "Right Y", "Left Trigger", "Right Trigger"
+    };
+
+    std::string VirtualKeyDisplayName(int key)
+    {
+        switch (key)
+        {
+        case 0: return "None";
+        case VK_LBUTTON: return "Mouse Left";
+        case VK_RBUTTON: return "Mouse Right";
+        case VK_MBUTTON: return "Mouse Middle";
+        case VK_XBUTTON1: return "Mouse X1";
+        case VK_XBUTTON2: return "Mouse X2";
+        case VK_LSHIFT: return "Left Shift";
+        case VK_RSHIFT: return "Right Shift";
+        case VK_LCONTROL: return "Left Ctrl";
+        case VK_RCONTROL: return "Right Ctrl";
+        case VK_LMENU: return "Left Alt";
+        case VK_RMENU: return "Right Alt";
+        default: break;
+        }
+
+        UINT scan_code = ::MapVirtualKeyW(static_cast<UINT>(key), MAPVK_VK_TO_VSC);
+        LONG key_name_parameter = static_cast<LONG>(scan_code << 16);
+        switch (key)
+        {
+        case VK_PRIOR: case VK_NEXT: case VK_END: case VK_HOME:
+        case VK_LEFT: case VK_UP: case VK_RIGHT: case VK_DOWN:
+        case VK_INSERT: case VK_DELETE: case VK_DIVIDE: case VK_NUMLOCK:
+            key_name_parameter |= 1 << 24;
+            break;
+        default: break;
+        }
+        wchar_t wide_name[64]{};
+        if (scan_code != 0 && ::GetKeyNameTextW(key_name_parameter,
+            wide_name, static_cast<int>(std::size(wide_name))) > 0)
+        {
+            char utf8_name[128]{};
+            if (::WideCharToMultiByte(CP_UTF8, 0, wide_name, -1, utf8_name,
+                static_cast<int>(std::size(utf8_name)), nullptr, nullptr) > 0)
+                return utf8_name;
+        }
+        char buffer[24]{};
+        std::snprintf(buffer, sizeof(buffer), "Unknown (0x%02X)", key & 0xff);
+        return buffer;
+    }
+
+    const char* GamepadButtonDisplayName(WORD button) noexcept
+    {
+        for (const auto& option : gamepad_button_options)
+            if (option.value == button) return option.label;
+        return "Unknown";
+    }
+
+    bool ContainsCaseInsensitive(std::string_view text, std::string_view filter)
+    {
+        if (filter.empty()) return true;
+        return std::search(text.begin(), text.end(), filter.begin(), filter.end(),
+            [](char left, char right)
+            {
+                return std::tolower(static_cast<unsigned char>(left)) ==
+                    std::tolower(static_cast<unsigned char>(right));
+            }) != text.end();
+    }
 
     ReplayEngine::Editor::EditorStylePreset MakeDefaultEditorStylePreset()
     {
@@ -678,6 +796,7 @@ void framework::draw_editor_main_menu()
         // 見た目の調整。人によって画面サイズも見やすい大きさも違うので、
         // 固定値で決め打ちせずここで変えられるようにする。
         ImGui::Separator();
+        ImGui::MenuItem(u8"キー割り当て", nullptr, &show_input_bindings_panel);
         if (ImGui::BeginMenu(u8"UI の見た目"))
         {
             bool style_changed = false;
@@ -1056,4 +1175,373 @@ void framework::draw_editor_main_menu()
         ImGui::TextWrapped("SceneをGameObjectとComponentの組み合わせで制作します。");
         ImGui::EndMenu();
     }
+}
+
+void framework::draw_input_bindings_panel()
+{
+    static std::array<char, 128> name_filter{};
+    static BindingKeyCapture capture{};
+    static std::string status;
+    static bool status_error = false;
+
+    if (!show_input_bindings_panel)
+    {
+        capture = {};
+        input_binding_capture_active = false;
+        input_binding_capture_key = 0;
+        return;
+    }
+
+    PendingBindingEdit pending_edit;
+    bool save_requested = false;
+    bool reset_requested = false;
+
+    if (capture.target != BindingKeyTarget::None)
+    {
+        int pressed_key = input_binding_capture_key;
+        input_binding_capture_key = 0;
+        if (pressed_key == VK_ESCAPE)
+        {
+            capture = {};
+            input_binding_capture_active = false;
+            status = u8"キーの入力を取り消しました";
+            status_error = false;
+        }
+        else if (pressed_key == 0)
+        {
+            constexpr int mouse_keys[] = {
+                VK_LBUTTON, VK_RBUTTON, VK_MBUTTON, VK_XBUTTON1, VK_XBUTTON2
+            };
+            for (int button = 0; button < static_cast<int>(std::size(mouse_keys)); ++button)
+            {
+                if (ImGui::IsMouseClicked(button))
+                {
+                    pressed_key = mouse_keys[button];
+                    break;
+                }
+            }
+        }
+
+        if (pressed_key != 0)
+        {
+            if (capture.target == BindingKeyTarget::ActionPrimary ||
+                capture.target == BindingKeyTarget::ActionSecondary)
+            {
+                const auto found = game_input.Actions().find(capture.name);
+                if (found != game_input.Actions().end())
+                {
+                    pending_edit.ready = true;
+                    pending_edit.action = true;
+                    pending_edit.name = capture.name;
+                    pending_edit.action_binding = found->second;
+                    int& destination = capture.target == BindingKeyTarget::ActionPrimary
+                        ? pending_edit.action_binding.keyboard_primary
+                        : pending_edit.action_binding.keyboard_secondary;
+                    destination = pressed_key;
+                }
+            }
+            else
+            {
+                const auto found = game_input.Axes().find(capture.name);
+                if (found != game_input.Axes().end())
+                {
+                    pending_edit.ready = true;
+                    pending_edit.name = capture.name;
+                    pending_edit.axis_binding = found->second;
+                    switch (capture.target)
+                    {
+                    case BindingKeyTarget::AxisNegativePrimary:
+                        pending_edit.axis_binding.negative_primary = pressed_key; break;
+                    case BindingKeyTarget::AxisNegativeSecondary:
+                        pending_edit.axis_binding.negative_secondary = pressed_key; break;
+                    case BindingKeyTarget::AxisPositivePrimary:
+                        pending_edit.axis_binding.positive_primary = pressed_key; break;
+                    case BindingKeyTarget::AxisPositiveSecondary:
+                        pending_edit.axis_binding.positive_secondary = pressed_key; break;
+                    default: break;
+                    }
+                }
+            }
+            capture = {};
+            input_binding_capture_active = false;
+            status = u8"未保存の変更があります";
+            status_error = false;
+        }
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(900.0f, 650.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin(u8"キー割り当て", &show_input_bindings_panel))
+    {
+        if (!show_input_bindings_panel)
+        {
+            capture = {};
+            input_binding_capture_active = false;
+            input_binding_capture_key = 0;
+        }
+        ImGui::End();
+        return;
+    }
+
+    ImGui::SetNextItemWidth(300.0f);
+    ImGui::InputTextWithHint("##InputBindingFilter", u8"名前で絞り込み",
+        name_filter.data(), name_filter.size());
+    ImGui::SameLine();
+    if (ImGui::Button(u8"保存")) save_requested = true;
+    ImGui::SameLine();
+    if (ImGui::Button(u8"既定へ戻す")) reset_requested = true;
+
+    if (capture.target != BindingKeyTarget::None)
+        ImGui::TextColored(ImVec4(1.0f, 0.80f, 0.25f, 1.0f),
+            u8"%s: キーを押してください（Esc で取り消し）", capture.name.c_str());
+    else if (!status.empty())
+        ImGui::TextColored(status_error ? ImVec4(1.0f, 0.35f, 0.30f, 1.0f)
+            : ImVec4(0.45f, 0.85f, 0.55f, 1.0f), "%s", status.c_str());
+
+    const auto queue_action = [&](const std::string& name,
+        const GameInput::ActionBinding& binding)
+    {
+        if (pending_edit.ready) return;
+        pending_edit.ready = true;
+        pending_edit.action = true;
+        pending_edit.name = name;
+        pending_edit.action_binding = binding;
+        status = u8"未保存の変更があります";
+        status_error = false;
+    };
+    const auto queue_axis = [&](const std::string& name,
+        const GameInput::AxisBinding& binding)
+    {
+        if (pending_edit.ready) return;
+        pending_edit.ready = true;
+        pending_edit.name = name;
+        pending_edit.axis_binding = binding;
+        status = u8"未保存の変更があります";
+        status_error = false;
+    };
+    const auto draw_key_field = [&](const char* label, int key,
+        BindingKeyTarget target, const std::string& name)
+    {
+        ImGui::TextUnformatted(label);
+        ImGui::SameLine();
+        ImGui::PushID(static_cast<int>(target));
+        const bool waiting = capture.target == target && capture.name == name;
+        const std::string key_label = waiting ? u8"キーを押してください" : VirtualKeyDisplayName(key);
+        if (ImGui::Button(key_label.c_str(), ImVec2(135.0f, 0.0f)))
+        {
+            capture = { target, name };
+            input_binding_capture_active = true;
+            input_binding_capture_key = 0;
+        }
+        ImGui::PopID();
+    };
+    const auto add_conflict = [](std::vector<std::string>& conflicts,
+        const std::string& label)
+    {
+        if (std::find(conflicts.begin(), conflicts.end(), label) == conflicts.end())
+            conflicts.push_back(label);
+    };
+    const auto collect_conflicts = [&](int key, bool own_action,
+        const std::string& own_name, std::vector<std::string>& conflicts)
+    {
+        if (key == 0) return;
+        for (const auto& entry : game_input.Actions())
+        {
+            if (own_action && entry.first == own_name) continue;
+            const auto& binding = entry.second;
+            if (binding.keyboard_primary == key || binding.keyboard_secondary == key)
+                add_conflict(conflicts, "Action: " + entry.first);
+        }
+        for (const auto& entry : game_input.Axes())
+        {
+            if (!own_action && entry.first == own_name) continue;
+            const auto& binding = entry.second;
+            if (binding.negative_primary == key || binding.negative_secondary == key ||
+                binding.positive_primary == key || binding.positive_secondary == key)
+                add_conflict(conflicts, "Axis: " + entry.first);
+        }
+    };
+    const auto draw_conflicts = [](const std::vector<std::string>& conflicts)
+    {
+        if (conflicts.empty()) return;
+        std::string message = u8"警告: 同じキーが ";
+        for (std::size_t index = 0; index < conflicts.size(); ++index)
+        {
+            if (index != 0) message += ", ";
+            message += conflicts[index];
+        }
+        message += u8" にも割り当てられています";
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.25f, 1.0f), "%s", message.c_str());
+    };
+
+    std::vector<std::string> action_maps;
+    const auto add_action_map = [&action_maps](const std::string& action_map)
+    {
+        if (std::find(action_maps.begin(), action_maps.end(), action_map) == action_maps.end())
+            action_maps.push_back(action_map);
+    };
+    for (const auto& entry : game_input.Actions()) add_action_map(entry.second.action_map);
+    for (const auto& entry : game_input.Axes()) add_action_map(entry.second.action_map);
+    std::sort(action_maps.begin(), action_maps.end());
+
+    ImGui::Separator();
+    ImGui::BeginChild("##InputBindingsList", ImVec2(0.0f, 0.0f), true);
+    const std::string_view filter(name_filter.data());
+    for (const std::string& action_map : action_maps)
+    {
+        std::vector<std::string> action_names;
+        std::vector<std::string> axis_names;
+        for (const auto& entry : game_input.Actions())
+            if (entry.second.action_map == action_map &&
+                ContainsCaseInsensitive(entry.first, filter)) action_names.push_back(entry.first);
+        for (const auto& entry : game_input.Axes())
+            if (entry.second.action_map == action_map &&
+                ContainsCaseInsensitive(entry.first, filter)) axis_names.push_back(entry.first);
+        if (action_names.empty() && axis_names.empty()) continue;
+        std::sort(action_names.begin(), action_names.end());
+        std::sort(axis_names.begin(), axis_names.end());
+
+        const std::string map_label = action_map.empty() ? u8"（action_map なし）" : action_map;
+        ImGui::SetNextItemOpen(true, ImGuiCond_Once);
+        if (!ImGui::CollapsingHeader(map_label.c_str())) continue;
+
+        if (!action_names.empty()) ImGui::TextDisabled("Actions");
+        for (const std::string& name : action_names)
+        {
+            const GameInput::ActionBinding binding = game_input.Actions().at(name);
+            ImGui::PushID(name.c_str());
+            ImGui::Text("%s", name.c_str());
+            ImGui::Indent();
+            draw_key_field(u8"主キー", binding.keyboard_primary,
+                BindingKeyTarget::ActionPrimary, name);
+            ImGui::SameLine();
+            draw_key_field(u8"副キー", binding.keyboard_secondary,
+                BindingKeyTarget::ActionSecondary, name);
+            ImGui::SameLine();
+            ImGui::TextUnformatted(u8"ゲームパッド");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(145.0f);
+            if (ImGui::BeginCombo("##GamepadButton",
+                GamepadButtonDisplayName(binding.gamepad_button)))
+            {
+                for (const auto& option : gamepad_button_options)
+                {
+                    const bool selected = option.value == binding.gamepad_button;
+                    if (ImGui::Selectable(option.label, selected))
+                    {
+                        auto edited = binding;
+                        edited.gamepad_button = option.value;
+                        queue_action(name, edited);
+                    }
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            std::vector<std::string> conflicts;
+            collect_conflicts(binding.keyboard_primary, true, name, conflicts);
+            collect_conflicts(binding.keyboard_secondary, true, name, conflicts);
+            draw_conflicts(conflicts);
+            ImGui::Unindent();
+            ImGui::Separator();
+            ImGui::PopID();
+        }
+
+        if (!axis_names.empty()) ImGui::TextDisabled("Axes");
+        for (const std::string& name : axis_names)
+        {
+            const GameInput::AxisBinding binding = game_input.Axes().at(name);
+            ImGui::PushID(name.c_str());
+            ImGui::Text("%s", name.c_str());
+            ImGui::Indent();
+            draw_key_field(u8"負1", binding.negative_primary,
+                BindingKeyTarget::AxisNegativePrimary, name);
+            ImGui::SameLine();
+            draw_key_field(u8"負2", binding.negative_secondary,
+                BindingKeyTarget::AxisNegativeSecondary, name);
+            draw_key_field(u8"正1", binding.positive_primary,
+                BindingKeyTarget::AxisPositivePrimary, name);
+            ImGui::SameLine();
+            draw_key_field(u8"正2", binding.positive_secondary,
+                BindingKeyTarget::AxisPositiveSecondary, name);
+            ImGui::TextUnformatted(u8"ゲームパッド軸");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(145.0f);
+            const int axis_index = static_cast<int>(binding.gamepad_axis);
+            const char* axis_label = axis_index >= 0 &&
+                axis_index < static_cast<int>(std::size(gamepad_axis_names))
+                ? gamepad_axis_names[axis_index] : "Unknown";
+            if (ImGui::BeginCombo("##GamepadAxis", axis_label))
+            {
+                for (int index = 0; index < static_cast<int>(std::size(gamepad_axis_names)); ++index)
+                {
+                    const bool selected = index == axis_index;
+                    if (ImGui::Selectable(gamepad_axis_names[index], selected))
+                    {
+                        auto edited = binding;
+                        edited.gamepad_axis = static_cast<GameInput::GamepadAxis>(index);
+                        queue_axis(name, edited);
+                    }
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            ImGui::TextUnformatted(u8"デッドゾーン");
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(180.0f);
+            float dead_zone = binding.dead_zone;
+            if (ImGui::SliderFloat("##DeadZone", &dead_zone, 0.0f, 0.95f, "%.2f"))
+            {
+                auto edited = binding;
+                edited.dead_zone = dead_zone;
+                queue_axis(name, edited);
+            }
+            std::vector<std::string> conflicts;
+            collect_conflicts(binding.negative_primary, false, name, conflicts);
+            collect_conflicts(binding.negative_secondary, false, name, conflicts);
+            collect_conflicts(binding.positive_primary, false, name, conflicts);
+            collect_conflicts(binding.positive_secondary, false, name, conflicts);
+            draw_conflicts(conflicts);
+            ImGui::Unindent();
+            ImGui::Separator();
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+
+    // 入力一覧の走査後に変更を一件だけ反映する。
+    if (reset_requested)
+    {
+        game_input.ResetDefaultBindings();
+        capture = {};
+        input_binding_capture_active = false;
+        input_binding_capture_key = 0;
+        status = u8"既定の割り当てへ戻しました（未保存）";
+        status_error = false;
+    }
+    else if (pending_edit.ready)
+    {
+        if (pending_edit.action)
+            game_input.SetActionBinding(std::move(pending_edit.name),
+                std::move(pending_edit.action_binding));
+        else
+            game_input.SetAxisBinding(std::move(pending_edit.name),
+                std::move(pending_edit.axis_binding));
+    }
+    if (save_requested)
+    {
+        std::string error;
+        if (game_input.SaveBindings(saved_path(std::filesystem::path("Editor") /
+            "InputBindings.ini"), error))
+        {
+            status = u8"Saved/Editor/InputBindings.ini に保存しました";
+            status_error = false;
+        }
+        else
+        {
+            status = error.empty() ? u8"キー割り当てを保存できませんでした" : error;
+            status_error = true;
+            object_editor_context.SetStatus(status);
+        }
+    }
+    ImGui::End();
 }
