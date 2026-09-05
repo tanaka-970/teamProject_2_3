@@ -612,6 +612,7 @@ namespace ReplayEngine::Editor
         draw_effect_reorder(dynamic_cast<Components::UIEffectStackComponent*>(&component));
         draw_effect_reorder(dynamic_cast<Components::ModelEffectStackComponent*>(&component));
         draw_effect_reorder(dynamic_cast<Components::ScreenEffectStackComponent*>(&component));
+        if (component_extra_drawer_) component_extra_drawer_(context, component);
 
         draw_separator();
 

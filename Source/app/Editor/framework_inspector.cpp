@@ -301,18 +301,32 @@ namespace
 }
 
 // 地形をモデルから作る入口。編集パレットではなくコンポーネント側に置く。
-void framework::draw_landscape_model_inspector()
+void framework::draw_landscape_model_inspector(ReplayEngine::Core::Component& component)
 {
-    ReplayEngine::Scene::Scene* scene = object_editor_context.GetScene();
-    if (scene == nullptr || object_editor_context.Selection().Count() != 1) return;
-    ReplayEngine::Core::GameObject* object =
-        object_editor_context.Selection().ResolvePrimary(*scene);
-    if (object == nullptr) return;
-    if (object->GetComponent<ReplayEngine::Components::LandscapeComponent>() == nullptr) return;
-    if (!object_editor_context.CanEdit()) return;
+    if (dynamic_cast<ReplayEngine::Components::LandscapeComponent*>(&component) == nullptr) return;
+    ReplayEngine::Core::GameObject* object = component.Owner();
+    if (object == nullptr || !object_editor_context.CanEdit()) return;
 
-    if (!ImGui::CollapsingHeader(u8"地形をモデルから作る")) return;
+    auto* landscape = static_cast<ReplayEngine::Components::LandscapeComponent*>(&component);
+    // どのモデルから作った地形なのかを、閉じていても分かるよう見出しへ出す。
+    std::string current_name;
+    if (!landscape->source_model_asset.empty())
+    {
+        for (const auto& record : asset_database.Records())
+            if (record.guid == landscape->source_model_asset)
+            {
+                current_name = record.display_name;
+                break;
+            }
+        if (current_name.empty()) current_name = u8"（見つからないモデル）";
+    }
+    else current_name = u8"なし（手で作った地形）";
 
+    const std::string header = std::string(u8"地形をモデルから作る｜作成元: ") +
+        current_name + "###LandscapeSourceModel";
+    if (!ImGui::CollapsingHeader(header.c_str())) return;
+
+    ImGui::TextDisabled(u8"作成元モデル: %s", current_name.c_str());
     static std::array<char, 96> model_filter{};
     ImGui::SetNextItemWidth(-1.0f);
     ImGui::InputTextWithHint("##LandscapeModelFilter", u8"モデルを検索...",
@@ -327,7 +341,10 @@ void framework::draw_landscape_model_inspector()
                 record.display_name.find(model_filter.data()) == std::string::npos)
                 continue;
             ImGui::PushID(record.guid.c_str());
-            if (ImGui::Button(record.display_name.c_str()))
+            const bool is_current = record.guid == landscape->source_model_asset;
+            const std::string label = is_current
+                ? std::string(u8"● ") + record.display_name : record.display_name;
+            if (ImGui::Button(label.c_str()))
             {
                 std::string message;
                 object_editor_context.BeginEdit(u8"モデルから地形を作る");
@@ -523,6 +540,9 @@ void framework::draw_inspector()
         // 表示内容は ComponentRegistry と PropertyRegistry から自動生成される。
         bool show_game_template_components =
             project_settings.ShowGameTemplateComponents();
+        object_inspector_panel.SetComponentExtraDrawer(
+            [this](ReplayEngine::Editor::EditorContext&, ReplayEngine::Core::Component& component)
+            { draw_landscape_model_inspector(component); });
         if (object_inspector_panel.DrawContents(object_editor_context,
             show_game_template_components))
         {
@@ -531,7 +551,6 @@ void framework::draw_inspector()
             save_project_settings();
         }
         draw_material_slot_inspector();
-        draw_landscape_model_inspector();
         break;
     }
 

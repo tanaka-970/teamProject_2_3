@@ -448,7 +448,7 @@ private:
     void draw_scene_hierarchy();
     void draw_inspector();
     void draw_material_slot_inspector();
-    void draw_landscape_model_inspector();
+    void draw_landscape_model_inspector(ReplayEngine::Core::Component& component);
     void draw_shader_adjustment_workspace();
     // シェーダ編集の唯一の入口（Source/app/Editor/framework_shader_stack.cpp）。
     //
