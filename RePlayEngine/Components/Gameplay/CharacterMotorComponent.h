@@ -66,7 +66,7 @@ namespace ReplayEngine::Components
         // ジャンプ要求。次の FixedUpdate で 1 回だけ消費される。
         // 可変フレームで複数回呼ばれても 1 回にまとまり、
         // FixedUpdate が 1 フレームに複数回走っても重複実行されない。
-        void RequestJump() noexcept { jump_requested_ = true; }
+        void RequestJump() noexcept { jump_requested = true; }
 
         // 位置を直接指定する（テレポート）。速度は保持したままにする。
         void Teleport(const DirectX::XMFLOAT3& world_position);
@@ -154,6 +154,10 @@ namespace ReplayEngine::Components
         float jump_power = 8.0f;
         float maximum_fall_speed = 55.0f;
 
+        // ジャンプ要求の実体。RequestJump() が立て、次の FixedUpdate が消費して倒す。
+        // C# / Inspector からも立てられるよう public にしてある。
+        bool jump_requested = false;
+
         // 地形が無い場合に床とみなす高さ。旧 Player の ground_y に相当。
         float fallback_ground_y = 0.0f;
 
@@ -231,7 +235,6 @@ namespace ReplayEngine::Components
         bool has_wall_contact_ = false;
         float ground_height_ = 0.0f;
         bool grounded_ = true;
-        bool jump_requested_ = false;
         bool has_ground_ = false;
     };
 }

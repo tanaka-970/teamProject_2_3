@@ -105,6 +105,7 @@ void framework::draw_editor()
             else if (active_editor_workspace == editor_workspace::motion)
             {
                 ImGui::DockBuilderDockWindow("Motion レイヤー", left);
+                ImGui::DockBuilderDockWindow(u8"Motion リグ", left);
                 ImGui::DockBuilderDockWindow("階層", left);
                 ImGui::DockBuilderDockWindow("Motion インスペクター", right);
                 ImGui::DockBuilderDockWindow(u8"イージングカーブ###EasingCurveEditor", right);
@@ -240,6 +241,7 @@ void framework::draw_editor()
         draw_motion_inspector();
         draw_motion_timeline();
         draw_motion_graph_editor();
+        draw_motion_rig();
         if (show_project_panel) draw_project_panel();
         if (show_console_panel) draw_console_panel();
         draw_search_results();

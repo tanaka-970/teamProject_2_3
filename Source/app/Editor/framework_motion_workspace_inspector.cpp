@@ -28,6 +28,7 @@ using namespace framework_motion_workspace::Detail;
 
 void framework::draw_motion_inspector()
 {
+    REPLAY_PROFILE_SCOPE("Editor/MotionInspector");
     if (!show_motion_inspector_panel) return;
     ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
     if (!ImGui::Begin(u8"Motion インスペクター", &show_motion_inspector_panel))

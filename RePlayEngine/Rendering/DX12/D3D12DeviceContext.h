@@ -13,6 +13,7 @@
 #include "D3D12RenderItemBatch.h"
 #include "D3D12ResourceStateTracker.h"
 #include "D3D12ScreenBounds.h"
+#include "../Frustum.h"
 #include "D3D12ShaderCompiler.h"
 #include "D3D12UploadContext.h"
 #include "../ShaderStack/ShaderLayerStack.h"
@@ -933,6 +934,31 @@ namespace ReplayEngine::Rendering::DX12
         {
             return last_shadow_coverage_draw_count_;
         }
+        std::uint32_t LastSceneDrawCallCount() const noexcept
+        {
+            return last_scene_draw_call_count_;
+        }
+        std::uint64_t LastSceneTriangleCount() const noexcept
+        {
+            return last_scene_triangle_count_;
+        }
+        std::uint64_t LastSceneVertexCount() const noexcept
+        {
+            return last_scene_vertex_count_;
+        }
+        // カメラの視錐台に入っているぶん。まだ捨ててはいないので描画数とは別に持つ。
+        std::uint64_t LastVisibleTriangleCount() const noexcept
+        {
+            return last_visible_triangle_count_;
+        }
+        std::uint64_t LastVisibleVertexCount() const noexcept
+        {
+            return last_visible_vertex_count_;
+        }
+        std::uint64_t LastVisibleDrawCallCount() const noexcept
+        {
+            return last_visible_draw_call_count_;
+        }
         bool HasStaticMesh(const std::string& key) const noexcept
         {
             return static_mesh_cache_.find(key) != static_mesh_cache_.end();
@@ -1176,6 +1202,9 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12RootSignature> scene3d_shadow_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_gbuffer_pipelines_[6];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_gbuffer_pipelines_[6];
+        // Effect Stack で分離したモデルのモーションベクターだけを書き足す。
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_motion_pipelines_[6];
+        Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_motion_pipelines_[6];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_static_layer_pipelines_[kScene3DLayerPipelineCount];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_skinned_layer_pipelines_[kScene3DLayerPipelineCount];
         Microsoft::WRL::ComPtr<ID3D12PipelineState> scene3d_lighting_pipeline_;
@@ -1294,6 +1323,15 @@ namespace ReplayEngine::Rendering::DX12
         std::uint32_t last_model_effect_stack_count_ = 0;
         std::uint32_t last_screen_effect_stack_count_ = 0;
         std::uint32_t last_shadow_coverage_draw_count_ = 0;
+        std::uint32_t last_scene_draw_call_count_ = 0;
+        std::uint64_t last_scene_triangle_count_ = 0;
+        std::uint64_t last_scene_vertex_count_ = 0;
+        std::uint64_t last_visible_triangle_count_ = 0;
+        std::uint64_t last_visible_vertex_count_ = 0;
+        std::uint64_t last_visible_draw_call_count_ = 0;
+        // GBuffer を描いている間だけ true。影パスは別のカメラなので数えない。
+        bool counting_visible_ = false;
+        Frustum visible_frustum_;
         struct UIEffectHistoryEntry final
         {
             D3D12OffscreenTarget target{};
@@ -1319,7 +1357,7 @@ namespace ReplayEngine::Rendering::DX12
         Microsoft::WRL::ComPtr<ID3D12RootSignature> ui_effect_root_signature_;
         static constexpr std::size_t UIEffectKindCount =
             static_cast<std::size_t>(ReplayEngine::UI::UIEffectKind::Count);
-        static_assert(UIEffectKindCount == 80,
+        static_assert(UIEffectKindCount == 86,
             "UIEffectKind の永続化値とDX12 Effect Shader表の対応が変わりました。");
         std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, UIEffectKindCount>
             ui_effect_pipelines_{};

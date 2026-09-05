@@ -50,9 +50,16 @@
                     handled = (wparam == 'Z') ? undo_sprite_atlas_edit() : redo_sprite_atlas_edit();
                 else if (active_editor_workspace == editor_workspace::motion)
                 {
-                    if (wparam == 'Z') undo_motion_edit();
-                    else redo_motion_edit();
-                    handled = true;
+                    // Motion の履歴と骨のポーズは別物。リグパネルの上にいる間だけ
+                    // 骨側へ回す。そうしないとどちらが戻るのか予測できない。
+                    if (motion_rig_panel_hovered)
+                        handled = (wparam == 'Z') ? undo_rig_pose_edit() : redo_rig_pose_edit();
+                    if (!handled)
+                    {
+                        if (wparam == 'Z') undo_motion_edit();
+                        else redo_motion_edit();
+                        handled = true;
+                    }
                 }
                 else if (show_scene_flow_panel && scene_flow_editor_loaded &&
                     !project_browser_focused)
@@ -181,9 +188,12 @@
             // Maya の W/E/R を Shift 付きへ退避する。選択中の GameObject にだけ効く。
             const bool shift_down = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
             const bool alt_down = (GetKeyState(VK_MENU) & 0x8000) != 0;
+            // selected_editor_object は Inspector が何を映すかの状態で、Gizmo が
+            // 使えるかとは別。Project Browser を触ると asset へ移り、Motion で
+            // 骨を編集中に切替が丸ごと死んでいた。GameObject の選択だけを見る。
             if (msg == WM_KEYDOWN && edit_mode_active && !search_input_active &&
+                !ImGui::GetIO().WantTextInput &&
                 shift_down && !control_down && !alt_down &&
-                selected_editor_object == editor_selection::game_object &&
                 object_editor_context.Selection().Primary().Valid())
             {
                 if (wparam == 'W')

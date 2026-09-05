@@ -698,7 +698,8 @@ namespace ReplayEngine::Editor
 
         if (ImGui::CollapsingHeader("Prefab Source Details"))
         {
-            if (asset != nullptr) ImGui::TextWrapped("Path: %s", asset->source_path.string().c_str());
+            if (asset != nullptr)
+                ImGui::TextWrapped("Path: %s", asset->source_path.u8string().c_str());
             ImGui::TextDisabled("AssetGUID: %s", root->PrefabSourceGUID().c_str());
             ImGui::TextDisabled("Local ID: %llu", static_cast<unsigned long long>(root->PrefabLocalID()));
         }

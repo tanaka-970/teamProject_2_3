@@ -326,6 +326,7 @@ void framework::draw_shader_adjustment_workspace()
 
 void framework::draw_inspector()
 {
+    REPLAY_PROFILE_SCOPE("Editor/Inspector");
     ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Editor");
     ImGui::Begin("インスペクター");
     project_settings_file_undo_enabled = false;

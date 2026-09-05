@@ -836,6 +836,13 @@ public readonly struct CharacterMotorComponent : IComponentBinding<CharacterMoto
         get => Accessor.GetFloat("air_control");
         set => Accessor.SetFloat("air_control", value);
     }
+
+    // true を書くと次の更新で 1 回だけ跳ぶ。消費されると自動で false へ戻る。
+    public bool RequestJump
+    {
+        get => Accessor.GetBool("jump_requested");
+        set => Accessor.SetBool("jump_requested", value);
+    }
 }
 
 public readonly struct HealthComponent : IComponentBinding<HealthComponent>

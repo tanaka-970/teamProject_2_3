@@ -88,9 +88,11 @@ std::filesystem::path gltf_model::MeshCachePath(const std::string& filename) con
     }
 
     std::error_code error;
-    const auto size = std::filesystem::file_size(filename, error);
+    // source_filename_ は UTF-8。path へは u8path で戻す。
+    const std::filesystem::path source = std::filesystem::u8path(filename);
+    const auto size = std::filesystem::file_size(source, error);
     if (!error) mix(static_cast<std::uint64_t>(size));
-    const auto write_time = std::filesystem::last_write_time(filename, error);
+    const auto write_time = std::filesystem::last_write_time(source, error);
     if (!error)
         mix(static_cast<std::uint64_t>(write_time.time_since_epoch().count()));
 
@@ -249,7 +251,7 @@ bool gltf_model::StaticPrimitiveInfoAt(std::size_t index,
         out.alpha_mode = material.alpha_mode;
         out.alpha_cutoff = material.alpha_cutoff;
         const std::filesystem::path base_directory =
-            std::filesystem::path(source_filename_).parent_path();
+            std::filesystem::u8path(source_filename_).parent_path();
         if (!material.base_color_uri.empty())
             out.embedded_base_color_texture =
                 base_directory / std::filesystem::path(material.base_color_uri);
@@ -277,7 +279,7 @@ bool gltf_model::ExportStaticPrimitives(
         {
             out.reserve(primitives.size());
             const std::filesystem::path base_directory =
-                std::filesystem::path(source_filename_).parent_path();
+                std::filesystem::u8path(source_filename_).parent_path();
             for (const Primitive& primitive : primitives)
             {
                 if (primitive.source_vertices.empty() || primitive.source_indices.empty())

@@ -785,31 +785,43 @@ void framework::draw_editor_main_menu()
             }
 
             ImGui::TextDisabled(u8"大きさ");
+            static float button_scale_edit = 1.0f;
+            static bool button_scale_editing = false;
+            if (!button_scale_editing) button_scale_edit = ui_button_scale;
             ImGui::SetNextItemWidth(180.0f);
             const auto button_scale_before = capture_editor_style_snapshot();
             const bool button_scale_changed = ImGui::SliderFloat(
-                u8"ボタンの余白", &ui_button_scale, 0.6f, 3.0f, "x%.2f");
+                u8"ボタンの余白", &button_scale_edit, 0.6f, 3.0f, "x%.2f");
             if (button_scale_changed && !editor_style_history.InTransaction())
                 editor_style_history.Begin(button_scale_before, "ボタンの余白を変更");
-            style_changed |= button_scale_changed;
-            if (ImGui::IsItemDeactivatedAfterEdit() &&
-                editor_style_history.InTransaction())
+            button_scale_editing |= button_scale_changed;
+            if (ImGui::IsItemDeactivatedAfterEdit())
             {
-                editor_style_history.Commit(capture_editor_style_snapshot());
+                ui_button_scale = button_scale_edit;
+                style_changed = true;
+                if (editor_style_history.InTransaction())
+                    editor_style_history.Commit(capture_editor_style_snapshot());
                 style_save_requested = true;
+                button_scale_editing = false;
             }
+            static float font_scale_edit = 1.0f;
+            static bool font_scale_editing = false;
+            if (!font_scale_editing) font_scale_edit = ui_font_scale;
             ImGui::SetNextItemWidth(180.0f);
             const auto font_scale_before = capture_editor_style_snapshot();
             const bool font_scale_changed = ImGui::SliderFloat(
-                u8"文字の大きさ", &ui_font_scale, 0.7f, 2.5f, "x%.2f");
+                u8"文字の大きさ", &font_scale_edit, 0.7f, 2.5f, "x%.2f");
             if (font_scale_changed && !editor_style_history.InTransaction())
                 editor_style_history.Begin(font_scale_before, "文字の大きさを変更");
-            style_changed |= font_scale_changed;
-            if (ImGui::IsItemDeactivatedAfterEdit() &&
-                editor_style_history.InTransaction())
+            font_scale_editing |= font_scale_changed;
+            if (ImGui::IsItemDeactivatedAfterEdit())
             {
-                editor_style_history.Commit(capture_editor_style_snapshot());
+                ui_font_scale = font_scale_edit;
+                style_changed = true;
+                if (editor_style_history.InTransaction())
+                    editor_style_history.Commit(capture_editor_style_snapshot());
                 style_save_requested = true;
+                font_scale_editing = false;
             }
 
             ImGui::Separator();
@@ -1002,9 +1014,7 @@ void framework::draw_editor_main_menu()
                 editor_style_name_buffer_id.clear();
             }
 
-            // 変えた瞬間に反映する。
-            // configure_editor_style は毎回 EditorStyle::Apply から作り直すので、
-            // 何度呼んでも倍率が積み重なることはない。
+            // 確定した見た目の変更を反映する。
             if (style_changed)
             {
                 ui_style_overridden = true;
