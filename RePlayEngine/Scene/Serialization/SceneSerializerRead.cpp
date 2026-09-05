@@ -1,4 +1,5 @@
 ﻿#include "SceneSerializer.h"
+#include "../../Rendering/RenderStats.h"
 
 #include <cmath>
 #include <cstdint>
@@ -261,6 +262,7 @@ namespace ReplayEngine::Scene::Serialization
     bool SceneSerializer::LoadFromFile(SceneData& data,
         const std::filesystem::path& path, std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/Scene");
         std::error_code filesystem_error;
         if (!std::filesystem::exists(path, filesystem_error) || filesystem_error)
         {

@@ -28,12 +28,16 @@ Global
 		{0DDBE550-8551-4506-9A5A-4DD100C00C48}.Release|x86.ActiveCfg = Release|Win32
 		{0DDBE550-8551-4506-9A5A-4DD100C00C48}.Release|x86.Build.0 = Release|Win32
 		{2EF861B8-8CA1-4788-88D7-BCAED0D0A508}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2EF861B8-8CA1-4788-88D7-BCAED0D0A508}.Debug|x64.Build.0 = Debug|Any CPU
 		{2EF861B8-8CA1-4788-88D7-BCAED0D0A508}.Debug|x86.ActiveCfg = Debug|Any CPU
 		{2EF861B8-8CA1-4788-88D7-BCAED0D0A508}.Release|x64.ActiveCfg = Release|Any CPU
+		{2EF861B8-8CA1-4788-88D7-BCAED0D0A508}.Release|x64.Build.0 = Release|Any CPU
 		{2EF861B8-8CA1-4788-88D7-BCAED0D0A508}.Release|x86.ActiveCfg = Release|Any CPU
 		{4028740B-274F-435F-ADA5-0504F8767C60}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4028740B-274F-435F-ADA5-0504F8767C60}.Debug|x64.Build.0 = Debug|Any CPU
 		{4028740B-274F-435F-ADA5-0504F8767C60}.Debug|x86.ActiveCfg = Debug|Any CPU
 		{4028740B-274F-435F-ADA5-0504F8767C60}.Release|x64.ActiveCfg = Release|Any CPU
+		{4028740B-274F-435F-ADA5-0504F8767C60}.Release|x64.Build.0 = Release|Any CPU
 		{4028740B-274F-435F-ADA5-0504F8767C60}.Release|x86.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution

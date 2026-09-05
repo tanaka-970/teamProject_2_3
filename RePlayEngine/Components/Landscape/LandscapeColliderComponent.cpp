@@ -75,7 +75,10 @@ namespace ReplayEngine::Components
             changed = true;
         }
 
-        const XMFLOAT4X4 current_world = owner->GetTransform().WorldMatrixFloat4x4();
+        XMFLOAT4X4 current_world = owner->GetTransform().WorldMatrixFloat4x4();
+        current_world._41 += center_offset.x;
+        current_world._42 += center_offset.y;
+        current_world._43 += center_offset.z;
         if (!transform_valid_ || std::memcmp(&current_world, &cached_world_, sizeof(current_world)) != 0 || changed)
         {
             cached_world_ = current_world;

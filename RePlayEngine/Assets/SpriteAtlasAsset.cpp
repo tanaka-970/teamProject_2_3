@@ -1,4 +1,5 @@
 ﻿#include "SpriteAtlasAsset.h"
+#include "../Rendering/RenderStats.h"
 
 #include <fstream>
 #include <iomanip>
@@ -32,6 +33,7 @@ namespace ReplayEngine::Assets
     bool SpriteAtlasAsset::LoadFromFile(const std::filesystem::path& path,
         SpriteAtlasAsset& out, std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/SpriteAtlas");
         std::ifstream file(path);
         if (!file)
         {

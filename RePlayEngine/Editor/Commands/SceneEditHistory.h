@@ -1,8 +1,10 @@
 #pragma once
 
+#include "../../Landscape/LandscapeUndoCommand.h"
 #include "../../Scene/Serialization/SceneData.h"
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -35,6 +37,8 @@ namespace ReplayEngine::Editor
         // （最初の Begin が優先される。ImGui のように毎フレーム描く UI から呼ぶため）。
         void Begin(const Scene::Scene& scene, std::string label);
         void Commit(const Scene::Scene& scene);
+        void CommitLandscape(Core::ObjectID object,
+            std::unique_ptr<Landscape::LandscapeUndoCommand> command, std::string label);
         void Cancel() noexcept;
 
         bool InTransaction() const noexcept { return in_transaction_; }
@@ -57,7 +61,11 @@ namespace ReplayEngine::Editor
             std::string label;
             Scene::Serialization::SceneData before;
             Scene::Serialization::SceneData after;
+            Core::ObjectID landscape_object;
+            std::unique_ptr<Landscape::LandscapeUndoCommand> landscape_command;
         };
+
+        static bool ApplyLandscape(const Entry& entry, Scene::Scene& scene, bool redo);
 
         // 1 操作あたり Scene 2 つぶんを持つため、既存 UndoStack より控えめにする。
         static constexpr std::size_t maximum_entries = 64;

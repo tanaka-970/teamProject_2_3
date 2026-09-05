@@ -277,6 +277,8 @@
     std::uint32_t landscape_bridge_b0{ static_cast<std::uint32_t>(-1) };
     std::uint32_t landscape_bridge_b1{ static_cast<std::uint32_t>(-1) };
     bool landscape_stroke_transaction{ false };
+    bool landscape_subdivide_stroke_changed{ false };
+    ReplayEngine::Core::ObjectID landscape_stroke_object;
     float landscape_extrude_distance{ 1.0f };
     float landscape_inset_amount{ 0.25f };
     float landscape_tunnel_depth{ 8.0f };
@@ -352,6 +354,7 @@ private:
     float ui_button_scale{ 1.0f };      // ボタンとメニューの余白倍率
     float ui_font_scale{ 1.0f };        // 文字の大きさ倍率
     float ui_text_color[3]{ 1.0f, 1.0f, 1.0f };   // 文字色（既定は白）
+    float ui_texture_preview_scale{ 4.5f };  // マテリアルスロットの見本の大きさ（文字高の倍率）
     bool  ui_style_overridden{ false };  // 一度でも触ったか
     std::vector<ReplayEngine::Editor::EditorStylePreset> editor_style_presets;
     int active_editor_style_preset_index{ -1 };

@@ -180,18 +180,25 @@ void framework::draw_motion_timeline()
 
     if (ImGui::CollapsingHeader(u8"コマンドガイド"))
     {
+        const auto command_guide = [&](const char* name, const char* description)
+        {
+            const std::string shortcut = action_shortcut(name);
+            ImGui::BulletText("%s%s%s", shortcut.c_str(), shortcut.empty() ? "" : "    ",
+                description);
+        };
         ImGui::TextDisabled(u8"文字入力中はモーションショートカットを無効化します。");
-        ImGui::BulletText(u8"S          キーを追加");
-        ImGui::BulletText(u8"Delete     選択キーを削除");
-        ImGui::BulletText(u8"Ctrl+D     選択キーを複製");
-        ImGui::BulletText(u8"Ctrl+C     選択キーをコピー");
-        ImGui::BulletText(u8"Ctrl+V     キーを貼り付け");
-        ImGui::BulletText(u8"Space      再生 / 停止");
-        ImGui::BulletText(u8"Home       先頭へ移動");
-        ImGui::BulletText(u8"End        末尾へ移動");
-        ImGui::BulletText(u8"PageUp     1フレーム戻る");
-        ImGui::BulletText(u8"PageDown   1フレーム進む");
-        ImGui::BulletText(u8"F9         選択中プリセットを一括適用（未選択はEaseInOutCubic）");
+        command_guide(u8"キーを追加", u8"キーを追加");
+        command_guide(u8"キーを削除", u8"選択キーを削除");
+        command_guide(u8"キーを複製", u8"選択キーを複製");
+        command_guide(u8"キーをコピー", u8"選択キーをコピー");
+        command_guide(u8"キーを貼り付け", u8"キーを貼り付け");
+        command_guide(u8"再生/停止", u8"再生 / 停止");
+        command_guide(u8"先頭へ移動", u8"先頭へ移動");
+        command_guide(u8"末尾へ移動", u8"末尾へ移動");
+        command_guide(u8"1コマ戻る", u8"1フレーム戻る");
+        command_guide(u8"1コマ進む", u8"1フレーム進む");
+        command_guide(u8"プリセットを適用",
+            u8"選択中プリセットを一括適用（未選択はEaseInOutCubic）");
         ImGui::Separator();
     }
 

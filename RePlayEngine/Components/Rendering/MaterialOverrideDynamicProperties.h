@@ -95,6 +95,14 @@ namespace ReplayEngine::Components
                 slot != nullptr ? slot->name : std::string{}));
             output.Set(prefix + "asset", Reflection::PropertyValue::MakeAssetPath(
                 slot != nullptr ? slot->asset : std::string{}));
+            output.Set(prefix + "base_color_texture", Reflection::PropertyValue::MakeAssetPath(
+                slot != nullptr ? slot->base_color_texture : std::string{}));
+            output.Set(prefix + "normal_texture", Reflection::PropertyValue::MakeAssetPath(
+                slot != nullptr ? slot->normal_texture : std::string{}));
+            output.Set(prefix + "orm_texture", Reflection::PropertyValue::MakeAssetPath(
+                slot != nullptr ? slot->orm_texture : std::string{}));
+            output.Set(prefix + "emissive_texture", Reflection::PropertyValue::MakeAssetPath(
+                slot != nullptr ? slot->emissive_texture : std::string{}));
         }
     }
 
@@ -116,6 +124,17 @@ namespace ReplayEngine::Components
                 slot.name = name->AsString();
             if (const Reflection::PropertyValue* asset = input.Find(prefix + "asset"))
                 slot.asset = asset->AsString();
+            if (const Reflection::PropertyValue* base_color_texture =
+                input.Find(prefix + "base_color_texture"))
+                slot.base_color_texture = base_color_texture->AsString();
+            if (const Reflection::PropertyValue* normal_texture =
+                input.Find(prefix + "normal_texture"))
+                slot.normal_texture = normal_texture->AsString();
+            if (const Reflection::PropertyValue* orm_texture = input.Find(prefix + "orm_texture"))
+                slot.orm_texture = orm_texture->AsString();
+            if (const Reflection::PropertyValue* emissive_texture =
+                input.Find(prefix + "emissive_texture"))
+                slot.emissive_texture = emissive_texture->AsString();
         }
     }
 
@@ -177,6 +196,118 @@ namespace ReplayEngine::Components
                 typed.material_slots[static_cast<std::size_t>(index)].asset = value.AsString();
             };
             output.push_back(std::move(asset));
+
+            Reflection::PropertyDesc base_color_texture;
+            base_color_texture.name = prefix + "base_color_texture";
+            base_color_texture.display_name = "ベースカラー";
+            base_color_texture.type = Reflection::PropertyType::AssetPath;
+            base_color_texture.asset_type = "Texture";
+            base_color_texture.serializable = false;
+            base_color_texture.editor_visible = false;
+            base_color_texture.animatable = Reflection::Animatable::None;
+            base_color_texture.getter = [index](const Core::Component& base)
+            {
+                if (base.TypeID() != T::StaticTypeID()) return Reflection::PropertyValue{};
+                const T& typed = static_cast<const T&>(base);
+                if (static_cast<std::size_t>(index) >= typed.material_slots.size())
+                    return Reflection::PropertyValue::MakeAssetPath({});
+                return Reflection::PropertyValue::MakeAssetPath(
+                    typed.material_slots[static_cast<std::size_t>(index)].base_color_texture);
+            };
+            base_color_texture.setter = [index](Core::Component& base,
+                const Reflection::PropertyValue& value)
+            {
+                if (base.TypeID() != T::StaticTypeID()) return;
+                T& typed = static_cast<T&>(base);
+                EnsureMaterialSlotStorage(typed, index + 1);
+                typed.material_slots[static_cast<std::size_t>(index)].base_color_texture =
+                    value.AsString();
+            };
+            output.push_back(std::move(base_color_texture));
+
+            Reflection::PropertyDesc normal_texture;
+            normal_texture.name = prefix + "normal_texture";
+            normal_texture.display_name = "法線マップ";
+            normal_texture.type = Reflection::PropertyType::AssetPath;
+            normal_texture.asset_type = "Texture";
+            normal_texture.serializable = false;
+            normal_texture.editor_visible = false;
+            normal_texture.animatable = Reflection::Animatable::None;
+            normal_texture.getter = [index](const Core::Component& base)
+            {
+                if (base.TypeID() != T::StaticTypeID()) return Reflection::PropertyValue{};
+                const T& typed = static_cast<const T&>(base);
+                if (static_cast<std::size_t>(index) >= typed.material_slots.size())
+                    return Reflection::PropertyValue::MakeAssetPath({});
+                return Reflection::PropertyValue::MakeAssetPath(
+                    typed.material_slots[static_cast<std::size_t>(index)].normal_texture);
+            };
+            normal_texture.setter = [index](Core::Component& base,
+                const Reflection::PropertyValue& value)
+            {
+                if (base.TypeID() != T::StaticTypeID()) return;
+                T& typed = static_cast<T&>(base);
+                EnsureMaterialSlotStorage(typed, index + 1);
+                typed.material_slots[static_cast<std::size_t>(index)].normal_texture =
+                    value.AsString();
+            };
+            output.push_back(std::move(normal_texture));
+
+            Reflection::PropertyDesc orm_texture;
+            orm_texture.name = prefix + "orm_texture";
+            orm_texture.display_name = "ORM マップ";
+            orm_texture.type = Reflection::PropertyType::AssetPath;
+            orm_texture.asset_type = "Texture";
+            orm_texture.serializable = false;
+            orm_texture.editor_visible = false;
+            orm_texture.animatable = Reflection::Animatable::None;
+            orm_texture.getter = [index](const Core::Component& base)
+            {
+                if (base.TypeID() != T::StaticTypeID()) return Reflection::PropertyValue{};
+                const T& typed = static_cast<const T&>(base);
+                if (static_cast<std::size_t>(index) >= typed.material_slots.size())
+                    return Reflection::PropertyValue::MakeAssetPath({});
+                return Reflection::PropertyValue::MakeAssetPath(
+                    typed.material_slots[static_cast<std::size_t>(index)].orm_texture);
+            };
+            orm_texture.setter = [index](Core::Component& base,
+                const Reflection::PropertyValue& value)
+            {
+                if (base.TypeID() != T::StaticTypeID()) return;
+                T& typed = static_cast<T&>(base);
+                EnsureMaterialSlotStorage(typed, index + 1);
+                typed.material_slots[static_cast<std::size_t>(index)].orm_texture =
+                    value.AsString();
+            };
+            output.push_back(std::move(orm_texture));
+
+            Reflection::PropertyDesc emissive_texture;
+            emissive_texture.name = prefix + "emissive_texture";
+            emissive_texture.display_name = "エミッシブ";
+            emissive_texture.type = Reflection::PropertyType::AssetPath;
+            emissive_texture.asset_type = "Texture";
+            emissive_texture.serializable = false;
+            emissive_texture.editor_visible = false;
+            emissive_texture.animatable = Reflection::Animatable::None;
+            emissive_texture.getter = [index](const Core::Component& base)
+            {
+                if (base.TypeID() != T::StaticTypeID()) return Reflection::PropertyValue{};
+                const T& typed = static_cast<const T&>(base);
+                if (static_cast<std::size_t>(index) >= typed.material_slots.size())
+                    return Reflection::PropertyValue::MakeAssetPath({});
+                return Reflection::PropertyValue::MakeAssetPath(
+                    typed.material_slots[static_cast<std::size_t>(index)].emissive_texture);
+            };
+            emissive_texture.setter = [index](Core::Component& base,
+                const Reflection::PropertyValue& value)
+            {
+                if (base.TypeID() != T::StaticTypeID()) return;
+                T& typed = static_cast<T&>(base);
+                EnsureMaterialSlotStorage(typed, index + 1);
+                typed.material_slots[static_cast<std::size_t>(index)].emissive_texture =
+                    value.AsString();
+            };
+            output.push_back(std::move(emissive_texture));
         }
     }
 
@@ -476,7 +607,7 @@ namespace ReplayEngine::Components
         const auto* fixed = FixedMaterialOverrideDynamicProperties<T>();
         const std::size_t schema_count = component.material_motion_state.schema_properties.size();
         const std::size_t slot_count = static_cast<std::size_t>(ClampedMaterialSlotCount(component));
-        const std::size_t required = fixed->size() + schema_count + slot_count * 2u;
+        const std::size_t required = fixed->size() + schema_count + slot_count * 6u;
         bool rebuild = combined.size() != required;
         if (!rebuild && schema_count > 0)
         {
@@ -487,7 +618,7 @@ namespace ReplayEngine::Components
         if (!rebuild && slot_count > 0)
         {
             rebuild = combined.back().name !=
-                "material_slots[" + std::to_string(slot_count - 1u) + "].asset";
+                "material_slots[" + std::to_string(slot_count - 1u) + "].emissive_texture";
         }
         if (rebuild)
         {

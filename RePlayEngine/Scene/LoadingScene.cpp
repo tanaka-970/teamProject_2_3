@@ -77,6 +77,7 @@ namespace ReplayEngine::Scene
     void LoadingScene::Update(float elapsed_time)
     {
         spinner_ += elapsed_time * 120.0f;
+        if (elapsed_time > 0.0f) elapsed_ += elapsed_time;
         if (!task_running_) return;
         if (!loader_.valid()) { task_running_ = false; return; }
         if (loader_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
@@ -92,7 +93,9 @@ namespace ReplayEngine::Scene
 
     bool LoadingScene::IsFinished() const noexcept
     {
-        return initialized_ && !task_running_ && completed_tasks_.load() >= tasks_.size();
+        return initialized_ && !task_running_ &&
+            completed_tasks_.load() >= tasks_.size() &&
+            elapsed_ >= minimum_display_time_;
     }
 
     bool LoadingScene::BuildRuntimeUI(Rendering::DX12::D3D12UIFrame& frame,

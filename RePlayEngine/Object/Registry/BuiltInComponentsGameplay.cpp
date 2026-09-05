@@ -47,13 +47,13 @@ namespace ReplayEngine::Core::Detail
                     .InModule("RePlayEngine.Template.ActionPlatformer"));
 
             // 移動用 Collider は明示的に選ぶ。暗黙の自動選択はしない。
-            // 一覧には Sphere / Capsule / Box だけが出る（Mesh と Trigger は除外）。
+            // 一覧には Sphere / Capsule / Box / Mesh が出る（Landscape と Trigger は除外）。
             PropertyRegistry::Register<CharacterMotorComponent>(
                 MakeProperty("primary_collider_key",
                     &CharacterMotorComponent::primary_collider_key)
                     .Display("移動用 Collider").AsColliderReference()
                     .Tooltip("移動・接地・押し戻しに使う Collider。"
-                        "未設定だと地形との当たり判定を行わない。"));
+                        "未設定だと地形との当たり判定を行わない。Mesh は外接球で近似する。"));
 
             PropertyRegistry::Register<CharacterMotorComponent>(
                 MakeProperty("move_speed", &CharacterMotorComponent::move_speed)

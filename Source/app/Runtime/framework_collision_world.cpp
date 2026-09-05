@@ -61,6 +61,10 @@ void framework::detach_collision_world()
     // 参照が 0 になった Cook データを表から外す。
     // Scene を離れた時点で誰も使っていないものは、ここで消える。
     object_collision_cook_cache.Collect();
+
+    // 描画提出リストも捨てる。RenderItem は Component 内の値を借りているので、
+    // Scene が入れ替わった後に残っていると、解放済みの領域を読みに行く。
+    object_render_items.Clear();
 }
 
 void framework::refresh_collision_world()

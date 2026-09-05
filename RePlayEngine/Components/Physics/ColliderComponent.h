@@ -63,7 +63,7 @@ namespace ReplayEngine::Components
             DirectX::XMFLOAT3& maximum) const = 0;
 
         // Character Motor の移動用 Collider として選べるか。
-        // Mesh は静的地形用なので false。Trigger も移動体には使わない。
+        // 対応形状だけが true を返し、Trigger は呼び出し側で除外する。
         virtual bool UsableAsCharacterShape() const noexcept { return false; }
 
         // Inspector へ出す警告文。空なら問題なし。

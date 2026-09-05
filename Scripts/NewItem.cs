@@ -1,4 +1,4 @@
-using ReplayEngine;
+﻿using ReplayEngine;
 
 namespace Game;
 
@@ -32,8 +32,6 @@ public sealed class NewItem : ScriptBehaviour
     [Tooltip("跳んでいる間の回転量（度／秒）。0 で回さない")]
     public float SpinSpeed = 0.0f;
 
-    // Play 中に増えるのを見るためのもの
-
     public int JumpCount = 0;
     public int UsingMotor = 0;
     public int Airborne = 0;
@@ -65,11 +63,34 @@ public sealed class NewItem : ScriptBehaviour
         // 自分で位置を書くと Motor に打ち消されるため。
         if (TryGetComponent<CharacterMotorComponent>(out var motor))
         {
+
             UsingMotor = 1;
+            // 垂直物理が切れていると Motor がジャンプ要求を捨てる。既定は無効なので
+            // ここで入れておく（Inspector の「重力とジャンプを有効化」と同じ）。
+            if (!motor.VerticalPhysics) motor.VerticalPhysics = true;
             if (timer >= Interval)
             {
                 timer = 0.0f;
                 motor.RequestJump = true;
+                JumpCount += 1;
+            }
+            Spin(deltaTime);
+            return;
+        }
+
+        // Rigidbod接続。
+        if (TryGetComponent<RigidbodyComponent>(out var body))
+        {
+            UsingMotor = 2;
+            if (timer >= Interval)
+            {
+                timer = 0.0f;
+                // v = sqrt(2gh)。重力に打ち勝って JumpHeight まで上がる初速。
+                var gravity = 9.81f * body.GravityScale;
+                if (gravity < 0.01f) gravity = 9.81f;
+                var speed = (float)System.Math.Sqrt(2.0 * gravity * JumpHeight);
+                var v = body.Velocity;
+                body.Velocity = new Vector3(v.X, speed, v.Z);
                 JumpCount += 1;
             }
             Spin(deltaTime);

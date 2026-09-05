@@ -1,4 +1,5 @@
 ﻿#include "ProjectSettingsSerializer.h"
+#include "../Rendering/RenderStats.h"
 
 #include <fstream>
 #include <iomanip>
@@ -395,6 +396,7 @@ namespace ReplayEngine::Project
     bool ProjectSettingsSerializer::LoadFromFile(ProjectSettings& settings,
         const std::filesystem::path& path, std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/ProjectSettings");
         std::error_code filesystem_error;
         if (!std::filesystem::exists(path, filesystem_error) || filesystem_error)
         {

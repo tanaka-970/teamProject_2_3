@@ -199,8 +199,10 @@
     std::unordered_map<std::string, std::unique_ptr<static_mesh>> builtin_primitive_mesh_cache;
     struct landscape_gpu_cache_entry
     {
+        const void* source = nullptr;
         std::uint64_t revision = 0;
-        std::unique_ptr<static_mesh> mesh;
+        // チャンクごとに載せた世代。触っていないチャンクは作り直さない。
+        std::vector<std::uint64_t> chunk_revisions;
     };
     std::unordered_map<std::uint64_t, landscape_gpu_cache_entry> landscape_gpu_mesh_cache;
 
@@ -424,6 +426,11 @@
     bool             editor_camera_presets_loaded{ false };
     bool             show_camera_preset_manager{ false };
     bool             show_ui_focus_style_manager{ false };
+    bool             show_input_bindings_panel{ false };
+    bool             input_binding_capture_active{ false };
+    int              input_binding_capture_key{ 0 };
+    std::uint8_t     input_binding_capture_modifiers{ GameInput::ActionModifierNone };
+    int              input_binding_capture_modifier_key{ 0 };
     bool             gizmo_move_shortcut_was_down{ false };
     bool             gizmo_rotate_shortcut_was_down{ false };
     bool             gizmo_scale_shortcut_was_down{ false };

@@ -3,6 +3,7 @@
 #include "../Physics/BoxColliderComponent.h"
 #include "../Physics/CapsuleColliderComponent.h"
 #include "../Physics/ColliderComponent.h"
+#include "../Physics/MeshColliderComponent.h"
 #include "../Physics/SphereColliderComponent.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Scene/Runtime/Scene.h"
@@ -20,6 +21,7 @@ namespace ReplayEngine::Components
         // 下端は origin.y - 220 だった。上側は max_step_height へ切り出したが、
         // 下側の到達距離は変えないよう 220 をそのまま名前付きで残す。
         constexpr float ground_search_depth = 220.0f;
+        constexpr int wall_resolution_iterations = 4;
 
         float Length2D(const DirectX::XMFLOAT3& value) noexcept
         {
@@ -97,7 +99,7 @@ namespace ReplayEngine::Components
         ColliderComponent* collider = FindColliderByKey(*owner, primary_collider_key);
         if (collider == nullptr) return nullptr;
 
-        // Mesh や Trigger は移動用として使えないので、指定されていても受け付けない。
+        // Trigger と移動形状へ落とせない Collider は受け付けない。
         if (!collider->UsableAsCharacterShape()) return nullptr;
         if (collider->is_trigger) return nullptr;
         return collider;
@@ -113,7 +115,7 @@ namespace ReplayEngine::Components
         if (primary_collider_key <= 0)
         {
             return "移動用 Collider が設定されていません。"
-                "地形との当たり判定は行われず、重力と接地も働きません。";
+                "Scene Collider との壁・接地判定は行われません。";
         }
 
         Core::GameObject* owner = Owner();
@@ -128,12 +130,17 @@ namespace ReplayEngine::Components
         if (!collider->UsableAsCharacterShape())
         {
             return "この形状は移動用 Collider に使えません。"
-                "Sphere / Capsule / Box のいずれかを選んでください。";
+                "Sphere / Capsule / Box / Mesh のいずれかを選んでください。";
         }
         if (collider->is_trigger)
         {
             return "Trigger の Collider は移動用に使えません。"
                 "Trigger を外すか、別の Collider を選んでください。";
+        }
+        if (collider->Shape() == ColliderShape::Mesh)
+        {
+            return "Mesh Collider は AABB の外接球で近似します。"
+                "凹形状や細長い形状では見た目より早く衝突します。";
         }
         return std::string();
     }
@@ -142,7 +149,7 @@ namespace ReplayEngine::Components
     {
         MotionSphere shape;
 
-        const ColliderComponent* collider = ResolvePrimaryCollider();
+        ColliderComponent* collider = ResolvePrimaryCollider();
         if (collider == nullptr || !collider->ActiveInHierarchy()) return shape;
 
         shape.filter.layer = collider->collision_layer;
@@ -174,9 +181,14 @@ namespace ReplayEngine::Components
 
             // 接地は「一番下の半球」で見る。
             // 中心で見ると、カプセルの下半分ぶん床へめり込んだ位置で接地判定になる。
-            const float half_cylinder =
-                (std::max)(0.0f, capsule.EffectiveHeight() * 0.5f - capsule.EffectiveRadius());
-            shape.ground_offset.y -= half_cylinder;
+            DirectX::XMFLOAT3 segment_start{};
+            DirectX::XMFLOAT3 segment_end{};
+            capsule.WorldSegment(segment_start, segment_end);
+            const DirectX::XMFLOAT3 lower = segment_start.y <= segment_end.y
+                ? segment_start : segment_end;
+            const DirectX::XMFLOAT3 owner_position = Owner()->GetTransform().WorldPosition();
+            shape.ground_offset = DirectX::XMFLOAT3{ lower.x - owner_position.x,
+                lower.y - owner_position.y, lower.z - owner_position.z };
             shape.valid = shape.radius > 0.0f;
             break;
         }
@@ -193,8 +205,35 @@ namespace ReplayEngine::Components
             break;
         }
         case ColliderShape::Mesh:
+        {
+            auto& mesh = static_cast<MeshColliderComponent&>(*collider);
+            mesh.RefreshTransformIfChanged();
+
+            DirectX::XMFLOAT3 minimum{};
+            DirectX::XMFLOAT3 maximum{};
+            const Core::GameObject* owner = Owner();
+            if (owner == nullptr || !mesh.ComputeWorldBounds(minimum, maximum)) break;
+
+            const DirectX::XMFLOAT3 owner_position = owner->GetTransform().WorldPosition();
+            const DirectX::XMFLOAT3 center{
+                (minimum.x + maximum.x) * 0.5f,
+                (minimum.y + maximum.y) * 0.5f,
+                (minimum.z + maximum.z) * 0.5f };
+            const DirectX::XMFLOAT3 half{
+                (maximum.x - minimum.x) * 0.5f,
+                (maximum.y - minimum.y) * 0.5f,
+                (maximum.z - minimum.z) * 0.5f };
+
+            shape.radius = std::sqrt(half.x * half.x + half.y * half.y + half.z * half.z);
+            shape.wall_offset = DirectX::XMFLOAT3{ center.x - owner_position.x,
+                center.y - owner_position.y, center.z - owner_position.z };
+            shape.ground_offset = shape.wall_offset;
+            shape.ground_offset.y = minimum.y + shape.radius - owner_position.y;
+            shape.valid = shape.radius > 0.0f;
+            break;
+        }
         case ColliderShape::Landscape:
-            // ここへは来ない（ResolvePrimaryCollider が弾く）。静的環境用。
+            // Landscape は ResolvePrimaryCollider が弾く。
             break;
         }
         return shape;
@@ -210,7 +249,7 @@ namespace ReplayEngine::Components
         if (owner == nullptr || fixed_delta_time <= 0.0f) return;
 
         Core::Transform& transform = owner->GetTransform();
-        const DirectX::XMFLOAT3 previous_position = transform.LocalPosition();
+        const DirectX::XMFLOAT3 previous_position = transform.WorldPosition();
 
         // ---- 水平方向 -------------------------------------------------------
 
@@ -293,12 +332,52 @@ namespace ReplayEngine::Components
         position.x += velocity_.x * fixed_delta_time;
         position.z += velocity_.z * fixed_delta_time;
         if (vertical_physics) position.y += velocity_.y * fixed_delta_time;
-        transform.SetLocalPosition(position);
+        transform.SetWorldPosition(position);
 
         // ---- 地形との解決 ---------------------------------------------------
         // 順序は旧 SceneGame と同じ「壁 -> 接地」。
         ResolveWalls(shape, previous_position);
-        ResolveGround(shape);
+        ResolveGround(shape, previous_position);
+
+        // 壁と床のどちらにも数えられなかった面が残っていても、ここで必ず追い出す。
+        ResolvePenetration(shape);
+    }
+
+    // どんな向きの面でも、球が食い込んでいれば外へ出す。
+    // 壁として押し戻すかどうかの判定に漏れた面でも、めり込みだけは必ず解消する。
+    void CharacterMotorComponent::ResolvePenetration(const MotionSphere& shape)
+    {
+        Core::GameObject* owner = Owner();
+        if (owner == nullptr || !shape.valid) return;
+
+        Scene::Scene* scene = GetScene();
+        if (scene == nullptr) return;
+        const Scene::IPhysicsQueryService* physics = scene->Services().Physics();
+        if (physics == nullptr || !physics->CollisionAvailable()) return;
+
+        Core::Transform& transform = owner->GetTransform();
+        const float skin = SanitizeNonNegative(shape.skin_width);
+
+        for (int iteration = 0; iteration < wall_resolution_iterations; ++iteration)
+        {
+            const DirectX::XMFLOAT3 position = transform.WorldPosition();
+            const DirectX::XMFLOAT3 center{
+                position.x + shape.wall_offset.x,
+                position.y + shape.wall_offset.y,
+                position.z + shape.wall_offset.z };
+
+            // 面の向きで絞らない。上限 1.0 で床も含めた全部を対象にする。
+            Scene::SphereSweepHit hit{};
+            if (!physics->SweepSphereFiltered(center, center, shape.radius,
+                1.0f, shape.filter, hit)) break;
+            if (!hit.started_overlapping) break;
+
+            const float push = shape.radius + skin;
+            transform.SetWorldPosition(DirectX::XMFLOAT3{
+                hit.position.x + hit.normal.x * push - shape.wall_offset.x,
+                hit.position.y + hit.normal.y * push - shape.wall_offset.y,
+                hit.position.z + hit.normal.z * push - shape.wall_offset.z });
+        }
     }
 
     void CharacterMotorComponent::ResolveWalls(const MotionSphere& shape,
@@ -318,7 +397,7 @@ namespace ReplayEngine::Components
         if (physics == nullptr || !physics->CollisionAvailable()) return;
 
         Core::Transform& transform = owner->GetTransform();
-        const DirectX::XMFLOAT3 current = transform.LocalPosition();
+        const DirectX::XMFLOAT3 current = transform.WorldPosition();
 
         const DirectX::XMFLOAT3 start{
             previous_position.x + shape.wall_offset.x,
@@ -331,28 +410,43 @@ namespace ReplayEngine::Components
 
         // 床は下向きキャストが扱うので、ここでは壁だけを対象にする。
         // Trigger は SceneCollisionWorld 側で除外される。
-        Scene::SphereSweepHit hit{};
-        if (!physics->SweepSphereFiltered(start, end, shape.radius,
-            shape.walkable_normal_y - 0.001f, shape.filter, hit))
+        DirectX::XMFLOAT3 sweep_start = start;
+        DirectX::XMFLOAT3 sweep_end = end;
+        for (int iteration = 0; iteration < wall_resolution_iterations; ++iteration)
         {
-            return;
+            Scene::SphereSweepHit hit{};
+            if (!physics->SweepSphereFiltered(sweep_start, sweep_end, shape.radius,
+                shape.walkable_normal_y - 0.001f, shape.filter, hit)) break;
+            if (iteration > 0 && !hit.started_overlapping) break;
+
+            last_wall_source_ = hit.source;
+            has_wall_contact_ = true;
+            last_wall_point_ = hit.center;
+            last_wall_normal_ = hit.normal;
+
+            DirectX::XMFLOAT3 resolved_center = hit.center;
+            if (hit.started_overlapping)
+            {
+                resolved_center = DirectX::XMFLOAT3{
+                    hit.position.x + hit.normal.x * shape.radius,
+                    hit.position.y + hit.normal.y * shape.radius,
+                    hit.position.z + hit.normal.z * shape.radius };
+            }
+            const float skin = SanitizeNonNegative(shape.skin_width);
+            resolved_center.x += hit.normal.x * skin;
+            resolved_center.y += hit.normal.y * skin;
+            resolved_center.z += hit.normal.z * skin;
+            transform.SetWorldPosition(DirectX::XMFLOAT3{
+                resolved_center.x - shape.wall_offset.x,
+                resolved_center.y - shape.wall_offset.y,
+                resolved_center.z - shape.wall_offset.z });
+            sweep_start = resolved_center;
+            sweep_end = resolved_center;
         }
-
-        last_wall_source_ = hit.source;
-
-        // Collision Event 配送用に記録するだけ。押し戻しの計算には使わない。
-        has_wall_contact_ = true;
-        last_wall_point_ = hit.center;
-        last_wall_normal_ = hit.normal;
-
-        // 面から skin_width だけ離した位置へ押し戻す。
-        transform.SetLocalPosition(DirectX::XMFLOAT3{
-            hit.center.x + hit.normal.x * shape.skin_width - shape.wall_offset.x,
-            hit.center.y + hit.normal.y * shape.skin_width - shape.wall_offset.y,
-            hit.center.z + hit.normal.z * shape.skin_width - shape.wall_offset.z });
     }
 
-    void CharacterMotorComponent::ResolveGround(const MotionSphere& shape)
+    void CharacterMotorComponent::ResolveGround(const MotionSphere& shape,
+        const DirectX::XMFLOAT3& previous_position)
     {
         Core::GameObject* owner = Owner();
         if (owner == nullptr) return;
@@ -367,29 +461,33 @@ namespace ReplayEngine::Components
 
         if (shape.valid && physics != nullptr && physics->CollisionAvailable())
         {
-            const DirectX::XMFLOAT3 local = owner->GetTransform().LocalPosition();
+            const DirectX::XMFLOAT3 world = owner->GetTransform().WorldPosition();
             const DirectX::XMFLOAT3 origin{
-                local.x + shape.ground_offset.x,
-                local.y + shape.ground_offset.y,
-                local.z + shape.ground_offset.z };
+                world.x + shape.ground_offset.x,
+                world.y + shape.ground_offset.y,
+                world.z + shape.ground_offset.z };
 
             // 探索を始める高さは「登れる段差の高さ」そのもの。
             // ここを大きくすると頭上の面まで床として拾い、壁の横に立っただけで
             // その上へ瞬間移動する。以前は 80.0f という無名の定数だった。
             const float step_height = (std::max)(0.0f, max_step_height);
 
+            // この tick で落ちた分も上から探す。速く落ちると床を飛び越して素通りする。
+            const float fell_this_tick = (std::max)(0.0f, previous_position.y - world.y);
+            const float up_offset = step_height + fell_this_tick;
+
             Scene::GroundHit hit{};
-            if (physics->QueryGroundFiltered(origin, shape.radius, step_height,
-                step_height + ground_search_depth, shape.walkable_normal_y,
+            if (physics->QueryGroundFiltered(origin, shape.radius, up_offset,
+                up_offset + ground_search_depth, shape.walkable_normal_y,
                 shape.filter, hit))
             {
                 has_ground_ = true;
 
                 // 接地点から「GameObject をどの高さへ置くか」を求める。
                 //
-                //   落とした球の中心は  local.y + ground_offset.y
+                //   落とした球の中心は  world.y + ground_offset.y
                 //   球が床へ乗ったとき  球の中心 = 床の高さ + 半径
-                //   よって              local.y = 床の高さ + 半径 - ground_offset.y
+                //   よって              world.y = 床の高さ + 半径 - ground_offset.y
                 //
                 // 旧 Player は center_offset.y と半径が同じ値（0.38）だったため、
                 // この式は「床の高さそのもの」に一致する。挙動は変わらない。
@@ -408,19 +506,19 @@ namespace ReplayEngine::Components
             // 地面の高さへ吸着させるだけにする。
             if (has_ground_)
             {
-                DirectX::XMFLOAT3 snapped = owner->GetTransform().LocalPosition();
+                DirectX::XMFLOAT3 snapped = owner->GetTransform().WorldPosition();
                 snapped.y = ground_height_;
-                owner->GetTransform().SetLocalPosition(snapped);
+                owner->GetTransform().SetWorldPosition(snapped);
             }
             grounded_ = true;
             return;
         }
 
-        DirectX::XMFLOAT3 current = owner->GetTransform().LocalPosition();
+        DirectX::XMFLOAT3 current = owner->GetTransform().WorldPosition();
         if (current.y <= ground_height_ && velocity_.y <= 0.0f)
         {
             current.y = ground_height_;
-            owner->GetTransform().SetLocalPosition(current);
+            owner->GetTransform().SetWorldPosition(current);
             velocity_.y = 0.0f;
             grounded_ = true;
         }

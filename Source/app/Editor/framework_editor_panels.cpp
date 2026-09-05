@@ -374,7 +374,9 @@ void framework::draw_project_panel()
                 bool changed = false;
                 std::vector<std::string> action_names;
                 action_names.reserve(editing_input.Actions().size());
-                for (const auto& pair : editing_input.Actions()) action_names.push_back(pair.first);
+                for (const auto& pair : editing_input.Actions())
+                    if (pair.second.action_map != "Editor" && pair.second.action_map != "Motion")
+                        action_names.push_back(pair.first);
                 std::sort(action_names.begin(), action_names.end());
                 if (ImGui::TreeNodeEx("Actions", ImGuiTreeNodeFlags_DefaultOpen))
                 {
@@ -390,6 +392,28 @@ void framework::draw_project_panel()
                             if (std::string(map) != binding.action_map) binding.action_map = map;
                             changed = ImGui::InputInt("Keyboard Primary (VK)", &binding.keyboard_primary) || changed;
                             changed = ImGui::InputInt("Keyboard Secondary (VK)", &binding.keyboard_secondary) || changed;
+                            int primary_modifiers = binding.keyboard_primary_modifiers;
+                            changed = ImGui::CheckboxFlags("Primary Ctrl", &primary_modifiers,
+                                GameInput::ActionModifierCtrl) || changed;
+                            ImGui::SameLine();
+                            changed = ImGui::CheckboxFlags("Primary Shift", &primary_modifiers,
+                                GameInput::ActionModifierShift) || changed;
+                            ImGui::SameLine();
+                            changed = ImGui::CheckboxFlags("Primary Alt", &primary_modifiers,
+                                GameInput::ActionModifierAlt) || changed;
+                            binding.keyboard_primary_modifiers = static_cast<std::uint8_t>(
+                                primary_modifiers & GameInput::ActionModifierAll);
+                            int secondary_modifiers = binding.keyboard_secondary_modifiers;
+                            changed = ImGui::CheckboxFlags("Secondary Ctrl", &secondary_modifiers,
+                                GameInput::ActionModifierCtrl) || changed;
+                            ImGui::SameLine();
+                            changed = ImGui::CheckboxFlags("Secondary Shift", &secondary_modifiers,
+                                GameInput::ActionModifierShift) || changed;
+                            ImGui::SameLine();
+                            changed = ImGui::CheckboxFlags("Secondary Alt", &secondary_modifiers,
+                                GameInput::ActionModifierAlt) || changed;
+                            binding.keyboard_secondary_modifiers = static_cast<std::uint8_t>(
+                                secondary_modifiers & GameInput::ActionModifierAll);
                             int button = static_cast<int>(binding.gamepad_button);
                             if (ImGui::InputInt("Gamepad Button", &button))
                             {
@@ -856,8 +880,7 @@ void framework::draw_console_panel()
     ImGui::Text("画面サイズ: %u x %u", client_width, client_height);
     ImGui::TextUnformatted("描画方式: Deferred（固定）");
     ImGui::Text(u8"出力: %s", ReplayEngine::Rendering::RenderGraph::Name(render_graph.OutputIndex()));
-    ImGui::TextDisabled("Ctrl+S: 保存  Ctrl+Z/Y: 元に戻す/やり直す  Ctrl+C/V: コピー/貼り付け  Ctrl+D: 複製");
-    ImGui::TextDisabled("F1: エディタ表示  F2: 名前変更  Ctrl+F2: 出力  F3: 入力キャプチャ  F5: 実行  F11: 全画面");
+        ImGui::TextDisabled(u8"ショートカットは Window > キー割り当て > Editor で確認・変更できます。");
     ImGui::End();
 }
 

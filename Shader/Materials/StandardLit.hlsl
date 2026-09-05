@@ -30,6 +30,7 @@
 #pragma property color   BaseColor     "基本色"          = (1, 1, 1, 1)
 #pragma property texture BaseMap       "基本色マップ"     default white
 #pragma property texture NormalMap     "法線マップ"       default bump
+#pragma property range   NormalStrength "法線の強さ" 0..2  = 1.0
 #pragma property range   Metallic      "金属度"    0..1  = 0.0
 #pragma property range   Roughness     "粗さ"      0..1  = 0.55
 #pragma property float3  Emissive      "発光色"          = (0, 0, 0)

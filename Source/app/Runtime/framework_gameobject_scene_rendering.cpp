@@ -388,6 +388,7 @@ bool framework::build_landscape_from_model(ReplayEngine::Core::GameObject& objec
         error = u8"地形として取り込めませんでした（頂点や三角形の並びが不正です）。";
         return false;
     }
+    landscape.source_model_asset = asset_guid;
     error = u8"モデルから地形を作りました（頂点 " + std::to_string(vertex_count) +
         u8" / 三角形 " + std::to_string(triangle_count) + u8"）。";
     return true;

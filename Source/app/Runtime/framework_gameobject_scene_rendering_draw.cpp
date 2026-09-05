@@ -63,6 +63,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -364,6 +365,7 @@ bool framework::build_dx12_static_scene(
 {
     using namespace ReplayEngine::Rendering;
     using namespace ReplayEngine::Rendering::DX12;
+    using ReplayEngine::Components::MeshMaterialSlot;
 
     // 呼出し側がフレームごとに選択した背景色とポストプロセス設定は、
     // Scene内の描画項目を集め直しても失ってはいけない。
@@ -552,17 +554,22 @@ bool framework::build_dx12_static_scene(
         return key;
     };
 
-    const auto add_material_texture = [&add_texture](
-        D3D12StaticDrawItem& draw, std::uint32_t slot,
-        const std::filesystem::path& input_path, std::uint32_t semantic_bit)
+    const auto add_material_texture_key = [](D3D12StaticDrawItem& draw,
+        std::uint32_t slot, const std::string& key, std::uint32_t semantic_bit)
     {
-        const std::string key = add_texture(input_path);
         if (key.empty()) return;
         D3D12StaticMaterialTexture mapped;
         mapped.slot = slot;
         mapped.texture_key = key;
         draw.material_textures.push_back(std::move(mapped));
         draw.material_texture_semantic_mask |= semantic_bit;
+    };
+
+    const auto add_material_texture = [&add_texture, &add_material_texture_key](
+        D3D12StaticDrawItem& draw, std::uint32_t slot,
+        const std::filesystem::path& input_path, std::uint32_t semantic_bit)
+    {
+        add_material_texture_key(draw, slot, add_texture(input_path), semantic_bit);
     };
 
     const auto add_asset_texture = [this, &add_texture](
@@ -573,6 +580,14 @@ bool framework::build_dx12_static_scene(
             asset_database.FindByGuid(asset_guid);
         if (record == nullptr) return {};
         return add_texture(content_path(record->source_path));
+    };
+
+    const auto add_model_texture = [&add_texture, &add_asset_texture](
+        const std::filesystem::path& model_texture,
+        const std::string* override_texture) -> std::string
+    {
+        return override_texture != nullptr && !override_texture->empty()
+            ? add_asset_texture(*override_texture) : add_texture(model_texture);
     };
 
     struct BaseTextureBinding final
@@ -904,6 +919,15 @@ bool framework::build_dx12_static_scene(
         if (material == nullptr) return nullptr;
         out_asset = candidate;
         return material;
+    };
+
+    const auto resolve_texture_slot = [](const RenderItem& source_item,
+        std::size_t subset_index) -> const MeshMaterialSlot*
+    {
+        if (source_item.material_slots == nullptr ||
+            subset_index >= static_cast<std::size_t>(source_item.material_slot_count))
+            return nullptr;
+        return source_item.material_slots[subset_index];
     };
 
     const auto make_mesh_source = [&submission, &mesh_source_keys, this](
@@ -1481,8 +1505,9 @@ bool framework::build_dx12_static_scene(
                     }
                     skinned_palette_size_cache.insert_or_assign(mesh_key, palette_size);
                 }
-                std::vector<DirectX::XMFLOAT4X4> palette(palette_size,
-                    DirectX::XMFLOAT4X4{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 });
+                auto shared_palette = std::make_shared<std::vector<DirectX::XMFLOAT4X4>>(
+                    palette_size, DirectX::XMFLOAT4X4{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 });
+                std::vector<DirectX::XMFLOAT4X4>& palette = *shared_palette;
 
                 const auto pose_for_object = object_rig_pose.find(source_item.owner.Value());
                 const bool has_pose = pose_for_object != object_rig_pose.end() &&
@@ -1625,6 +1650,8 @@ bool framework::build_dx12_static_scene(
                     const std::string* slot_asset = nullptr;
                     const MaterialAsset* slot_material =
                         resolve_material_slot(source_item, subset_index, slot_asset);
+                    const MeshMaterialSlot* material_slot =
+                        resolve_texture_slot(source_item, subset_index);
                     RenderItem slot_item;
                     const RenderItem* material_item = &item;
                     if (slot_material != nullptr && slot_asset != nullptr)
@@ -1695,7 +1722,8 @@ bool framework::build_dx12_static_scene(
                             if (!texture_path.empty() && texture_path.is_relative() &&
                                 !model_source.empty())
                                 texture_path = model_source.parent_path() / texture_path;
-                            draw.base_color_texture_key = add_texture(texture_path);
+                            draw.base_color_texture_key = add_model_texture(texture_path,
+                                material_slot != nullptr ? &material_slot->base_color_texture : nullptr);
                             const auto embedded_texture_path =
                                 [&material, &model_source](std::size_t slot)
                             {
@@ -1705,12 +1733,15 @@ bool framework::build_dx12_static_scene(
                                     path = model_source.parent_path() / path;
                                 return path;
                             };
-                            add_material_texture(draw, 41u, embedded_texture_path(1),
-                                kNormalMapSemantic);
-                            add_material_texture(draw, 42u, embedded_texture_path(2),
-                                kPackedOrmMapSemantic);
-                            add_material_texture(draw, 44u, embedded_texture_path(3),
-                                kEmissiveMapSemantic);
+                            add_material_texture_key(draw, 41u,
+                                add_model_texture(embedded_texture_path(1), material_slot != nullptr
+                                    ? &material_slot->normal_texture : nullptr), kNormalMapSemantic);
+                            add_material_texture_key(draw, 42u,
+                                add_model_texture(embedded_texture_path(2), material_slot != nullptr
+                                    ? &material_slot->orm_texture : nullptr), kPackedOrmMapSemantic);
+                            add_material_texture_key(draw, 44u,
+                                add_model_texture(embedded_texture_path(3), material_slot != nullptr
+                                    ? &material_slot->emissive_texture : nullptr), kEmissiveMapSemantic);
                             if (const skinned_mesh::gltf_material_info* gltf_material =
                                 mesh_asset->GltfMaterial(material_id))
                             {
@@ -1734,7 +1765,7 @@ bool framework::build_dx12_static_scene(
                     skinned_draw.motion_key = std::to_string(source_item.owner.Value()) + ":" +
                         mesh_key + ":" + std::to_string(start);
                     resolve_normal_adjust(source_item, draw, &mesh, keyframe);
-                    skinned_draw.bone_palette = palette;
+                    skinned_draw.bone_palette = shared_palette;
                     skinned_draw.morph_weight = morph_weight;
                     submission.skinned_draws.push_back(std::move(skinned_draw));
                 };
@@ -1866,6 +1897,8 @@ bool framework::build_dx12_static_scene(
             {
                 gltf_model::StaticPrimitiveInfo info;
                 if (!gltf->StaticPrimitiveInfoAt(primitive_index, info)) continue;
+                const MeshMaterialSlot* material_slot =
+                    resolve_texture_slot(source_item, primitive_index);
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = item.mesh_asset + "#gltf:" +
                     std::to_string(primitive_index);
@@ -1889,13 +1922,20 @@ bool framework::build_dx12_static_scene(
                 {
                     draw.base_color = multiply_color(info.embedded_base_color,
                         source_item.tint);
-                    draw.base_color_texture_key = add_texture(
-                        info.embedded_base_color_texture);
-                    add_material_texture(draw, 41u, info.embedded_normal_texture,
-                        kNormalMapSemantic);
-                    add_material_texture(draw, 42u, info.embedded_orm_texture,
-                        kPackedOrmMapSemantic);
-                    if (!info.embedded_orm_texture.empty())
+                    draw.base_color_texture_key = add_model_texture(
+                        info.embedded_base_color_texture, material_slot != nullptr
+                            ? &material_slot->base_color_texture : nullptr);
+                    add_material_texture_key(draw, 41u,
+                        add_model_texture(info.embedded_normal_texture, material_slot != nullptr
+                            ? &material_slot->normal_texture : nullptr), kNormalMapSemantic);
+                    add_material_texture_key(draw, 42u,
+                        add_model_texture(info.embedded_orm_texture, material_slot != nullptr
+                            ? &material_slot->orm_texture : nullptr), kPackedOrmMapSemantic);
+                    if (material_slot != nullptr && !material_slot->emissive_texture.empty())
+                        add_material_texture_key(draw, 44u,
+                            add_asset_texture(material_slot->emissive_texture), kEmissiveMapSemantic);
+                    if (!info.embedded_orm_texture.empty() ||
+                        (material_slot != nullptr && !material_slot->orm_texture.empty()))
                     {
                         draw.metallic = 1.0f;
                         draw.roughness = 1.0f;
@@ -1943,6 +1983,8 @@ bool framework::build_dx12_static_scene(
                 const std::string* slot_asset = nullptr;
                 const MaterialAsset* slot_material =
                     resolve_material_slot(source_item, subset_index, slot_asset);
+                const MeshMaterialSlot* material_slot =
+                    resolve_texture_slot(source_item, subset_index);
                 RenderItem slot_item;
                 const RenderItem* material_item = &item;
                 if (slot_material != nullptr && slot_asset != nullptr)
@@ -1997,7 +2039,8 @@ bool framework::build_dx12_static_scene(
                         if (!texture_path.empty() && texture_path.is_relative() &&
                             !model_source.empty())
                             texture_path = model_source.parent_path() / texture_path;
-                        draw.base_color_texture_key = add_texture(texture_path);
+                        draw.base_color_texture_key = add_model_texture(texture_path,
+                            material_slot != nullptr ? &material_slot->base_color_texture : nullptr);
                         const auto embedded_texture_path =
                             [&material, &model_source](std::size_t slot)
                         {
@@ -2007,12 +2050,15 @@ bool framework::build_dx12_static_scene(
                                 path = model_source.parent_path() / path;
                             return path;
                         };
-                        add_material_texture(draw, 41u, embedded_texture_path(1),
-                            kNormalMapSemantic);
-                        add_material_texture(draw, 42u, embedded_texture_path(2),
-                            kPackedOrmMapSemantic);
-                        add_material_texture(draw, 44u, embedded_texture_path(3),
-                            kEmissiveMapSemantic);
+                        add_material_texture_key(draw, 41u,
+                            add_model_texture(embedded_texture_path(1), material_slot != nullptr
+                                ? &material_slot->normal_texture : nullptr), kNormalMapSemantic);
+                        add_material_texture_key(draw, 42u,
+                            add_model_texture(embedded_texture_path(2), material_slot != nullptr
+                                ? &material_slot->orm_texture : nullptr), kPackedOrmMapSemantic);
+                        add_material_texture_key(draw, 44u,
+                            add_model_texture(embedded_texture_path(3), material_slot != nullptr
+                                ? &material_slot->emissive_texture : nullptr), kEmissiveMapSemantic);
                         if (const skinned_mesh::gltf_material_info* gltf_material =
                             mesh_asset->GltfMaterial(material_id))
                         {
@@ -2214,41 +2260,79 @@ bool framework::build_dx12_static_scene(
                 !renderer->ActiveInHierarchy() || !landscape->Data().Valid()) continue;
 
             const auto& data = landscape->Data();
-            const std::string mesh_key = "landscape:" +
-                std::to_string(object->ID().Value()) + ":" + std::to_string(data.Revision());
-            if (!dx12_device_context.HasStaticMesh(mesh_key))
-            {
-                D3D12StaticMeshSource source;
-                source.key = mesh_key;
-                source.vertices.reserve(data.Vertices().size());
-                for (const auto& input : data.Vertices())
-                {
-                    D3D12StaticVertex vertex;
-                    vertex.position = input.position;
-                    vertex.normal = input.normal;
-                    vertex.texcoord = input.uv;
-                    source.vertices.push_back(vertex);
-                }
-                source.indices = data.Indices();
-                submission.mesh_sources.push_back(std::move(source));
-            }
+            const std::string object_key = "landscape:" +
+                std::to_string(object->ID().Value());
+            auto& cache = landscape_gpu_mesh_cache[object->ID().Value()];
 
-            D3D12StaticDrawItem draw;
-            draw.mesh_key = mesh_key;
-            draw.owner_id = object->ID().Value();
-            draw.rendering_layer = 0;
-            draw.motion_key = std::to_string(object->ID().Value()) + ":" + mesh_key;
-            draw.world = object->GetTransform().WorldMatrixFloat4x4();
-            draw.base_color = renderer->tint;
-            draw.double_sided = renderer->double_sided;
-            draw.cast_shadow = renderer->cast_shadow;
-            draw.receive_shadow = renderer->receive_shadow;
-            draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Pbr);
-            // 境界はメッシュ単位で共有する。視錐台の判定に要る。
-            if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
-                found_bounds != static_mesh_bounds_cache.end())
-                draw.material_bounds = found_bounds->second;
-            submission.draws.push_back(std::move(draw));
+            // チャンクごとに別メッシュとして持つ。塗った所だけ載せ替えられ、
+            // 画面外のチャンクは視錐台で落とせる。
+            const bool source_changed = cache.source != &data;
+            cache.source = &data;
+            cache.revision = data.Revision();
+
+            const auto& chunks = data.Chunks();
+            if (source_changed || cache.chunk_revisions.size() != chunks.size())
+                cache.chunk_revisions.assign(chunks.size(), 0);
+            for (std::size_t chunk_index = 0; chunk_index < chunks.size(); ++chunk_index)
+            {
+                const auto& chunk = chunks[chunk_index];
+                if (chunk.indices.empty()) continue;
+
+                const std::string mesh_key = object_key + ":" + std::to_string(chunk_index);
+                if (cache.chunk_revisions[chunk_index] != chunk.revision ||
+                    !dx12_device_context.HasStaticMesh(mesh_key))
+                {
+                    REPLAY_PROFILE_SCOPE("Landscape/ChunkUpload");
+                    // このチャンクが使う頂点だけを詰め直す。境界の頂点は隣とも重複する。
+                    std::unordered_map<std::uint32_t, std::uint32_t> remap;
+                    D3D12StaticMeshSource source;
+                    source.key = mesh_key;
+                    source.replace_existing = true;
+                    source.vertices.reserve(chunk.indices.size());
+                    source.indices.reserve(chunk.indices.size());
+                    for (const std::uint32_t global : chunk.indices)
+                    {
+                        if (global >= data.Vertices().size()) continue;
+                        const auto found = remap.find(global);
+                        if (found != remap.end())
+                        {
+                            source.indices.push_back(found->second);
+                            continue;
+                        }
+                        const std::uint32_t local =
+                            static_cast<std::uint32_t>(source.vertices.size());
+                        remap.emplace(global, local);
+                        const auto& input = data.Vertices()[global];
+                        D3D12StaticVertex vertex;
+                        vertex.position = input.position;
+                        vertex.normal = input.normal;
+                        vertex.texcoord = input.uv;
+                        source.vertices.push_back(vertex);
+                        source.indices.push_back(local);
+                    }
+                    if (source.vertices.empty() || source.indices.empty()) continue;
+                    submission.mesh_sources.push_back(std::move(source));
+                    cache.chunk_revisions[chunk_index] = chunk.revision;
+                }
+
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = mesh_key;
+                draw.owner_id = object->ID().Value();
+                draw.rendering_layer = 0;
+                draw.motion_key = std::to_string(object->ID().Value()) + ":" + mesh_key;
+                draw.world = object->GetTransform().WorldMatrixFloat4x4();
+                draw.base_color = renderer->tint;
+                draw.double_sided = renderer->double_sided;
+                draw.cast_shadow = renderer->cast_shadow;
+                draw.receive_shadow = renderer->receive_shadow;
+                draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Pbr);
+
+                // 境界はチャンク自身のものを使う。これが視錐台カリングの効き目になる。
+                draw.material_bounds.minimum = chunk.bounds_min;
+                draw.material_bounds.maximum = chunk.bounds_max;
+                draw.material_bounds.valid = true;
+                submission.draws.push_back(std::move(draw));
+            }
         }
     }
 

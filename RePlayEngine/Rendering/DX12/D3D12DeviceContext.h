@@ -238,7 +238,7 @@ namespace ReplayEngine::Rendering::DX12
         std::string motion_key;
         // CPU Animator が確定した姿勢から生成した可変長 Bone Palette。
         // 256/600 などの固定長定数バッファにはしない。
-        std::vector<DirectX::XMFLOAT4X4> bone_palette;
+        std::shared_ptr<std::vector<DirectX::XMFLOAT4X4>> bone_palette;
         float morph_weight = 0.0f;
     };
 
@@ -1071,6 +1071,8 @@ namespace ReplayEngine::Rendering::DX12
         void ReleaseBackBufferCapture() noexcept;
         std::uint64_t SignalQueue() noexcept;
         void ReclaimDeferredDescriptors() noexcept;
+        void RetireStaticMesh(std::unique_ptr<D3D12MeshBuffer> mesh) noexcept;
+        void ReleaseRetiredStaticMeshes(std::uint64_t completed_fence_value) noexcept;
         void ReportDeviceRemoved(HRESULT trigger) noexcept;
         void WriteDeviceRemovedReport(HRESULT trigger, HRESULT reason,
             bool forced_validation) noexcept;
@@ -1179,7 +1181,7 @@ namespace ReplayEngine::Rendering::DX12
         {
             DirectX::XMFLOAT4X4 world{
                 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
-            std::vector<DirectX::XMFLOAT4X4> bones;
+            std::shared_ptr<const std::vector<DirectX::XMFLOAT4X4>> bones;
             std::uint64_t frame_serial = 0;
             bool valid = false;
         };
@@ -1269,6 +1271,8 @@ namespace ReplayEngine::Rendering::DX12
         std::uint64_t scene3d_history_write_serial_ = 0;
         D3D12DescriptorAllocation static_samplers_[3]{};
         std::unordered_map<std::string, std::unique_ptr<D3D12MeshBuffer>> static_mesh_cache_;
+        // 置換で外したメッシュは GPU が読み終わるまで捨てない。
+        std::vector<std::pair<std::uint64_t, std::unique_ptr<D3D12MeshBuffer>>> retired_static_meshes_;
         std::unordered_map<std::string, D3D12MeshLocalBounds> static_mesh_bounds_cache_;
         std::unordered_map<std::string, StaticTextureResource> texture_cache_;
         std::unordered_map<std::string, SkyCubeCpuData> sky_cpu_cubes_;
@@ -1331,6 +1335,10 @@ namespace ReplayEngine::Rendering::DX12
         std::uint64_t last_visible_draw_call_count_ = 0;
         // GBuffer を描いている間だけ true。影パスは別のカメラなので数えない。
         bool counting_visible_ = false;
+        // 不具合の切り分け時は false にしてカメラ視錐台カリングを止める。
+        bool frustum_culling_enabled_ = true;
+        // 不具合の切り分け時は false にして影視錐台カリングを止める。
+        bool shadow_culling_enabled_ = true;
         Frustum visible_frustum_;
         struct UIEffectHistoryEntry final
         {

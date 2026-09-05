@@ -6,6 +6,7 @@
 // PropertyRegistry を通る描画経路は PropertyDrawer に委譲し、ここでは
 // 選択状態と Component の入口だけを担当する。
 
+#include "../../Rendering/RenderStats.h"
 #include "../ReorderableList.h"
 #include "../Style/EditorStyle.h"
 #include "InspectorPanel.h"
@@ -138,8 +139,9 @@ namespace ReplayEngine::Editor
             selected_component_stable_ = Core::invalid_component_stable_id;
         }
 
-        DrawGameObjectHeader(context, *object);
-        DrawPlayerComposition(context, *object, show_game_template_components);
+        { REPLAY_PROFILE_SCOPE("Inspector/Header"); DrawGameObjectHeader(context, *object); }
+        { REPLAY_PROFILE_SCOPE("Inspector/PlayerComposition");
+            DrawPlayerComposition(context, *object, show_game_template_components); }
         ImGui::Separator();
 
         const std::size_t count = object->ComponentCount();
@@ -253,7 +255,10 @@ namespace ReplayEngine::Editor
                 {
                     Core::Component* component = object->ComponentAt(index);
                     if (component == nullptr || component->PendingDestroy()) continue;
-                    DrawComponent(context, *component, index, count, object);
+                    {
+                        REPLAY_PROFILE_SCOPE("Inspector/Component");
+                        DrawComponent(context, *component, index, count, object);
+                    }
                     if (pending_component_move_source_ != static_cast<std::size_t>(-1))
                         break;
                 }
@@ -275,7 +280,10 @@ namespace ReplayEngine::Editor
                         index >= component_category_by_index_.size() ||
                         component_category_by_index_[index] != summary.category)
                         continue;
-                    DrawComponent(context, *component, index, count, object);
+                    {
+                        REPLAY_PROFILE_SCOPE("Inspector/Component");
+                        DrawComponent(context, *component, index, count, object);
+                    }
                     if (pending_component_move_source_ != static_cast<std::size_t>(-1))
                         break;
                 }

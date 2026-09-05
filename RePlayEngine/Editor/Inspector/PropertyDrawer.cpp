@@ -28,8 +28,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <utility>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "PropertyDrawerInternal.h"
@@ -49,11 +51,31 @@ namespace
         if (record == nullptr || record->kind != ReplayEngine::Assets::AssetKind::Material)
             return false;
 
+        // Material の実体はディスクにある。Inspector は毎フレーム描かれるので、
+        // 毎回開くと選択しているだけでフレーム時間が跳ねる。更新時刻で持ち越す。
+        struct MaterialShadingCache
+        {
+            std::filesystem::file_time_type stamp;
+            bool unlit;
+        };
+        static std::unordered_map<std::string, MaterialShadingCache> cache;
+
+        std::error_code stamp_error;
+        const std::filesystem::file_time_type stamp =
+            std::filesystem::last_write_time(record->source_path, stamp_error);
+        if (!stamp_error)
+        {
+            const auto found = cache.find(guid);
+            if (found != cache.end() && found->second.stamp == stamp) return found->second.unlit;
+        }
+
         ReplayEngine::Rendering::MaterialAsset material;
         std::string error;
         if (!ReplayEngine::Rendering::MaterialAsset::Load(record->source_path, material, error))
             return false;
-        return IsUnlitOrFlatFillShadingModel(material.shading_model);
+        const bool unlit = IsUnlitOrFlatFillShadingModel(material.shading_model);
+        if (!stamp_error) cache[guid] = MaterialShadingCache{ stamp, unlit };
+        return unlit;
     }
 
     bool ShouldDisableShadowToggles(const ReplayEngine::Core::Component& component,

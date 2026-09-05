@@ -1,4 +1,5 @@
-#include "BehaviourValidationInternal.h"
+﻿#include "BehaviourValidationInternal.h"
+#include "../../Physics/SphereCast.h"
 
 namespace ReplayEngine::Runtime::Validation
 {
@@ -474,6 +475,52 @@ namespace ReplayEngine::Runtime::Validation
             dynamics.DetachScene();
             rigid_world.Services().SetRuntime(nullptr);
             rigid_world.Services().SetPhysics(nullptr);
+        }
+
+        // 複数の斜面の裏側に重なった球が、三角形の順序によらず表側へ出る。
+        {
+            const Physics::Triangle slopes[2]{
+                { { { -4.0f, -3.8f, -4.0f }, { 0.0f, 0.2f, 4.0f },
+                    { 4.0f, 4.2f, -4.0f } } },
+                { { { -4.0f, -4.0f, -4.0f }, { 0.0f, 0.0f, 4.0f },
+                    { 4.0f, 4.0f, -4.0f } } }
+            };
+            bool resolved = true;
+            for (int order = 0; order < 2; ++order)
+            {
+                const Physics::Triangle triangles[2]{ slopes[order], slopes[1 - order] };
+                Physics::SphereCastQuery query{};
+                query.start = { 0.1f, -0.1f, 0.0f };
+                query.end = query.start;
+                Physics::SphereCastHit hit{};
+                const bool found = Physics::CastSphereAgainstTriangles(query, triangles, 2, hit);
+                resolved = resolved && found && hit.started_overlapping &&
+                    hit.distance == 0.0f && hit.fraction == 0.0f &&
+                    hit.triangle_index == static_cast<std::uint32_t>(1 - order);
+                for (int iteration = 0; iteration < 4; ++iteration)
+                {
+                    if (!Physics::CastSphereAgainstTriangles(query, triangles, 2, hit)) break;
+                    resolved = resolved && hit.started_overlapping;
+                    const float push = query.radius + 0.01f;
+                    query.start = { hit.position.x + hit.normal.x * push,
+                        hit.position.y + hit.normal.y * push,
+                        hit.position.z + hit.normal.z * push };
+                    query.end = query.start;
+                }
+                for (const Physics::Triangle& triangle : triangles)
+                {
+                    const auto a = DirectX::XMLoadFloat3(&triangle.vertices[0]);
+                    const auto b = DirectX::XMLoadFloat3(&triangle.vertices[1]);
+                    const auto c = DirectX::XMLoadFloat3(&triangle.vertices[2]);
+                    const auto normal = DirectX::XMVector3Normalize(DirectX::XMVector3Cross(
+                        DirectX::XMVectorSubtract(b, a), DirectX::XMVectorSubtract(c, a)));
+                    const float clearance = DirectX::XMVectorGetX(DirectX::XMVector3Dot(
+                        DirectX::XMVectorSubtract(DirectX::XMLoadFloat3(&query.start), a), normal));
+                    resolved = resolved && clearance >= query.radius;
+                }
+                resolved = resolved && !Physics::CastSphereAgainstTriangles(query, triangles, 2, hit);
+            }
+            check.Expect(resolved, "複数斜面への初期重なりは最深部から解決し、球全体が表側へ出る");
         }
 
         world.Services().SetPhysics(nullptr);

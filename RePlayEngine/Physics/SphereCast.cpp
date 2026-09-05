@@ -117,7 +117,14 @@ namespace
     bool NormalAllowed(FXMVECTOR normal,
         const ReplayEngine::Physics::SphereCastQuery& query) noexcept
     {
-        const float y = XMVectorGetY(normal);
+        XMVECTOR allowed_normal = normal;
+        if (query.normal_transform != nullptr)
+        {
+            allowed_normal = XMVector3Normalize(XMVector3TransformNormal(
+                normal, XMLoadFloat4x4(query.normal_transform)));
+        }
+        if (query.flip_normal) allowed_normal = XMVectorNegate(allowed_normal);
+        const float y = XMVectorGetY(allowed_normal);
         return y >= query.minimum_normal_y && y <= query.maximum_normal_y;
     }
 
@@ -164,6 +171,8 @@ namespace ReplayEngine::Physics
             XMVECTOR normal = LengthSq3(initial_delta) > kEpsilon
                 ? XMVector3Normalize(initial_delta)
                 : (Dot3(direction, face_normal) <= 0.0f ? face_normal : -face_normal);
+            // 面の裏側にある球は、面法線に沿って表側へ押し出す。
+            if (Dot3(start - a, face_normal) < 0.0f) normal = face_normal;
             if (NormalAllowed(normal, query))
             {
                 StoreCandidate(0.0f, cast_length, start, initial_contact, normal, true, best);
@@ -237,14 +246,23 @@ namespace ReplayEngine::Physics
         bool found = false;
         SphereCastHit closest{};
         closest.distance = (std::numeric_limits<float>::max)();
+        float deepest_penetration = 0.0f;
         for (std::size_t i = 0; i < triangle_count; ++i)
         {
             SphereCastHit candidate{};
-            if (CastSphereAgainstTriangle(query, triangles[i], candidate) &&
-                candidate.distance < closest.distance)
+            if (!CastSphereAgainstTriangle(query, triangles[i], candidate)) continue;
+            // 初期重なり同士は距離がすべてゼロなので、食い込みの深さで選ぶ。
+            const float penetration = candidate.started_overlapping
+                ? query.radius - std::sqrt(LengthSq3(
+                    XMLoadFloat3(&query.start) - XMLoadFloat3(&candidate.position)))
+                : 0.0f;
+            if (candidate.distance < closest.distance ||
+                (candidate.started_overlapping && closest.started_overlapping &&
+                    penetration > deepest_penetration))
             {
                 candidate.triangle_index = static_cast<std::uint32_t>(i);
                 closest = candidate;
+                deepest_penetration = penetration;
                 found = true;
             }
         }

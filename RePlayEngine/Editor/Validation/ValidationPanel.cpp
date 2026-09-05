@@ -5,6 +5,9 @@
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Services/SceneCollisionWorld.h"
+#include "../../Object/Registry/ComponentRegistry.h"
+#include "../../Reflection/Registry/PropertyRegistry.h"
+#include "../../Reflection/Property/PropertyValue.h"
 
 #include "imgui/imgui.h"
 
@@ -12,6 +15,70 @@ namespace ReplayEngine::Editor
 {
     namespace
     {
+        // C++ に登録されている Component と Property をそのまま見せる。
+        // C# の型付き入口 (Components*.cs) はここから起こしているので、
+        // 「C# から何が触れるか」もこの一覧で分かる。
+        void DrawComponentApiTab()
+        {
+            static ImGuiTextFilter filter;
+            filter.Draw("検索", 240.0f);
+
+            const auto& types = Core::ComponentRegistry::All();
+            std::size_t property_count = 0;
+            std::size_t csharp_count = 0;
+            for (const Core::ComponentTypeInfo& info : types)
+                for (const Reflection::PropertyDesc& desc :
+                    Reflection::PropertyRegistry::PropertiesOf(info.type_id))
+                {
+                    ++property_count;
+                    if (desc.type != Reflection::PropertyType::Array) ++csharp_count;
+                }
+
+            ImGui::Text("Component %zu 種 / Property %zu 個。C# から触れるのは %zu 個",
+                types.size(), property_count, csharp_count);
+            ImGui::TextDisabled("Array は ComponentAccessor に窓口が無いので C# へ出していない");
+            ImGui::TextDisabled("作り直し: 3dgp.exe --dump-component-properties → "
+                "python Tools/generate_component_bindings.py");
+            ImGui::Separator();
+
+            for (const Core::ComponentTypeInfo& info : types)
+            {
+                const auto& properties =
+                    Reflection::PropertyRegistry::PropertiesOf(info.type_id);
+                if (!filter.PassFilter(info.type_name.c_str())) continue;
+
+                const std::string label = info.type_name + "  [" + info.category +
+                    "]  " + std::to_string(properties.size()) + " 個";
+                if (!ImGui::TreeNode(label.c_str())) continue;
+
+                if (properties.empty())
+                {
+                    ImGui::TextDisabled("Property の登録なし");
+                }
+                else
+                {
+                    for (const Reflection::PropertyDesc& desc : properties)
+                    {
+                        // Array だけは ComponentAccessor に窓口が無く、C# へ出していない。
+                        const bool usable =
+                            desc.type != Reflection::PropertyType::Array;
+                        const char* write = desc.read_only ? "  読取のみ" : "";
+                        if (usable)
+                        {
+                            ImGui::Text("%-30s %-16s%s", desc.name.c_str(),
+                                Reflection::ToString(desc.type), write);
+                        }
+                        else
+                        {
+                            ImGui::TextDisabled("%-30s %-16s%s  C# 未対応",
+                                desc.name.c_str(),
+                                Reflection::ToString(desc.type), write);
+                        }
+                    }
+                }
+                ImGui::TreePop();
+            }
+        }
         const char* SeverityLabel(ValidationSeverity severity) noexcept
         {
             switch (severity)
@@ -137,6 +204,11 @@ namespace ReplayEngine::Editor
                         collision_world->TriggerColliderCount(),
                         collision_world->MeshColliderCount());
                 }
+                ImGui::EndTabItem();
+            }
+            if (ImGui::BeginTabItem("Component API"))
+            {
+                DrawComponentApiTab();
                 ImGui::EndTabItem();
             }
             ImGui::EndTabBar();

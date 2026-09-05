@@ -240,9 +240,13 @@ void framework::update_editor_camera(float elapsed_time)
         // EditorCameraController の edge 判定へ確実に渡す。
         return (::GetAsyncKeyState(virtual_key) & 0x8001) != 0;
     };
-    const auto set_key = [&](ReplayEngine::Editor::EditorCameraKey key, int virtual_key)
+    using CameraKey = ReplayEngine::Editor::EditorCameraKey;
+    std::array<int, static_cast<std::size_t>(CameraKey::Count)> camera_virtual_keys{};
+    const auto set_key = [&](CameraKey key, int virtual_key)
     {
-        input.keys[static_cast<std::size_t>(key)] = key_down(virtual_key);
+        const std::size_t index = static_cast<std::size_t>(key);
+        input.keys[index] = key_down(virtual_key);
+        camera_virtual_keys[index] = virtual_key;
     };
 
     input.alt_down = key_down(VK_MENU);
@@ -250,7 +254,6 @@ void framework::update_editor_camera(float elapsed_time)
     input.control_down = key_down(VK_CONTROL);
     input.escape_pressed = key_down(VK_ESCAPE);
 
-    using CameraKey = ReplayEngine::Editor::EditorCameraKey;
     set_key(CameraKey::W, 'W'); set_key(CameraKey::A, 'A');
     set_key(CameraKey::S, 'S'); set_key(CameraKey::D, 'D');
     set_key(CameraKey::Q, 'Q'); set_key(CameraKey::E, 'E');
@@ -271,24 +274,39 @@ void framework::update_editor_camera(float elapsed_time)
     input.window_focused = ::GetForegroundWindow() == hwnd;
     input.delta_time = elapsed_time;
 
-    // Gizmo shortcut も preset の一部。Mayaなら W/E/R、Hybridなら Shift+W/E/R など。
-    // selected_editor_object では縛らない。Project Browser を触るだけで asset へ
-    // 移り、Gizmo 切替が死ぬ。文字入力中だけ避ければよい。
+    // ギズモ切り替えは Editor Action の割り当てを使う。
     const bool selected_game_object = !input.ui_text_input_active &&
         object_editor_context.Selection().Primary().Valid();
-    // RMB+WASD で fly している最中に Unity の W/E/R tool shortcut が発火しないよう、
-    // mouse navigation 中は Gizmo shortcut を開始しない。
     const bool no_mouse_navigation = !input.left_mouse_down &&
         !input.middle_mouse_down && !input.right_mouse_down;
+    const auto editor_action_held = [&](std::string_view name)
+    {
+        const auto found = game_input.Actions().find(std::string(name));
+        if (found == game_input.Actions().end() ||
+            found->second.action_map != "Editor") return false;
+        const auto matches = [&](int key, std::uint8_t modifiers)
+        {
+            if (key == 0 || !key_down(key)) return false;
+            std::uint8_t actual = GameInput::ActionModifierNone;
+            if (key != VK_CONTROL && key != VK_LCONTROL && key != VK_RCONTROL && input.control_down)
+                actual |= GameInput::ActionModifierCtrl;
+            if (key != VK_SHIFT && key != VK_LSHIFT && key != VK_RSHIFT && input.shift_down)
+                actual |= GameInput::ActionModifierShift;
+            if (key != VK_MENU && key != VK_LMENU && key != VK_RMENU && input.alt_down)
+                actual |= GameInput::ActionModifierAlt;
+            return actual == (modifiers & GameInput::ActionModifierAll);
+        };
+        return matches(found->second.keyboard_primary,
+                found->second.keyboard_primary_modifiers) ||
+            matches(found->second.keyboard_secondary,
+                found->second.keyboard_secondary_modifiers);
+    };
     const bool move_shortcut_down = selected_game_object && no_mouse_navigation &&
-        ReplayEngine::Editor::EditorCameraController::KeyChordHeld(
-            camera_preset.gizmo_move, input, false);
+        editor_action_held(u8"移動ギズモ");
     const bool rotate_shortcut_down = selected_game_object && no_mouse_navigation &&
-        ReplayEngine::Editor::EditorCameraController::KeyChordHeld(
-            camera_preset.gizmo_rotate, input, false);
+        editor_action_held(u8"回転ギズモ");
     const bool scale_shortcut_down = selected_game_object && no_mouse_navigation &&
-        ReplayEngine::Editor::EditorCameraController::KeyChordHeld(
-            camera_preset.gizmo_scale, input, false);
+        editor_action_held(u8"拡縮ギズモ");
 
     if (move_shortcut_down && !gizmo_move_shortcut_was_down)
         transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Translate);
@@ -300,15 +318,19 @@ void framework::update_editor_camera(float elapsed_time)
     gizmo_rotate_shortcut_was_down = rotate_shortcut_down;
     gizmo_scale_shortcut_was_down = scale_shortcut_down;
 
-    // Tool shortcut に使った key は camera movement へ二重投入しない。
-    const auto suppress_chord_key = [&](const ReplayEngine::Editor::EditorCameraKeyChord& chord, bool held)
+    const auto suppress_action_keys = [&](std::string_view name, bool held)
     {
-        if (!held || chord.key == CameraKey::None) return;
-        input.keys[static_cast<std::size_t>(chord.key)] = false;
+        if (!held) return;
+        const auto found = game_input.Actions().find(std::string(name));
+        if (found == game_input.Actions().end()) return;
+        for (std::size_t index = 0; index < camera_virtual_keys.size(); ++index)
+            if (camera_virtual_keys[index] == found->second.keyboard_primary ||
+                camera_virtual_keys[index] == found->second.keyboard_secondary)
+                input.keys[index] = false;
     };
-    suppress_chord_key(camera_preset.gizmo_move, move_shortcut_down);
-    suppress_chord_key(camera_preset.gizmo_rotate, rotate_shortcut_down);
-    suppress_chord_key(camera_preset.gizmo_scale, scale_shortcut_down);
+    suppress_action_keys(u8"移動ギズモ", move_shortcut_down);
+    suppress_action_keys(u8"回転ギズモ", rotate_shortcut_down);
+    suppress_action_keys(u8"拡縮ギズモ", scale_shortcut_down);
 
     // 診断表示が読む。条件を書き写すと本物とズレるので実物を保持する。
     last_editor_camera_input = input;

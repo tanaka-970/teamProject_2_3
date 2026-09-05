@@ -7,6 +7,7 @@
 //   SceneDataDuplicate.cpp  … GameObject 部分木の複製
 
 #include "SceneData.h"
+#include "../../Rendering/RenderStats.h"
 #include "SceneDataInternal.h"
 
 #include "../Runtime/Scene.h"
@@ -149,6 +150,7 @@ namespace ReplayEngine::Scene::Serialization
 
     void CaptureScene(const Scene& scene, SceneData& output)
     {
+        REPLAY_PROFILE_SCOPE("Scene/Capture");
         output.Clear();
         output.scene_name = scene.Name();
 

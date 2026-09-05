@@ -285,6 +285,8 @@ void framework::save_editor_session()
     state << "UI_STYLE " << (ui_style_overridden ? 1 : 0) << ' '
         << ui_button_scale << ' ' << ui_font_scale << ' '
         << ui_text_color[0] << ' ' << ui_text_color[1] << ' ' << ui_text_color[2] << '\n';
+    // 既存の UI_STYLE 行へ足すと古い session が読めなくなるので別行にする。
+    state << "UI_TEXTURE_PREVIEW " << ui_texture_preview_scale << '\n';
     for (const auto& entry : ReplayEngine::Editor::EditorStyle::ComponentCategoryColors())
         state << "COMPONENT_CATEGORY_COLOR " << std::quoted(entry.first) << ' '
             << entry.second.x << ' ' << entry.second.y << ' ' << entry.second.z << '\n';
@@ -382,6 +384,12 @@ void framework::restore_editor_session()
                 ReplayEngine::Editor::EditorStyle::SetComponentCategoryColor(
                     category, ImVec4(red, green, blue, 1.0f));
             }
+        }
+        else if (key == "UI_TEXTURE_PREVIEW")
+        {
+            float preview_scale = 4.5f;
+            if (state >> preview_scale)
+                ui_texture_preview_scale = (std::max)(1.5f, (std::min)(12.0f, preview_scale));
         }
         else if (key == "UI_STYLE")
         {

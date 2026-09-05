@@ -93,6 +93,8 @@ namespace ReplayEngine::Editor
 
         void BeginEdit(std::string label);
         void CommitEdit();
+        void CommitLandscapeEdit(Core::ObjectID object,
+            std::unique_ptr<Landscape::LandscapeUndoCommand> command);
         void CancelEdit() noexcept;
 
         bool Undo();

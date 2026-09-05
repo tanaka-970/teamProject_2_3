@@ -185,6 +185,7 @@ namespace ReplayEngine::Scene
         // Collider 1 つに対するスイープ。形状ごとの分岐はここだけ。
         bool SweepSingleCollider(const Components::ColliderComponent& collider,
             const DirectX::XMFLOAT3& start, const DirectX::XMFLOAT3& end, float radius,
+            float minimum_normal_y, float maximum_normal_y,
             Physics::SphereCastHit& hit) const;
 
         // 三角形群（ローカル空間）へスイープして、結果をワールドへ戻す共通処理。
@@ -193,6 +194,7 @@ namespace ReplayEngine::Scene
             float local_radius_scale, const Physics::Triangle* triangles,
             std::size_t triangle_count, const DirectX::XMFLOAT3& start,
             const DirectX::XMFLOAT3& end, float radius,
+            float minimum_normal_y, float maximum_normal_y,
             Physics::SphereCastHit& hit) const;
 
         // 2 つの Collider が重なっているか。Trigger 判定に使う。

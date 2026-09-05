@@ -1,4 +1,6 @@
 ﻿#include "RenderStats.h"
+#include <cstring>
+#include <cstdlib>
 
 // psapi.h は windows.h の型に依存するため、順序を入れ替えない。
 #include <windows.h>
@@ -736,6 +738,25 @@ namespace ReplayEngine::Rendering
 
     void RenderStats::MaybeAutoExport()
     {
+        // 環境変数でも自動ログを入れられる。F4 のチェックを人が触らなくても
+        // プロファイルを取れるようにするため。
+        static const bool environment_auto_export = []
+        {
+            // MSVC は getenv を C4996 で拒否するため _dupenv_s を使う。
+            char* value = nullptr;
+            std::size_t length = 0;
+            if (_dupenv_s(&value, &length, "REPLAY_AUTO_PROFILE") != 0 ||
+                value == nullptr)
+                return false;
+            const bool on = value[0] != '\0' && std::strcmp(value, "0") != 0;
+            std::free(value);
+            return on;
+        }();
+        if (environment_auto_export && !output_settings_.auto_export)
+        {
+            output_settings_.auto_export = true;
+            output_settings_.auto_export_interval_frames = 120;
+        }
         if (!output_settings_.auto_export || paused_ || !enabled_) return;
         ++frames_since_auto_export_;
         const std::uint32_t interval = (std::max)(60u,
