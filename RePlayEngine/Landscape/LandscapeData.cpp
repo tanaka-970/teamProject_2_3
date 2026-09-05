@@ -238,6 +238,10 @@ namespace ReplayEngine::Landscape
         const int divisions = chunk_divisions_;
         const float span_x = (std::max)(0.0001f, bounds_max_.x - bounds_min_.x);
         const float span_z = (std::max)(0.0001f, bounds_max_.z - bounds_min_.z);
+
+        // 触った頂点ごとに境界を作り直すと、同じチャンクを何度も舐めることになる。
+        // どれを上げるかを先に決めてから、1 チャンクにつき 1 回だけ計算する。
+        chunk_dirty_marks_.assign(chunks_.size(), 0);
         for (const std::size_t index : touched_vertices_)
         {
             if (index >= vertices_.size()) continue;
@@ -253,14 +257,19 @@ namespace ReplayEngine::Landscape
                     const int nx = cx + ox;
                     const int nz = cz + oz;
                     if (nx < 0 || nz < 0 || nx >= divisions || nz >= divisions) continue;
-                    LandscapeChunk& chunk =
-                        chunks_[static_cast<std::size_t>(nz) * divisions + nx];
-                    chunk.revision = revision_;
-                    chunk.render_dirty = true;
-                    chunk.collision_dirty = true;
-                    RecalculateChunkBounds(chunk);
+                    chunk_dirty_marks_[static_cast<std::size_t>(nz) * divisions + nx] = 1;
                 }
             }
+        }
+
+        for (std::size_t i = 0; i < chunks_.size(); ++i)
+        {
+            if (chunk_dirty_marks_[i] == 0) continue;
+            LandscapeChunk& chunk = chunks_[i];
+            chunk.revision = revision_;
+            chunk.render_dirty = true;
+            chunk.collision_dirty = true;
+            RecalculateChunkBounds(chunk);
         }
         touched_vertices_.clear();
     }

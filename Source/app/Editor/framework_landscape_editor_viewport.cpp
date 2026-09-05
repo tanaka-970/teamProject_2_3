@@ -355,7 +355,10 @@ bool framework::handle_landscape_viewport_edit()
         {
             const float dt = (std::max)(1.0f / 240.0f,
                 (std::min)(ImGui::GetIO().DeltaTime, 1.0f / 15.0f));
-            landscape_editor_tool.ApplySample(hit.position, dt);
+            {
+                REPLAY_PROFILE_SCOPE("Landscape/Brush");
+                landscape_editor_tool.ApplySample(hit.position, dt);
+            }
         }
         return true;
     }

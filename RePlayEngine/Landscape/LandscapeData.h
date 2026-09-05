@@ -146,6 +146,7 @@ namespace ReplayEngine::Landscape
         static constexpr int chunk_maximum_divisions = 32;
         int chunk_divisions_ = 1;
         std::vector<std::size_t> touched_vertices_;
+        std::vector<std::uint8_t> chunk_dirty_marks_;
         std::uint64_t revision_ = 1;
         DirectX::XMFLOAT3 bounds_min_{};
         DirectX::XMFLOAT3 bounds_max_{};

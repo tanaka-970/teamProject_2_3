@@ -2282,6 +2282,7 @@ bool framework::build_dx12_static_scene(
                 if (cache.chunk_revisions[chunk_index] != chunk.revision ||
                     !dx12_device_context.HasStaticMesh(mesh_key))
                 {
+                    REPLAY_PROFILE_SCOPE("Landscape/ChunkUpload");
                     // このチャンクが使う頂点だけを詰め直す。境界の頂点は隣とも重複する。
                     std::unordered_map<std::uint32_t, std::uint32_t> remap;
                     D3D12StaticMeshSource source;
