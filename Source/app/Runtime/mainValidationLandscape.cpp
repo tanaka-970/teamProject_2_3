@@ -226,8 +226,7 @@ namespace ReplayEngine::Runtime::Detail
             return 40;
         }
         collider_component->RefreshGeometryIfChanged();
-        if (!collider_component->ReadyForQuery() || collider_component->Cooked() == nullptr ||
-            !collider_component->Cooked()->Valid())
+        if (!collider_component->ReadyForQuery() || collider_component->CookedChunkCount() == 0)
         {
             std::fprintf(stderr, "Landscape Collider spatial cook failed\n");
             return 41;
@@ -385,6 +384,142 @@ namespace ReplayEngine::Runtime::Detail
             }
         }
 
+        // 地形衝突は編集した近傍だけを再 cook し、全面 cook と同じ結果を返す。
+        {
+            ReplayEngine::Scene::Scene chunk_scene("LandscapeChunkCookValidation");
+            auto* chunk_ground = chunk_scene.CreateGameObject("Ground");
+            auto* chunk_landscape = chunk_ground != nullptr
+                ? chunk_ground->AddComponent<ReplayEngine::Components::LandscapeComponent>() : nullptr;
+            auto* chunk_collider = chunk_ground != nullptr
+                ? chunk_ground->AddComponent<ReplayEngine::Components::LandscapeColliderComponent>() : nullptr;
+            if (chunk_landscape == nullptr || chunk_collider == nullptr ||
+                !chunk_landscape->Data().Initialize(129, 129, 1.0f))
+            {
+                std::fprintf(stderr, "Landscape chunk collision cook setup failed\n");
+                return 54;
+            }
+
+            chunk_collider->RefreshGeometryIfChanged();
+            const std::size_t all_faces = chunk_landscape->Data().FaceCount();
+            const std::size_t all_chunks = chunk_landscape->Data().Chunks().size();
+            if (all_faces != 32768u || all_chunks != 9u ||
+                chunk_collider->LastRecookedChunkCount() != all_chunks ||
+                chunk_collider->LastRecookedTriangleCount() != all_faces)
+            {
+                std::fprintf(stderr,
+                    "Landscape initial chunk cook count mismatch: chunks=%zu/%zu triangles=%zu/%zu\n",
+                    chunk_collider->LastRecookedChunkCount(), all_chunks,
+                    chunk_collider->LastRecookedTriangleCount(), all_faces);
+                return 55;
+            }
+
+            std::vector<std::uint64_t> old_revisions;
+            std::vector<const ReplayEngine::Physics::CookedMeshCollisionData*> old_cooks;
+            for (const auto& chunk : chunk_collider->CookedChunks())
+            {
+                old_revisions.push_back(chunk.source_revision);
+                old_cooks.push_back(chunk.cooked.get());
+            }
+
+            chunk_collider->BeginInteractiveEdit();
+            if (!chunk_landscape->Data().SetHeight(16, 16, 1.0f)) return 56;
+            chunk_collider->RefreshGeometryIfChanged();
+            if (chunk_collider->LastRecookedChunkCount() != 0 ||
+                chunk_collider->LastRecookedTriangleCount() != 0)
+            {
+                std::fprintf(stderr, "Landscape collision cooked during interactive edit\n");
+                return 57;
+            }
+            chunk_collider->EndInteractiveEdit();
+            chunk_collider->RefreshGeometryIfChanged();
+
+            if (chunk_collider->LastRecookedChunkCount() != 4u ||
+                chunk_collider->LastRecookedTriangleCount() != 14450u)
+            {
+                std::fprintf(stderr,
+                    "Landscape local edit recooked %zu chunks and %zu triangles; expected 4 and 14450\n",
+                    chunk_collider->LastRecookedChunkCount(),
+                    chunk_collider->LastRecookedTriangleCount());
+                return 58;
+            }
+            std::size_t cached_faces = 0;
+            for (std::size_t index = 0; index < all_chunks; ++index)
+            {
+                cached_faces += chunk_collider->CookedChunks()[index].cooked->TriangleCount();
+                const bool revision_changed =
+                    chunk_landscape->Data().Chunks()[index].revision != old_revisions[index];
+                const bool cook_changed =
+                    chunk_collider->CookedChunks()[index].cooked.get() != old_cooks[index];
+                if (revision_changed != cook_changed)
+                {
+                    std::fprintf(stderr, "Landscape unchanged collision chunk was not reused\n");
+                    return 59;
+                }
+            }
+            if (cached_faces != all_faces)
+            {
+                std::fprintf(stderr, "Landscape chunk collision triangle set is incomplete\n");
+                return 59;
+            }
+
+            ReplayEngine::Scene::SceneCollisionWorld chunk_world;
+            chunk_world.AttachScene(&chunk_scene);
+            chunk_world.Refresh();
+            const DirectX::XMFLOAT3 sweep_start{ 16.25f, 5.0f, 16.25f };
+            const DirectX::XMFLOAT3 sweep_end{ 16.25f, -2.0f, 16.25f };
+            constexpr float sweep_radius = 0.2f;
+            ReplayEngine::Scene::CollisionQueryFilter filter;
+            filter.layer = ReplayEngine::Physics::CollisionLayers::Default;
+            filter.mask = ReplayEngine::Physics::CollisionLayers::all_layers_mask;
+            ReplayEngine::Scene::SphereSweepHit chunk_sweep{};
+            const bool chunk_found = chunk_world.SweepSphereFiltered(
+                sweep_start, sweep_end, sweep_radius, 1.0f, filter, chunk_sweep);
+            chunk_world.DetachScene();
+
+            ReplayEngine::Scene::Scene full_scene("LandscapeFullCookValidation");
+            auto* full_ground = full_scene.CreateGameObject("Ground");
+            auto* full_landscape = full_ground != nullptr
+                ? full_ground->AddComponent<ReplayEngine::Components::LandscapeComponent>() : nullptr;
+            auto* full_collider = full_ground != nullptr
+                ? full_ground->AddComponent<ReplayEngine::Components::LandscapeColliderComponent>() : nullptr;
+            if (full_landscape == nullptr || full_collider == nullptr ||
+                !full_landscape->Data().Initialize(129, 129, 1.0f) ||
+                !full_landscape->Data().SetHeight(16, 16, 1.0f)) return 60;
+            LandscapeChunk full_chunk;
+            full_chunk.coord = { 0, 0 };
+            full_chunk.bounds_min = full_landscape->Data().BoundsMin();
+            full_chunk.bounds_max = full_landscape->Data().BoundsMax();
+            full_chunk.revision = full_landscape->Data().Revision();
+            full_chunk.indices = full_landscape->Data().Indices();
+            full_landscape->Data().Chunks().assign(1, std::move(full_chunk));
+            full_collider->RefreshGeometryIfChanged();
+
+            ReplayEngine::Scene::SceneCollisionWorld full_world;
+            full_world.AttachScene(&full_scene);
+            full_world.Refresh();
+            ReplayEngine::Scene::SphereSweepHit full_sweep{};
+            const bool full_found = full_world.SweepSphereFiltered(
+                sweep_start, sweep_end, sweep_radius, 1.0f, filter, full_sweep);
+            full_world.DetachScene();
+            if (chunk_found != full_found || !chunk_found ||
+                chunk_sweep.center.x != full_sweep.center.x ||
+                chunk_sweep.center.y != full_sweep.center.y ||
+                chunk_sweep.center.z != full_sweep.center.z ||
+                chunk_sweep.position.x != full_sweep.position.x ||
+                chunk_sweep.position.y != full_sweep.position.y ||
+                chunk_sweep.position.z != full_sweep.position.z ||
+                chunk_sweep.normal.x != full_sweep.normal.x ||
+                chunk_sweep.normal.y != full_sweep.normal.y ||
+                chunk_sweep.normal.z != full_sweep.normal.z ||
+                chunk_sweep.fraction != full_sweep.fraction ||
+                chunk_sweep.started_overlapping != full_sweep.started_overlapping)
+            {
+                std::fprintf(stderr,
+                    "Landscape chunk collision query differs from full cook\n");
+                return 61;
+            }
+        }
+
         {
             ReplayEngine::Components::LandscapeRendererComponent load_renderer;
             const DirectX::XMFLOAT3 camera{ 0.0f, 0.0f, 0.0f };
@@ -421,7 +556,7 @@ namespace ReplayEngine::Runtime::Detail
         }
 
         std::fprintf(stderr,
-            "Landscape v2 OK: arbitrary mesh, sculpt+undo, topology+bridge, cave/tunnel, raycast, chunk load range, spatial collision cook, save/reload, v1 migration, Component Scene round-trip OK\n");
+            "Landscape v2 OK: arbitrary mesh, sculpt+undo, topology+bridge, cave/tunnel, raycast, chunk load range, chunk collision cook, save/reload, v1 migration, Component Scene round-trip OK\n");
         return 0;
     }
 

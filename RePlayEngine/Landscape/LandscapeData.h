@@ -117,6 +117,11 @@ namespace ReplayEngine::Landscape
         LandscapeChunk* FindChunk(LandscapeChunkCoord coord) noexcept;
         const LandscapeChunk* FindChunk(LandscapeChunkCoord coord) const noexcept;
         int ChunkDivisions() const noexcept { return chunk_divisions_; }
+        const std::vector<std::uint32_t>& ChunkFaceIndices(std::size_t chunk_index) const noexcept
+        {
+            static const std::vector<std::uint32_t> empty;
+            return chunk_index < chunk_faces_.size() ? chunk_faces_[chunk_index] : empty;
+        }
         // 編集で動いた頂点の周りだけを更新対象にする。空なら全チャンクを見る。
         void MarkVertexDirty(std::size_t index) noexcept;
         void MarkAllDirty() noexcept;
