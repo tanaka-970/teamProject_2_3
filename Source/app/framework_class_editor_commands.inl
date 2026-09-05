@@ -1,6 +1,37 @@
 ﻿// Window 処理、初期化/更新/描画宣言、Editor/制作機能宣言。
 // framework_class.h の class framework 内部からのみ include する。
 
+        const auto action_modifiers = [](int key)
+        {
+            std::uint8_t modifiers = GameInput::ActionModifierNone;
+            if (key != VK_CONTROL && key != VK_LCONTROL && key != VK_RCONTROL &&
+                (GetKeyState(VK_CONTROL) & 0x8000) != 0)
+                modifiers |= GameInput::ActionModifierCtrl;
+            if (key != VK_SHIFT && key != VK_LSHIFT && key != VK_RSHIFT &&
+                (GetKeyState(VK_SHIFT) & 0x8000) != 0)
+                modifiers |= GameInput::ActionModifierShift;
+            if (key != VK_MENU && key != VK_LMENU && key != VK_RMENU &&
+                (GetKeyState(VK_MENU) & 0x8000) != 0)
+                modifiers |= GameInput::ActionModifierAlt;
+            return modifiers;
+        };
+        const auto editor_action_pressed = [&](std::string_view name)
+        {
+            if ((msg != WM_KEYDOWN && msg != WM_SYSKEYDOWN) ||
+                (lparam & 0x40000000) != 0) return false;
+            const auto found = game_input.Actions().find(std::string(name));
+            if (found == game_input.Actions().end() ||
+                found->second.action_map != "Editor") return false;
+            const GameInput::ActionBinding& binding = found->second;
+            const auto matches = [&](int key, std::uint8_t modifiers)
+            {
+                return key != 0 && wparam == static_cast<WPARAM>(key) &&
+                    action_modifiers(key) == (modifiers & GameInput::ActionModifierAll);
+            };
+            return matches(binding.keyboard_primary, binding.keyboard_primary_modifiers) ||
+                matches(binding.keyboard_secondary, binding.keyboard_secondary_modifiers);
+        };
+
 #ifdef USE_IMGUI
         // IME 入力は ImGui へ先に渡す。将来 UIInputField を足すときは
         // WM_IME_* をここから横取りせず、Editor / Runtime の入力所有者で分岐する。
@@ -10,8 +41,30 @@
         if (editor_mode && input_binding_capture_active &&
             (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN))
         {
-            if ((lparam & 0x40000000) == 0)
+            const int key = static_cast<int>(wparam);
+            const bool modifier = key == VK_CONTROL || key == VK_LCONTROL || key == VK_RCONTROL ||
+                key == VK_SHIFT || key == VK_LSHIFT || key == VK_RSHIFT ||
+                key == VK_MENU || key == VK_LMENU || key == VK_RMENU;
+            if ((lparam & 0x40000000) == 0 && modifier)
+                input_binding_capture_modifier_key = key;
+            else if ((lparam & 0x40000000) == 0)
+            {
                 input_binding_capture_key = static_cast<int>(wparam);
+                input_binding_capture_modifiers = action_modifiers(key);
+                input_binding_capture_modifier_key = 0;
+            }
+            return 0;
+        }
+        if (editor_mode && input_binding_capture_active &&
+            (msg == WM_KEYUP || msg == WM_SYSKEYUP))
+        {
+            if (input_binding_capture_key == 0 &&
+                input_binding_capture_modifier_key == static_cast<int>(wparam))
+            {
+                input_binding_capture_key = input_binding_capture_modifier_key;
+                input_binding_capture_modifiers = GameInput::ActionModifierNone;
+                input_binding_capture_modifier_key = 0;
+            }
             return 0;
         }
         if (ImGui::GetCurrentContext() &&
@@ -27,7 +80,7 @@
                 !ImGui::GetIO().WantTextInput &&
                 ReplayEngine::UI::UIInputFieldSystem::HasFocusedInput(
                     active_object_scene());
-            const bool shortcut_pressed = msg == WM_KEYDOWN && control_down &&
+            const bool shortcut_pressed = (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) &&
                 (lparam & 0x40000000) == 0 && !ImGui::GetIO().WantTextInput &&
                 !runtime_ui_text_owner;
 
@@ -38,9 +91,11 @@
                 (wparam == VK_DELETE || (control_down && wparam == 'S'));
             if (focused_tool_owns_shortcut) return 0;
 
-            if (shortcut_pressed && wparam == 'S')
+            const bool save_as_pressed = editor_action_pressed(u8"名前を付けて保存");
+            if (shortcut_pressed &&
+                (save_as_pressed || editor_action_pressed(u8"保存")))
             {
-                const bool choose_path = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+                const bool choose_path = save_as_pressed;
                 if (active_editor_workspace == editor_workspace::motion &&
                     !choose_path && motion_editor_loaded)
                 {
@@ -51,21 +106,22 @@
                 save_object_scene(choose_path);
                 return 0;
             }
-            if (msg == WM_KEYDOWN && control_down && !ImGui::GetIO().WantTextInput &&
-                !runtime_ui_text_owner && (wparam == 'Z' || wparam == 'Y'))
+            const bool undo_pressed = editor_action_pressed(u8"元に戻す");
+            const bool redo_pressed = editor_action_pressed(u8"やり直し");
+            if (shortcut_pressed && (undo_pressed || redo_pressed))
             {
                 bool handled = false;
                 if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus)
-                    handled = (wparam == 'Z') ? undo_sprite_atlas_edit() : redo_sprite_atlas_edit();
+                    handled = undo_pressed ? undo_sprite_atlas_edit() : redo_sprite_atlas_edit();
                 else if (active_editor_workspace == editor_workspace::motion)
                 {
                     // Motion の履歴と骨のポーズは別物。リグパネルの上にいる間だけ
                     // 骨側へ回す。そうしないとどちらが戻るのか予測できない。
                     if (motion_rig_panel_hovered)
-                        handled = (wparam == 'Z') ? undo_rig_pose_edit() : redo_rig_pose_edit();
+                        handled = undo_pressed ? undo_rig_pose_edit() : redo_rig_pose_edit();
                     if (!handled)
                     {
-                        if (wparam == 'Z') undo_motion_edit();
+                        if (undo_pressed) undo_motion_edit();
                         else redo_motion_edit();
                         handled = true;
                     }
@@ -73,34 +129,34 @@
                 else if (show_scene_flow_panel && scene_flow_editor_loaded &&
                     !project_browser_focused)
                 {
-                    handled = (wparam == 'Z') ? undo_scene_flow_edit() : redo_scene_flow_edit();
+                    handled = undo_pressed ? undo_scene_flow_edit() : redo_scene_flow_edit();
                 }
                 else if (!project_browser_focused && material_editor_loaded &&
                     selected_editor_object == editor_selection::asset)
                 {
-                    handled = (wparam == 'Z') ? undo_material_editor() : redo_material_editor();
+                    handled = undo_pressed ? undo_material_editor() : redo_material_editor();
                 }
                 else
                 {
                     const bool external_context = project_browser_focused;
                     if (external_context)
                     {
-                        handled = (wparam == 'Z') ? undo_external_file_edit() : redo_external_file_edit();
+                        handled = undo_pressed ? undo_external_file_edit() : redo_external_file_edit();
                         if (!handled)
-                            project_browser_status = wparam == 'Z'
+                            project_browser_status = undo_pressed
                                 ? "Projectで取り消せるファイル操作はありません"
                                 : "Projectでやり直せるファイル操作はありません";
                     }
                     else
                     {
-                        if (wparam == 'Z') object_editor_context.Undo();
+                        if (undo_pressed) object_editor_context.Undo();
                         else object_editor_context.Redo();
                         handled = true;
                     }
                 }
                 return 0;
             }
-            if (shortcut_pressed && wparam == 'D')
+            if (shortcut_pressed && editor_action_pressed(u8"複製"))
             {
                 // Motion Workspace の Ctrl+D は Key 複製が持つ。GameObject を巻き添えにしない。
                 if (active_editor_workspace == editor_workspace::motion) return 0;
@@ -110,13 +166,15 @@
                     object_hierarchy_panel.DuplicateSelection(object_editor_context);
                 return 0;
             }
-            if (shortcut_pressed && wparam == 'N' &&
-                (GetKeyState(VK_SHIFT) & 0x8000) != 0 && project_browser_focused)
+            if (shortcut_pressed && editor_action_pressed(u8"新規フォルダー") &&
+                project_browser_focused)
             {
                 if (project_create_folder("New Folder")) project_begin_rename_selected();
                 return 0;
             }
-            if (shortcut_pressed && (wparam == 'C' || wparam == 'V'))
+            const bool copy_pressed = editor_action_pressed(u8"コピー");
+            const bool paste_pressed = editor_action_pressed(u8"貼り付け");
+            if (shortcut_pressed && (copy_pressed || paste_pressed))
             {
                 // Project WindowにFocusがある時、SceneのGameObject Copy/Pasteへ
                 // 誤爆させない。Project AssetはCtrl+D/Drag Moveを使う。
@@ -124,7 +182,7 @@
                 // Motion Workspace の Ctrl+C / Ctrl+V は Key の複写が持つ。
                 if (active_editor_workspace == editor_workspace::motion) return 0;
                 std::string clipboard_error;
-                if (wparam == 'C')
+                if (copy_pressed)
                 {
                     std::string clipboard_text;
                     if (object_hierarchy_panel.CopySelection(object_editor_context,
@@ -182,8 +240,7 @@
                 project_open_entry(project_selected_entry_path);
                 return 0;
             }
-            if (msg == WM_KEYDOWN && wparam == 'F' && !runtime_ui_text_owner &&
-                (GetKeyState(VK_CONTROL) & 0x8000))
+            if (editor_action_pressed(u8"検索") && !runtime_ui_text_owner)
             {
                 focus_search_requested = true;
                 set_edit_mode(true);
@@ -193,56 +250,52 @@
             {
                 return 0;
             }
-            // Scene Camera が W/A/S/D + Q/E を使うため、Transform Tool は
-            // Maya の W/E/R を Shift 付きへ退避する。選択中の GameObject にだけ効く。
-            const bool shift_down = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-            const bool alt_down = (GetKeyState(VK_MENU) & 0x8000) != 0;
+            // ギズモ切り替えは文字入力中を避け、GameObject 選択があるときだけ受ける。
             // selected_editor_object は Inspector が何を映すかの状態で、Gizmo が
             // 使えるかとは別。Project Browser を触ると asset へ移り、Motion で
             // 骨を編集中に切替が丸ごと死んでいた。GameObject の選択だけを見る。
-            if (msg == WM_KEYDOWN && edit_mode_active && !search_input_active &&
+            if (edit_mode_active && !search_input_active &&
                 !ImGui::GetIO().WantTextInput &&
-                shift_down && !control_down && !alt_down &&
                 object_editor_context.Selection().Primary().Valid())
             {
-                if (wparam == 'W')
+                if (editor_action_pressed(u8"移動ギズモ"))
                 {
                     transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Translate);
                     return 0;
                 }
-                if (wparam == 'E')
+                if (editor_action_pressed(u8"回転ギズモ"))
                 {
                     transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Rotate);
                     return 0;
                 }
-                if (wparam == 'R')
+                if (editor_action_pressed(u8"拡縮ギズモ"))
                 {
                     transform_gizmo.SetOperation(ReplayEngine::Editor::GizmoOperation::Scale);
                     return 0;
                 }
             }
         }
-        if (!standalone_game_mode && msg == WM_KEYDOWN && wparam == VK_F1)
+        if (!standalone_game_mode && editor_action_pressed(u8"エディタ表示"))
         {
             editor_mode = !editor_mode;
             set_edit_mode(editor_mode);
             return 0;
         }
-        if (msg == WM_KEYDOWN && wparam == VK_F3 && editor_mode)
+        if (editor_action_pressed(u8"入力キャプチャ") && editor_mode)
         {
             set_edit_mode(!edit_mode_active);
             return 0;
         }
-        if (msg == WM_KEYDOWN && wparam == VK_F4)
+        if (editor_action_pressed(u8"プロファイラ"))
         {
             show_render_stats = !show_render_stats;
             return 0;
         }
-        // F5 は開始専用、Shift+F5 は停止専用。UI 表示と実装を一致させる。
-        if (msg == WM_KEYDOWN && wparam == VK_F5 && editor_mode)
+        // 実行と停止は別 Action として処理する。
+        const bool stop_pressed = editor_action_pressed(u8"停止");
+        if ((stop_pressed || editor_action_pressed(u8"実行")) && editor_mode)
         {
-            const bool shift_down = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-            if (shift_down)
+            if (stop_pressed)
             {
                 if (object_scene_play_mode || object_editor_play_loading)
                     exit_object_play_mode();
@@ -282,17 +335,16 @@
                 return 0;
             }
         }
-        if ((msg == WM_SYSKEYDOWN && wparam == VK_RETURN && (lparam & (1LL << 29))) ||
-            (msg == WM_KEYDOWN && wparam == VK_F11))
+        if (editor_action_pressed(u8"全画面"))
         {
             toggle_fullscreen();
             return 0;
         }
-        if (msg == WM_KEYDOWN && wparam == VK_F2)
+        const bool rename_pressed = editor_action_pressed(u8"名前変更");
+        if (rename_pressed || editor_action_pressed(u8"描画出力切り替え"))
         {
 #ifdef USE_IMGUI
-            const bool control_down = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-            if (editor_mode && !control_down)
+            if (editor_mode && rename_pressed)
             {
                 if (project_browser_focused &&
                     selected_editor_object == editor_selection::asset &&
@@ -303,7 +355,7 @@
                 return 0;
             }
 #endif
-            // Render Output は Ctrl+F2。Hierarchy 標準の F2 Rename と競合させない。
+            // 描画出力と名前変更は別 Action として競合を避ける。
             render_graph.CycleOutput();
             if (render_graph.RequiresDeferred()) enable_deferred = true;
             return 0;

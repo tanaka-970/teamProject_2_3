@@ -766,7 +766,7 @@ namespace ReplayEngine::Runtime::Detail
         const bool ok = GameInput::InputState::ValidateDeterministicQueries(error);
 
         std::vector<std::string> lines;
-        lines.push_back("CHECKS pressed held released idle");
+        lines.push_back("CHECKS pressed held released idle modifiers legacy-v1 v2-roundtrip");
         if (!error.empty()) lines.push_back("ERROR " + error);
         WriteValidationResultFile("InputState.txt",
             "REPLAY_INPUT_STATE_VALIDATION", ok, lines);

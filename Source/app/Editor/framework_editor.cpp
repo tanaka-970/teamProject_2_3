@@ -222,6 +222,17 @@ namespace
         return buffer;
     }
 
+    std::string ActionKeyDisplayName(int key, std::uint8_t modifiers)
+    {
+        if (key == 0) return VirtualKeyDisplayName(key);
+        std::string label;
+        if ((modifiers & GameInput::ActionModifierCtrl) != 0) label += "Ctrl+";
+        if ((modifiers & GameInput::ActionModifierShift) != 0) label += "Shift+";
+        if ((modifiers & GameInput::ActionModifierAlt) != 0) label += "Alt+";
+        label += VirtualKeyDisplayName(key);
+        return label;
+    }
+
     const char* GamepadButtonDisplayName(WORD button) noexcept
     {
         for (const auto& option : gamepad_button_options)
@@ -577,6 +588,19 @@ void framework::set_edit_mode(bool enabled)
 
 void framework::draw_editor_main_menu()
 {
+    const auto shortcut = [&](std::string_view name)
+    {
+        const auto found = game_input.Actions().find(std::string(name));
+        return found == game_input.Actions().end() ? std::string{} :
+            ActionKeyDisplayName(found->second.keyboard_primary,
+                found->second.keyboard_primary_modifiers);
+    };
+    const std::string save_shortcut = shortcut(u8"保存");
+    const std::string save_as_shortcut = shortcut(u8"名前を付けて保存");
+    const std::string undo_shortcut = shortcut(u8"元に戻す");
+    const std::string redo_shortcut = shortcut(u8"やり直し");
+    const std::string play_shortcut = shortcut(u8"実行");
+    const std::string stop_shortcut = shortcut(u8"停止");
     if (editor_style_history.InTransaction() && !ImGui::IsAnyItemActive())
     {
         editor_style_history.Commit(capture_editor_style_snapshot());
@@ -586,7 +610,7 @@ void framework::draw_editor_main_menu()
     {
         if (ImGui::MenuItem("New Empty Scene")) create_object_scene(u8"新しいシーン", false);
         if (ImGui::MenuItem("New Default Scene")) create_object_scene(u8"新しいシーン", true);
-        if (ImGui::MenuItem("Open Scene...", "Ctrl+O")) load_object_scene(true);
+        if (ImGui::MenuItem("Open Scene...")) load_object_scene(true);
         if (ImGui::BeginMenu("Recent Scenes"))
         {
             if (recent_scene_paths.empty()) ImGui::TextDisabled("履歴はありません");
@@ -608,10 +632,10 @@ void framework::draw_editor_main_menu()
         ImGui::Separator();
         if (active_editor_workspace == editor_workspace::motion && motion_editor_loaded)
         {
-            if (ImGui::MenuItem("Save Motion", "Ctrl+S")) save_current_motion_asset();
+            if (ImGui::MenuItem("Save Motion", save_shortcut.c_str())) save_current_motion_asset();
         }
-        else if (ImGui::MenuItem("Save", "Ctrl+S")) save_object_scene(false);
-        if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S")) save_object_scene(true);
+        else if (ImGui::MenuItem("Save", save_shortcut.c_str())) save_object_scene(false);
+        if (ImGui::MenuItem("Save As...", save_as_shortcut.c_str())) save_object_scene(true);
         if (ImGui::MenuItem(u8"ゲームを書き出す...")) open_export_game_dialog();
         ImGui::Separator();
         if (ImGui::MenuItem("Exit"))
@@ -645,7 +669,7 @@ void framework::draw_editor_main_menu()
             : object_editor_context.History().CanUndo();
         if (scene_edit_blocked) ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
             ImGui::GetStyle().Alpha * 0.5f);
-        if (ImGui::MenuItem("Undo", "Ctrl+Z", false, can_undo))
+        if (ImGui::MenuItem("Undo", undo_shortcut.c_str(), false, can_undo))
         {
             if (atlas_context) undo_sprite_atlas_edit();
             else if (motion_workspace) undo_motion_edit();
@@ -669,7 +693,7 @@ void framework::draw_editor_main_menu()
             : object_editor_context.History().CanRedo();
         if (scene_edit_blocked) ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
             ImGui::GetStyle().Alpha * 0.5f);
-        if (ImGui::MenuItem("Redo", "Ctrl+Y", false, can_redo))
+        if (ImGui::MenuItem("Redo", redo_shortcut.c_str(), false, can_redo))
         {
             if (atlas_context) redo_sprite_atlas_edit();
             else if (motion_workspace) redo_motion_edit();
@@ -1158,12 +1182,12 @@ void framework::draw_editor_main_menu()
     // 実際にそれで迷子になった。
     if (ImGui::BeginMenu(u8"実行"))
     {
-        if (ImGui::MenuItem(u8"▲ 実行", "F5", false,
+        if (ImGui::MenuItem(u8"▲ 実行", play_shortcut.c_str(), false,
             !object_scene_play_mode && !object_editor_play_loading))
             enter_object_play_mode();
         if (ImGui::MenuItem(object_scene_paused ? u8"▲ 再開" : u8"││ 一時停止", nullptr,
             false, object_scene_play_mode)) object_scene_paused = !object_scene_paused;
-        if (ImGui::MenuItem(u8"■ 停止", "Shift+F5", false,
+        if (ImGui::MenuItem(u8"■ 停止", stop_shortcut.c_str(), false,
             object_scene_play_mode || object_editor_play_loading))
             exit_object_play_mode();
         ImGui::EndMenu();
@@ -1189,6 +1213,8 @@ void framework::draw_input_bindings_panel()
         capture = {};
         input_binding_capture_active = false;
         input_binding_capture_key = 0;
+        input_binding_capture_modifiers = GameInput::ActionModifierNone;
+        input_binding_capture_modifier_key = 0;
         return;
     }
 
@@ -1199,11 +1225,14 @@ void framework::draw_input_bindings_panel()
     if (capture.target != BindingKeyTarget::None)
     {
         int pressed_key = input_binding_capture_key;
+        std::uint8_t pressed_modifiers = input_binding_capture_modifiers;
         input_binding_capture_key = 0;
+        input_binding_capture_modifiers = GameInput::ActionModifierNone;
         if (pressed_key == VK_ESCAPE)
         {
             capture = {};
             input_binding_capture_active = false;
+            input_binding_capture_modifier_key = 0;
             status = u8"キーの入力を取り消しました";
             status_error = false;
         }
@@ -1217,6 +1246,10 @@ void framework::draw_input_bindings_panel()
                 if (ImGui::IsMouseClicked(button))
                 {
                     pressed_key = mouse_keys[button];
+                    const ImGuiIO& io = ImGui::GetIO();
+                    if (io.KeyCtrl) pressed_modifiers |= GameInput::ActionModifierCtrl;
+                    if (io.KeyShift) pressed_modifiers |= GameInput::ActionModifierShift;
+                    if (io.KeyAlt) pressed_modifiers |= GameInput::ActionModifierAlt;
                     break;
                 }
             }
@@ -1237,7 +1270,12 @@ void framework::draw_input_bindings_panel()
                     int& destination = capture.target == BindingKeyTarget::ActionPrimary
                         ? pending_edit.action_binding.keyboard_primary
                         : pending_edit.action_binding.keyboard_secondary;
+                    std::uint8_t& destination_modifiers =
+                        capture.target == BindingKeyTarget::ActionPrimary
+                        ? pending_edit.action_binding.keyboard_primary_modifiers
+                        : pending_edit.action_binding.keyboard_secondary_modifiers;
                     destination = pressed_key;
+                    destination_modifiers = pressed_modifiers;
                 }
             }
             else
@@ -1264,6 +1302,7 @@ void framework::draw_input_bindings_panel()
             }
             capture = {};
             input_binding_capture_active = false;
+            input_binding_capture_modifier_key = 0;
             status = u8"未保存の変更があります";
             status_error = false;
         }
@@ -1277,6 +1316,8 @@ void framework::draw_input_bindings_panel()
             capture = {};
             input_binding_capture_active = false;
             input_binding_capture_key = 0;
+            input_binding_capture_modifiers = GameInput::ActionModifierNone;
+            input_binding_capture_modifier_key = 0;
         }
         ImGui::End();
         return;
@@ -1318,19 +1359,22 @@ void framework::draw_input_bindings_panel()
         status = u8"未保存の変更があります";
         status_error = false;
     };
-    const auto draw_key_field = [&](const char* label, int key,
+    const auto draw_key_field = [&](const char* label, int key, std::uint8_t modifiers,
         BindingKeyTarget target, const std::string& name)
     {
         ImGui::TextUnformatted(label);
         ImGui::SameLine();
         ImGui::PushID(static_cast<int>(target));
         const bool waiting = capture.target == target && capture.name == name;
-        const std::string key_label = waiting ? u8"キーを押してください" : VirtualKeyDisplayName(key);
-        if (ImGui::Button(key_label.c_str(), ImVec2(135.0f, 0.0f)))
+        const std::string key_label = waiting ? u8"キーを押してください" :
+            ActionKeyDisplayName(key, modifiers);
+        if (ImGui::Button(key_label.c_str(), ImVec2(165.0f, 0.0f)))
         {
             capture = { target, name };
             input_binding_capture_active = true;
             input_binding_capture_key = 0;
+            input_binding_capture_modifiers = GameInput::ActionModifierNone;
+            input_binding_capture_modifier_key = 0;
         }
         ImGui::PopID();
     };
@@ -1340,7 +1384,7 @@ void framework::draw_input_bindings_panel()
         if (std::find(conflicts.begin(), conflicts.end(), label) == conflicts.end())
             conflicts.push_back(label);
     };
-    const auto collect_conflicts = [&](int key, bool own_action,
+    const auto collect_conflicts = [&](int key, std::uint8_t modifiers, bool own_action,
         const std::string& own_name, std::vector<std::string>& conflicts)
     {
         if (key == 0) return;
@@ -1348,15 +1392,19 @@ void framework::draw_input_bindings_panel()
         {
             if (own_action && entry.first == own_name) continue;
             const auto& binding = entry.second;
-            if (binding.keyboard_primary == key || binding.keyboard_secondary == key)
+            if ((binding.keyboard_primary == key &&
+                    binding.keyboard_primary_modifiers == modifiers) ||
+                (binding.keyboard_secondary == key &&
+                    binding.keyboard_secondary_modifiers == modifiers))
                 add_conflict(conflicts, "Action: " + entry.first);
         }
         for (const auto& entry : game_input.Axes())
         {
             if (!own_action && entry.first == own_name) continue;
             const auto& binding = entry.second;
-            if (binding.negative_primary == key || binding.negative_secondary == key ||
-                binding.positive_primary == key || binding.positive_secondary == key)
+            if (modifiers == GameInput::ActionModifierNone &&
+                (binding.negative_primary == key || binding.negative_secondary == key ||
+                    binding.positive_primary == key || binding.positive_secondary == key))
                 add_conflict(conflicts, "Axis: " + entry.first);
         }
     };
@@ -1412,9 +1460,11 @@ void framework::draw_input_bindings_panel()
             ImGui::Text("%s", name.c_str());
             ImGui::Indent();
             draw_key_field(u8"主キー", binding.keyboard_primary,
+                binding.keyboard_primary_modifiers,
                 BindingKeyTarget::ActionPrimary, name);
             ImGui::SameLine();
             draw_key_field(u8"副キー", binding.keyboard_secondary,
+                binding.keyboard_secondary_modifiers,
                 BindingKeyTarget::ActionSecondary, name);
             ImGui::SameLine();
             ImGui::TextUnformatted(u8"ゲームパッド");
@@ -1437,8 +1487,10 @@ void framework::draw_input_bindings_panel()
                 ImGui::EndCombo();
             }
             std::vector<std::string> conflicts;
-            collect_conflicts(binding.keyboard_primary, true, name, conflicts);
-            collect_conflicts(binding.keyboard_secondary, true, name, conflicts);
+            collect_conflicts(binding.keyboard_primary,
+                binding.keyboard_primary_modifiers, true, name, conflicts);
+            collect_conflicts(binding.keyboard_secondary,
+                binding.keyboard_secondary_modifiers, true, name, conflicts);
             draw_conflicts(conflicts);
             ImGui::Unindent();
             ImGui::Separator();
@@ -1452,15 +1504,15 @@ void framework::draw_input_bindings_panel()
             ImGui::PushID(name.c_str());
             ImGui::Text("%s", name.c_str());
             ImGui::Indent();
-            draw_key_field(u8"負1", binding.negative_primary,
+            draw_key_field(u8"負1", binding.negative_primary, GameInput::ActionModifierNone,
                 BindingKeyTarget::AxisNegativePrimary, name);
             ImGui::SameLine();
-            draw_key_field(u8"負2", binding.negative_secondary,
+            draw_key_field(u8"負2", binding.negative_secondary, GameInput::ActionModifierNone,
                 BindingKeyTarget::AxisNegativeSecondary, name);
-            draw_key_field(u8"正1", binding.positive_primary,
+            draw_key_field(u8"正1", binding.positive_primary, GameInput::ActionModifierNone,
                 BindingKeyTarget::AxisPositivePrimary, name);
             ImGui::SameLine();
-            draw_key_field(u8"正2", binding.positive_secondary,
+            draw_key_field(u8"正2", binding.positive_secondary, GameInput::ActionModifierNone,
                 BindingKeyTarget::AxisPositiveSecondary, name);
             ImGui::TextUnformatted(u8"ゲームパッド軸");
             ImGui::SameLine();
@@ -1496,10 +1548,14 @@ void framework::draw_input_bindings_panel()
                 queue_axis(name, edited);
             }
             std::vector<std::string> conflicts;
-            collect_conflicts(binding.negative_primary, false, name, conflicts);
-            collect_conflicts(binding.negative_secondary, false, name, conflicts);
-            collect_conflicts(binding.positive_primary, false, name, conflicts);
-            collect_conflicts(binding.positive_secondary, false, name, conflicts);
+            collect_conflicts(binding.negative_primary, GameInput::ActionModifierNone,
+                false, name, conflicts);
+            collect_conflicts(binding.negative_secondary, GameInput::ActionModifierNone,
+                false, name, conflicts);
+            collect_conflicts(binding.positive_primary, GameInput::ActionModifierNone,
+                false, name, conflicts);
+            collect_conflicts(binding.positive_secondary, GameInput::ActionModifierNone,
+                false, name, conflicts);
             draw_conflicts(conflicts);
             ImGui::Unindent();
             ImGui::Separator();
@@ -1515,6 +1571,8 @@ void framework::draw_input_bindings_panel()
         capture = {};
         input_binding_capture_active = false;
         input_binding_capture_key = 0;
+        input_binding_capture_modifiers = GameInput::ActionModifierNone;
+        input_binding_capture_modifier_key = 0;
         status = u8"既定の割り当てへ戻しました（未保存）";
         status_error = false;
     }

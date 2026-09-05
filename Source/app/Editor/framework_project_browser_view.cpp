@@ -391,7 +391,7 @@ void framework::draw_project_create_submenu(const std::filesystem::path& target_
         project_tree_reveal_selection_pending = true;
     };
 
-    if (ImGui::MenuItem("Folder", "Ctrl+Shift+N"))
+        if (ImGui::MenuItem("Folder"))
     {
         select_target();
         project_create_folder(project_new_item_name);
@@ -515,9 +515,9 @@ void framework::draw_project_entry_context_items(const std::filesystem::path& pa
 
     if (ImGui::MenuItem(directory ? "このフォルダを開く" : "開く", "Enter"))
         project_open_entry(path);
-    if (ImGui::MenuItem("名前を変更", "F2", false, object_editor_context.CanEdit()))
+        if (ImGui::MenuItem("名前を変更", nullptr, false, object_editor_context.CanEdit()))
         project_begin_rename_selected();
-    if (ImGui::MenuItem("複製", "Ctrl+D", false, object_editor_context.CanEdit()))
+        if (ImGui::MenuItem("複製", nullptr, false, object_editor_context.CanEdit()))
         project_duplicate_entry(path);
 
     ImGui::Separator();

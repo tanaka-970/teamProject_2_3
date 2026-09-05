@@ -429,6 +429,8 @@
     bool             show_input_bindings_panel{ false };
     bool             input_binding_capture_active{ false };
     int              input_binding_capture_key{ 0 };
+    std::uint8_t     input_binding_capture_modifiers{ GameInput::ActionModifierNone };
+    int              input_binding_capture_modifier_key{ 0 };
     bool             gizmo_move_shortcut_was_down{ false };
     bool             gizmo_rotate_shortcut_was_down{ false };
     bool             gizmo_scale_shortcut_was_down{ false };

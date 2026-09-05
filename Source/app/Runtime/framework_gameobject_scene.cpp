@@ -103,11 +103,16 @@ void framework::initialize_object_scene()
         object_editor_context.SetStatus("EditorHelp: " + editor_help_error);
     }
 
-    // Input の正本も ProjectSettings にぶら下がるため、設定を読み込んだ直後に適用する。
-    // Asset 未設定だけ旧 InputBindings.ini を移行用 fallback として読む。
+    // Gameplay は ProjectSettings の Asset、Editor は InputBindings.ini を正本として読む。
     if (!project_settings.InputActionAssetGuid().empty())
     {
         load_active_input_action_asset();
+        std::string input_bindings_error;
+        if (!game_input.LoadBindings(saved_path(std::filesystem::path("Editor") /
+            "InputBindings.ini"), input_bindings_error, true) && !input_bindings_error.empty())
+        {
+            push_editor_log("Warning", "Editor InputBindings: " + input_bindings_error);
+        }
     }
     else
     {

@@ -83,7 +83,67 @@ namespace GameInput
         if (!expect_stable("released", false, false, true)) return false;
 
         set_jump_state(false, false);
-        return expect_stable("idle", false, false, false);
+        if (!expect_stable("idle", false, false, false)) return false;
+
+        input.actions_["Jump"].keyboard_primary_modifiers = ActionModifierCtrl;
+        set_jump_state(false, true);
+        if (!expect_stable("modifier missing", false, false, false)) return false;
+        set_jump_state(false, true);
+        input.keyboard_current_[VK_CONTROL] = 0x80u;
+        if (!expect_stable("modifier pressed", true, true, false)) return false;
+        set_jump_state(true, true);
+        input.keyboard_previous_[VK_CONTROL] = 0x80u;
+        input.keyboard_current_[VK_CONTROL] = 0x80u;
+        if (!expect_stable("modifier held", false, true, false)) return false;
+        set_jump_state(true, true);
+        input.keyboard_previous_[VK_CONTROL] = 0x80u;
+        if (!expect_stable("modifier released", false, false, true)) return false;
+
+        const std::filesystem::path compatibility_path =
+            std::filesystem::temp_directory_path() /
+            ("RePlayInputBindingsV1_" + std::to_string(::GetCurrentProcessId()) + ".ini");
+        {
+            std::ofstream legacy(compatibility_path, std::ios::binary | std::ios::trunc);
+            legacy << "# RePlayEngine Input Bindings v1\n"
+                << "action \"Jump\" 74 0 4096\n"
+                << "axis \"MoveX\" 65 37 68 39 1 0.18\n";
+            if (!legacy)
+            {
+                error = "legacy InputBindings test file could not be written";
+                return false;
+            }
+        }
+        InputState legacy_input;
+        const bool legacy_loaded = legacy_input.LoadBindings(compatibility_path, error);
+        std::error_code remove_error;
+        std::filesystem::remove(compatibility_path, remove_error);
+        const auto jump = legacy_input.Actions().find("Jump");
+        const auto save = legacy_input.Actions().find(u8"保存");
+        if (!legacy_loaded || jump == legacy_input.Actions().end() ||
+            jump->second.keyboard_primary != 'J' ||
+            jump->second.keyboard_primary_modifiers != ActionModifierNone ||
+            save == legacy_input.Actions().end() ||
+            save->second.keyboard_primary != 'S' ||
+            save->second.keyboard_primary_modifiers != ActionModifierCtrl)
+        {
+            if (error.empty()) error = "legacy InputBindings compatibility failed";
+            return false;
+        }
+        if (!legacy_input.SaveBindings(compatibility_path, error)) return false;
+        InputState round_trip_input;
+        const bool round_trip_loaded = round_trip_input.LoadBindings(compatibility_path, error);
+        std::filesystem::remove(compatibility_path, remove_error);
+        const auto fullscreen = round_trip_input.Actions().find(u8"全画面");
+        if (!round_trip_loaded || fullscreen == round_trip_input.Actions().end() ||
+            fullscreen->second.keyboard_primary != VK_F11 ||
+            fullscreen->second.keyboard_primary_modifiers != ActionModifierNone ||
+            fullscreen->second.keyboard_secondary != VK_RETURN ||
+            fullscreen->second.keyboard_secondary_modifiers != ActionModifierAlt)
+        {
+            if (error.empty()) error = "InputBindings v2 round trip failed";
+            return false;
+        }
+        return true;
     }
 
     void InputState::ResetDefaultBindings()
@@ -111,6 +171,30 @@ namespace GameInput
         actions_["CameraPanDown"] = { 'O', 0, 0 };
         actions_["CameraZoomIn"] = { VK_PRIOR, 0, 0 };
         actions_["CameraZoomOut"] = { VK_NEXT, 0, 0 };
+
+        actions_[u8"保存"] = { 'S', 0, 0, "Editor", ActionModifierCtrl };
+        actions_[u8"名前を付けて保存"] = { 'S', 0, 0, "Editor",
+            ActionModifierCtrl | ActionModifierShift };
+        actions_[u8"元に戻す"] = { 'Z', 0, 0, "Editor", ActionModifierCtrl };
+        actions_[u8"やり直し"] = { 'Y', 0, 0, "Editor", ActionModifierCtrl };
+        actions_[u8"複製"] = { 'D', 0, 0, "Editor", ActionModifierCtrl };
+        actions_[u8"コピー"] = { 'C', 0, 0, "Editor", ActionModifierCtrl };
+        actions_[u8"貼り付け"] = { 'V', 0, 0, "Editor", ActionModifierCtrl };
+        actions_[u8"新規フォルダー"] = { 'N', 0, 0, "Editor",
+            ActionModifierCtrl | ActionModifierShift };
+        actions_[u8"検索"] = { 'F', 0, 0, "Editor", ActionModifierCtrl };
+        actions_[u8"移動ギズモ"] = { 'W', 0, 0, "Editor", ActionModifierShift };
+        actions_[u8"回転ギズモ"] = { 'E', 0, 0, "Editor", ActionModifierShift };
+        actions_[u8"拡縮ギズモ"] = { 'R', 0, 0, "Editor", ActionModifierShift };
+        actions_[u8"エディタ表示"] = { VK_F1, 0, 0, "Editor" };
+        actions_[u8"名前変更"] = { VK_F2, 0, 0, "Editor" };
+        actions_[u8"描画出力切り替え"] = { VK_F2, 0, 0, "Editor", ActionModifierCtrl };
+        actions_[u8"入力キャプチャ"] = { VK_F3, 0, 0, "Editor" };
+        actions_[u8"プロファイラ"] = { VK_F4, 0, 0, "Editor" };
+        actions_[u8"実行"] = { VK_F5, 0, 0, "Editor" };
+        actions_[u8"停止"] = { VK_F5, 0, 0, "Editor", ActionModifierShift };
+        actions_[u8"全画面"] = { VK_F11, VK_RETURN, 0, "Editor",
+            ActionModifierNone, ActionModifierAlt };
 
         axes_["MoveX"] = { 'A', VK_LEFT, 'D', VK_RIGHT,
             GamepadAxis::LeftX, 0.18f };
@@ -212,6 +296,30 @@ namespace GameInput
         return (IsMouseVirtualKey(vk) ? allow_mouse : allow_keyboard) && KeyDown(state, vk);
     }
 
+    bool InputState::ModifiersMatch(const std::array<BYTE, 256>& state, int vk,
+        std::uint8_t required) noexcept
+    {
+        std::uint8_t actual = ActionModifierNone;
+        if (vk != VK_CONTROL && vk != VK_LCONTROL && vk != VK_RCONTROL &&
+            (KeyDown(state, VK_CONTROL) || KeyDown(state, VK_LCONTROL) ||
+                KeyDown(state, VK_RCONTROL))) actual |= ActionModifierCtrl;
+        if (vk != VK_SHIFT && vk != VK_LSHIFT && vk != VK_RSHIFT &&
+            (KeyDown(state, VK_SHIFT) || KeyDown(state, VK_LSHIFT) ||
+                KeyDown(state, VK_RSHIFT))) actual |= ActionModifierShift;
+        if (vk != VK_MENU && vk != VK_LMENU && vk != VK_RMENU &&
+            (KeyDown(state, VK_MENU) || KeyDown(state, VK_LMENU) ||
+                KeyDown(state, VK_RMENU))) actual |= ActionModifierAlt;
+        return actual == (required & ActionModifierAll);
+    }
+
+    bool InputState::KeyboardBindingDown(const std::array<BYTE, 256>& state, int vk,
+        std::uint8_t modifiers, bool allow_keyboard, bool allow_mouse) noexcept
+    {
+        if ((modifiers & ActionModifierAll) != 0 && !allow_keyboard) return false;
+        return BoundKeyDown(state, vk, allow_keyboard, allow_mouse) &&
+            ModifiersMatch(state, vk, modifiers);
+    }
+
     float InputState::NormalizeStick(SHORT value, float dead_zone) noexcept
     {
         const float normalized = value < 0
@@ -279,8 +387,10 @@ namespace GameInput
         const std::array<BYTE, 256>& keyboard,
         const PadSnapshot* pad, bool allow_keyboard, bool allow_mouse) const noexcept
     {
-        if (BoundKeyDown(keyboard, binding.keyboard_primary, allow_keyboard, allow_mouse) ||
-            BoundKeyDown(keyboard, binding.keyboard_secondary, allow_keyboard, allow_mouse))
+        if (KeyboardBindingDown(keyboard, binding.keyboard_primary,
+                binding.keyboard_primary_modifiers, allow_keyboard, allow_mouse) ||
+            KeyboardBindingDown(keyboard, binding.keyboard_secondary,
+                binding.keyboard_secondary_modifiers, allow_keyboard, allow_mouse))
         {
             return true;
         }
@@ -330,9 +440,11 @@ namespace GameInput
         const bool current = ActionDown(*binding, keyboard_current_, pad,
             !keyboard_captured_, !mouse_captured_);
 
-        bool previous = BoundKeyDown(keyboard_previous_, binding->keyboard_primary,
+        bool previous = KeyboardBindingDown(keyboard_previous_, binding->keyboard_primary,
+            binding->keyboard_primary_modifiers,
             !previous_keyboard_captured_, !previous_mouse_captured_) ||
-            BoundKeyDown(keyboard_previous_, binding->keyboard_secondary,
+            KeyboardBindingDown(keyboard_previous_, binding->keyboard_secondary,
+                binding->keyboard_secondary_modifiers,
                 !previous_keyboard_captured_, !previous_mouse_captured_);
         if (pad != nullptr && pad->previous_connected && binding->gamepad_button != 0)
         {
@@ -350,9 +462,11 @@ namespace GameInput
         const bool current = ActionDown(*binding, keyboard_current_, pad,
             !keyboard_captured_, !mouse_captured_);
 
-        bool previous = BoundKeyDown(keyboard_previous_, binding->keyboard_primary,
+        bool previous = KeyboardBindingDown(keyboard_previous_, binding->keyboard_primary,
+            binding->keyboard_primary_modifiers,
             !previous_keyboard_captured_, !previous_mouse_captured_) ||
-            BoundKeyDown(keyboard_previous_, binding->keyboard_secondary,
+            KeyboardBindingDown(keyboard_previous_, binding->keyboard_secondary,
+                binding->keyboard_secondary_modifiers,
                 !previous_keyboard_captured_, !previous_mouse_captured_);
         if (pad != nullptr && pad->previous_connected && binding->gamepad_button != 0)
         {
@@ -372,12 +486,20 @@ namespace GameInput
     bool InputState::LoadActionAsset(const std::filesystem::path& path, std::string& error)
     {
         error.clear();
+        std::unordered_map<std::string, ActionBinding> editor_actions;
+        for (const auto& entry : actions_)
+            if (entry.second.action_map == "Editor") editor_actions[entry.first] = entry.second;
         ResetDefaultBindings();
+        const auto restore_editor_actions = [&]()
+        {
+            for (const auto& entry : editor_actions) actions_[entry.first] = entry.second;
+        };
 
         std::ifstream stream(path, std::ios::binary);
         if (!stream)
         {
             error = "Input Action Asset が見つかりません: " + path.generic_string();
+            restore_editor_actions();
             return false;
         }
 
@@ -394,10 +516,12 @@ namespace GameInput
 
         std::string magic;
         int version = 0;
-        if (!(stream >> magic >> version) || magic != "REPLAY_INPUT" || version != 1)
+        if (!(stream >> magic >> version) || magic != "REPLAY_INPUT" ||
+            (version != 1 && version != 2))
         {
             error = "Input Action Asset の形式が不正です。hard-coded default を使用します。";
             ResetDefaultBindings();
+            restore_editor_actions();
             return false;
         }
 
@@ -422,11 +546,21 @@ namespace GameInput
             if (!(row >> std::quoted(name) >> std::quoted(map))) continue;
             if (kind == "action")
             {
+                if (map == "Editor") continue;
                 ActionBinding binding{};
+                const auto existing = actions_.find(name);
+                if (existing != actions_.end()) binding = existing->second;
                 unsigned int button = 0;
                 if (row >> binding.keyboard_primary >> binding.keyboard_secondary >> button)
                 {
+                    unsigned int primary_modifiers = binding.keyboard_primary_modifiers;
+                    unsigned int secondary_modifiers = binding.keyboard_secondary_modifiers;
+                    if (version >= 2 && !(row >> primary_modifiers >> secondary_modifiers)) continue;
                     binding.gamepad_button = static_cast<WORD>(button);
+                    binding.keyboard_primary_modifiers = static_cast<std::uint8_t>(
+                        primary_modifiers & ActionModifierAll);
+                    binding.keyboard_secondary_modifiers = static_cast<std::uint8_t>(
+                        secondary_modifiers & ActionModifierAll);
                     binding.action_map = map.empty() ? "Gameplay" : map;
                     loaded_actions[name] = binding;
                 }
@@ -452,19 +586,27 @@ namespace GameInput
         {
             error = "Input Action Asset の読み取り中に I/O error が発生しました。";
             ResetDefaultBindings();
+            restore_editor_actions();
             return false;
         }
 
         for (const auto& entry : default_actions)
         {
+            if (entry.second.action_map == "Editor") continue;
             if (loaded_actions.find(entry.first) == loaded_actions.end())
             {
                 error = "既存 Action が不足しています: " + entry.first +
                     "。hard-coded default を使用します。";
                 ResetDefaultBindings();
+                restore_editor_actions();
                 return false;
             }
         }
+        for (const auto& entry : default_actions)
+            if (entry.second.action_map == "Editor" &&
+                loaded_actions.find(entry.first) == loaded_actions.end())
+                loaded_actions[entry.first] = entry.second;
+        for (const auto& entry : editor_actions) loaded_actions[entry.first] = entry.second;
         for (const auto& entry : default_axes)
         {
             if (loaded_axes.find(entry.first) == loaded_axes.end())
@@ -472,6 +614,7 @@ namespace GameInput
                 error = "既存 Axis が不足しています: " + entry.first +
                     "。hard-coded default を使用します。";
                 ResetDefaultBindings();
+                restore_editor_actions();
                 return false;
             }
         }
@@ -499,7 +642,7 @@ namespace GameInput
             return false;
         }
 
-        stream << "REPLAY_INPUT 1\n";
+        stream << "REPLAY_INPUT 2\n";
         stream << "scheme " << std::quoted("Keyboard&Mouse") << '\n';
         stream << "scheme " << std::quoted("Gamepad") << '\n';
 
@@ -509,14 +652,16 @@ namespace GameInput
             const std::string value = map.empty() ? "Gameplay" : map;
             if (std::find(maps.begin(), maps.end(), value) == maps.end()) maps.push_back(value);
         };
-        for (const auto& entry : actions_) add_map(entry.second.action_map);
+        for (const auto& entry : actions_)
+            if (entry.second.action_map != "Editor") add_map(entry.second.action_map);
         for (const auto& entry : axes_) add_map(entry.second.action_map);
         std::sort(maps.begin(), maps.end());
         for (const std::string& map : maps) stream << "map " << std::quoted(map) << '\n';
 
         std::vector<std::string> names;
         names.reserve(actions_.size());
-        for (const auto& pair : actions_) names.push_back(pair.first);
+        for (const auto& pair : actions_)
+            if (pair.second.action_map != "Editor") names.push_back(pair.first);
         std::sort(names.begin(), names.end());
         for (const std::string& name : names)
         {
@@ -524,7 +669,9 @@ namespace GameInput
             stream << "action " << std::quoted(name) << ' ' <<
                 std::quoted(a.action_map.empty() ? "Gameplay" : a.action_map) << ' ' <<
                 a.keyboard_primary << ' ' << a.keyboard_secondary << ' ' <<
-                static_cast<unsigned int>(a.gamepad_button) << '\n';
+                static_cast<unsigned int>(a.gamepad_button) << ' ' <<
+                static_cast<unsigned int>(a.keyboard_primary_modifiers) << ' ' <<
+                static_cast<unsigned int>(a.keyboard_secondary_modifiers) << '\n';
         }
 
         names.clear();
@@ -549,10 +696,11 @@ namespace GameInput
         return true;
     }
 
-    bool InputState::LoadBindings(const std::filesystem::path& path, std::string& error)
+    bool InputState::LoadBindings(const std::filesystem::path& path, std::string& error,
+        bool editor_only)
     {
         error.clear();
-        ResetDefaultBindings();
+        if (!editor_only) ResetDefaultBindings();
 
         std::ifstream stream(path);
         if (!stream)
@@ -576,14 +724,26 @@ namespace GameInput
                 ActionBinding binding{};
                 const auto existing = actions_.find(name);
                 if (existing != actions_.end()) binding = existing->second;
+                if (editor_only && (existing == actions_.end() ||
+                    existing->second.action_map != "Editor")) continue;
                 unsigned int pad_button = 0;
                 if (row >> binding.keyboard_primary >> binding.keyboard_secondary >> pad_button)
                 {
+                    unsigned int primary_modifiers = binding.keyboard_primary_modifiers;
+                    unsigned int secondary_modifiers = binding.keyboard_secondary_modifiers;
+                    if (row >> primary_modifiers)
+                    {
+                        if (!(row >> secondary_modifiers)) continue;
+                    }
                     binding.gamepad_button = static_cast<WORD>(pad_button);
+                    binding.keyboard_primary_modifiers = static_cast<std::uint8_t>(
+                        primary_modifiers & ActionModifierAll);
+                    binding.keyboard_secondary_modifiers = static_cast<std::uint8_t>(
+                        secondary_modifiers & ActionModifierAll);
                     actions_[name] = binding;
                 }
             }
-            else if (kind == "axis")
+            else if (kind == "axis" && !editor_only)
             {
                 AxisBinding binding{};
                 const auto existing = axes_.find(name);
@@ -630,8 +790,8 @@ namespace GameInput
             return false;
         }
 
-        stream << "# RePlayEngine Input Bindings v1\n";
-        stream << "# action \"name\" keyboard_primary keyboard_secondary gamepad_button\n";
+        stream << "# RePlayEngine Input Bindings v2\n";
+        stream << "# action \"name\" keyboard_primary keyboard_secondary gamepad_button primary_modifiers secondary_modifiers\n";
         stream << "# axis \"name\" neg1 neg2 pos1 pos2 gamepad_axis dead_zone\n";
 
         std::vector<std::string> action_names;
@@ -643,7 +803,9 @@ namespace GameInput
             const ActionBinding& b = actions_.at(name);
             stream << "action " << std::quoted(name) << ' '
                 << b.keyboard_primary << ' ' << b.keyboard_secondary << ' '
-                << static_cast<unsigned int>(b.gamepad_button) << '\n';
+                << static_cast<unsigned int>(b.gamepad_button) << ' '
+                << static_cast<unsigned int>(b.keyboard_primary_modifiers) << ' '
+                << static_cast<unsigned int>(b.keyboard_secondary_modifiers) << '\n';
         }
 
         std::vector<std::string> axis_names;

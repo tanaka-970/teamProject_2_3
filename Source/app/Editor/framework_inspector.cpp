@@ -587,7 +587,7 @@ void framework::draw_inspector()
         ImGui::Separator();
         {
             bool fullscreen = is_fullscreen();
-            if (ImGui::Checkbox("全画面表示 (F11 / Alt+Enter)", &fullscreen)) toggle_fullscreen();
+            if (ImGui::Checkbox(u8"全画面表示", &fullscreen)) toggle_fullscreen();
         }
         ImGui::TextUnformatted("レンダラー: Deferred（固定）");
         ImGui::TextDisabled("輪郭線・半透明はDeferred照明後の追加パスとして合成します");
@@ -627,7 +627,7 @@ void framework::draw_inspector()
         }
         {
             int output = render_graph.OutputIndex();
-            if (ImGui::Combo(u8"描画出力 (Ctrl+F2)", &output, ReplayEngine::Rendering::RenderGraph::Names()))
+            if (ImGui::Combo(u8"描画出力", &output, ReplayEngine::Rendering::RenderGraph::Names()))
             {
                 render_graph.SetOutput(output);
                 if (render_graph.RequiresDeferred()) enable_deferred = true;
