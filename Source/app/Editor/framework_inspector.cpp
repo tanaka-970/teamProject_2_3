@@ -300,83 +300,34 @@ namespace
     }
 }
 
-// 地形をモデルから作る入口。編集パレットではなくコンポーネント側に置く。
+// 地形をモデルから作る入口。欄は PropertyRegistry のアセット欄をそのまま使う。
 void framework::draw_landscape_model_inspector(ReplayEngine::Core::Component& component)
 {
-    if (dynamic_cast<ReplayEngine::Components::LandscapeComponent*>(&component) == nullptr) return;
+    auto* landscape = dynamic_cast<ReplayEngine::Components::LandscapeComponent*>(&component);
+    if (landscape == nullptr) return;
     ReplayEngine::Core::GameObject* object = component.Owner();
     if (object == nullptr || !object_editor_context.CanEdit()) return;
 
-    auto* landscape = static_cast<ReplayEngine::Components::LandscapeComponent*>(&component);
-    // どのモデルから作った地形なのかを、閉じていても分かるよう見出しへ出す。
-    std::string current_name;
-    std::string current_path;
-    if (!landscape->source_model_asset.empty())
+    if (landscape->source_model_asset.empty())
     {
-        for (const auto& record : asset_database.Records())
-            if (record.guid == landscape->source_model_asset)
-            {
-                current_name = record.display_name;
-                current_path = record.source_path.generic_u8string();
-                break;
-            }
-        if (current_name.empty()) current_name = u8"（見つからないモデル）";
+        ImGui::TextDisabled(u8"作成元モデルを選ぶと、その形で地形を作り直せます。");
+        return;
     }
-    else current_name = u8"なし（手で作った地形）";
-
-    const std::string header = std::string(u8"地形をモデルから作る｜作成元: ") +
-        current_name + "###LandscapeSourceModel";
-    if (!ImGui::CollapsingHeader(header.c_str())) return;
-
-    if (current_path.empty())
-        ImGui::TextDisabled(u8"作成元モデル: %s", current_name.c_str());
-    else
-        ImGui::TextDisabled(u8"作成元モデル: %s  (%s)",
-            current_name.c_str(), current_path.c_str());
-    static std::array<char, 96> model_filter{};
-    ImGui::SetNextItemWidth(-1.0f);
-    ImGui::InputTextWithHint("##LandscapeModelFilter", u8"モデルを検索...",
-        model_filter.data(), model_filter.size());
-    ImGui::TextDisabled(u8"選ぶとこの地形をそのモデルの形で作り直します。骨やアニメーションを持つモデルは使えません。");
-    if (ImGui::BeginChild("LandscapeModelList", ImVec2(0.0f, 180.0f), true))
+    if (ImGui::Button(u8"このモデルで地形を作り直す"))
     {
-        for (const auto& record : asset_database.Records())
+        std::string message;
+        object_editor_context.BeginEdit(u8"モデルから地形を作る");
+        if (build_landscape_from_model(*object, landscape->source_model_asset, message))
         {
-            if (record.kind != ReplayEngine::Assets::AssetKind::Model) continue;
-            // 名前だけでは区別が付かないので、検索も表示もファイルの場所を含める。
-            const std::string model_path = record.source_path.generic_u8string();
-            if (model_filter[0] != '\0' &&
-                record.display_name.find(model_filter.data()) == std::string::npos &&
-                model_path.find(model_filter.data()) == std::string::npos)
-                continue;
-            ImGui::PushID(record.guid.c_str());
-            const bool is_current = record.guid == landscape->source_model_asset;
-            const std::string label = (is_current ? std::string(u8"● ")
-                : std::string(u8"   ")) + record.display_name;
-            const bool picked = ImGui::Selectable(label.c_str(), is_current,
-                ImGuiSelectableFlags_None, ImVec2(170.0f, 0.0f));
-            if (ImGui::IsItemHovered() && !model_path.empty())
-                ImGui::SetTooltip("%s", model_path.c_str());
-            ImGui::SameLine();
-            ImGui::TextDisabled("%s", model_path.c_str());
-            if (picked)
-            {
-                std::string message;
-                object_editor_context.BeginEdit(u8"モデルから地形を作る");
-                if (build_landscape_from_model(*object, record.guid, message))
-                {
-                    object_editor_context.CommitEdit();
-                    landscape_selected_face = -1;
-                }
-                else object_editor_context.CancelEdit();
-                object_editor_context.SetStatus(message);
-            }
-            ImGui::PopID();
+            object_editor_context.CommitEdit();
+            landscape_selected_face = -1;
         }
+        else object_editor_context.CancelEdit();
+        object_editor_context.SetStatus(message);
     }
-    ImGui::EndChild();
+    ImGui::SameLine();
+    ImGui::TextDisabled(u8"今の形は消えます。骨付きモデルは使えません。");
 }
-
 void framework::draw_material_slot_inspector()
 {
     using namespace ReplayEngine::Components;

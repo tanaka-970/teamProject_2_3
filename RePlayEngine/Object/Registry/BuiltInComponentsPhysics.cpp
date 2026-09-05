@@ -230,6 +230,10 @@ namespace ReplayEngine::Core::Detail
                     .Display("新規解像度").Range(2.0, 513.0).Step(1.0)
                     .Tooltip("新しい平面を生成するときの解像度。既存地形は自動変更しない。"));
             PropertyRegistry::Register<LandscapeComponent>(
+                MakeProperty("source_model_asset", &LandscapeComponent::source_model_asset)
+                    .Display(u8"作成元モデル").AsAssetPath().OfAssetType("Model")
+                    .Tooltip("この地形を作ったモデル。選んだあと下のボタンで作り直す。"));
+            PropertyRegistry::Register<LandscapeComponent>(
                 MakeProperty("default_cell_size", &LandscapeComponent::default_cell_size)
                     .Display("新規セルサイズ").Range(0.05, 100.0).Step(0.05)
                     .Tooltip("新しい平面を生成するときの格子間隔。"));

@@ -754,6 +754,7 @@ public static class ComponentCatalog
         new("LandscapeComponent", "Landscape", "Landscape", new ComponentPropertyEntry[]
         {
             new("default_resolution", "int", false, true),
+            new("source_model_asset", "asset", false, true),
             new("default_cell_size", "float", false, true),
         }),
         new("LandscapeRendererComponent", "Landscape Renderer", "Landscape", new ComponentPropertyEntry[]

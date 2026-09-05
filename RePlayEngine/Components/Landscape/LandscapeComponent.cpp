@@ -40,14 +40,10 @@ namespace ReplayEngine::Components
     {
         output.Set("mesh_data",
             Reflection::PropertyValue::MakeString(data_.SerializeInline()));
-        output.Set("source_model_asset",
-            Reflection::PropertyValue::MakeString(source_model_asset));
     }
 
     void LandscapeComponent::OnDeserialize(const Reflection::PropertyBag& input)
     {
-        const Reflection::PropertyValue* source_model = input.Find("source_model_asset");
-        source_model_asset = source_model != nullptr ? source_model->AsString() : std::string();
         const Reflection::PropertyValue* mesh_data = input.Find("mesh_data");
         if (mesh_data == nullptr || mesh_data->AsString().empty()) return;
         std::string error;
