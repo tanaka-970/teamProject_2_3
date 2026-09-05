@@ -41,7 +41,7 @@ namespace ReplayEngine::Rendering
 
         // サブセット別 Material と Texture は Component 内の値を借用する。
         const std::string* const* material_slot_assets = nullptr;
-        const Components::MeshMaterialSlot* material_slots = nullptr;
+        const Components::MeshMaterialSlot* const* material_slots = nullptr;
         std::uint8_t material_slot_count = 0;
 
         // 旧 Scene 互換。Material が割り当てられているときは Shader と値を

@@ -109,8 +109,13 @@ namespace ReplayEngine::Components
                     ? &material_slots[static_cast<std::size_t>(index)].asset : nullptr;
             }
             out.material_slot_assets = material_slot_asset_view.data();
-            if (material_slots.size() >= static_cast<std::size_t>(slot_count))
-                out.material_slots = material_slots.data();
+            for (int index = 0; index < slot_count; ++index)
+            {
+                material_slot_view[static_cast<std::size_t>(index)] =
+                    static_cast<std::size_t>(index) < material_slots.size()
+                    ? &material_slots[static_cast<std::size_t>(index)] : nullptr;
+            }
+            out.material_slots = material_slot_view.data();
             out.material_slot_count = static_cast<std::uint8_t>(slot_count);
         }
         out.material_override = material_override;

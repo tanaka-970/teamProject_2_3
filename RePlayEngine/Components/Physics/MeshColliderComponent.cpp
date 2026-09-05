@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cstring>
 
 using namespace DirectX;
 
@@ -91,30 +92,23 @@ namespace ReplayEngine::Components
         if (owner == nullptr) return false;
 
         const Core::Transform& transform = owner->GetTransform();
-        const XMFLOAT3 position = transform.LocalPosition();
-        const XMFLOAT3 rotation = transform.LocalRotationEuler();
-        const XMFLOAT3 scale = transform.LocalScale();
-
-        const auto same = [](const XMFLOAT3& a, const XMFLOAT3& b) noexcept
-        {
-            return a.x == b.x && a.y == b.y && a.z == b.z;
-        };
-
-        if (transform_valid_ && same(position, cached_position_) &&
-            same(rotation, cached_rotation_) && same(scale, cached_scale_))
+        XMFLOAT4X4 current_world = transform.WorldMatrixFloat4x4();
+        current_world._41 += center_offset.x;
+        current_world._42 += center_offset.y;
+        current_world._43 += center_offset.z;
+        if (transform_valid_ &&
+            std::memcmp(&current_world, &cached_world_, sizeof(current_world)) == 0)
         {
             return false;
         }
 
-        cached_position_ = position;
-        cached_rotation_ = rotation;
-        cached_scale_ = scale;
+        cached_world_ = current_world;
         transform_valid_ = true;
 
         // ワールド行列と、その逆行列を控える。
         // 逆行列はクエリをローカル空間へ持ち込むために毎回使う。
-        const XMMATRIX world = transform.WorldMatrix();
-        XMStoreFloat4x4(&world_, world);
+        world_ = current_world;
+        const XMMATRIX world = XMLoadFloat4x4(&world_);
 
         XMVECTOR determinant{};
         const XMMATRIX inverse = XMMatrixInverse(&determinant, world);
@@ -124,6 +118,7 @@ namespace ReplayEngine::Components
         //   一様      … 球の半径をそのまま割れば正確
         //   非一様    … 球がローカルでは楕円体になる。正確には扱えない
         //   負を含む  … 面の裏表が反転する
+        const XMFLOAT3 scale = transform.WorldScale();
         const float ax = std::fabs(scale.x);
         const float ay = std::fabs(scale.y);
         const float az = std::fabs(scale.z);
@@ -131,7 +126,7 @@ namespace ReplayEngine::Components
         const float maximum = (std::max)({ ax, ay, az });
 
         uniform_scale_ = (maximum - minimum) <= scale_epsilon * (std::max)(1.0f, maximum);
-        negative_scale_ = (scale.x * scale.y * scale.z) < 0.0f;
+        negative_scale_ = XMVectorGetX(XMMatrixDeterminant(world)) < 0.0f;
 
         // 半径をローカルへ移すときの倍率。
         // 非一様のときは「最も縮む軸」で割る = ローカル球を大きめに取る。

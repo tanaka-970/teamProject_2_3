@@ -78,9 +78,8 @@ namespace ReplayEngine::Components
         // GameObject の回転を軸へ反映する。
         if (const Core::GameObject* owner = Owner())
         {
-            const XMFLOAT3 euler = owner->GetTransform().LocalRotationEuler();
-            const XMMATRIX rotation =
-                XMMatrixRotationRollPitchYaw(euler.x, euler.y, euler.z);
+            const XMFLOAT4 quaternion = owner->GetTransform().WorldRotationQuaternion();
+            const XMMATRIX rotation = XMMatrixRotationQuaternion(XMLoadFloat4(&quaternion));
             XMStoreFloat3(&direction,
                 XMVector3Normalize(XMVector3TransformNormal(XMLoadFloat3(&direction), rotation)));
         }

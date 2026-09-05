@@ -39,8 +39,7 @@ namespace ReplayEngine::Components
     //   参照は collider_key（GameObject 内で一意・Scene へ保存される番号）で持つ。
     //   Component 名でも GameObject 名でもないので、名前を変えても壊れない。
     //
-    //   Mesh Collider と Trigger Collider は選べない。
-    //   Inspector 側でも候補に出さないし、ここでも受け付けない。
+    //   Trigger Collider と Landscape Collider は選べない。
     class CharacterMotorComponent final : public Core::Component
     {
         REPLAY_COMPONENT_BODY(CharacterMotorComponent)
@@ -194,11 +193,11 @@ namespace ReplayEngine::Components
         // 形状から「移動判定に使う球」を求める。
         //
         // 問い合わせ窓口が球のスイープしか持たないため、
-        // 形状ごとに安全側の球へ落として使う。
+        // 形状ごとの球へ落として使う。
         //   Sphere  … そのまま
         //   Capsule … 半径はそのまま。接地は下側の半球、壁は中央の球を使う
-        //   Box     … 内接球（最小の半辺長）。角は拾えないが、
-        //              すり抜けは起きない側の近似になる
+        //   Box     … 内接球（最小の半辺長）。中心から離れた部分は拾えない
+        //   Mesh    … ワールド AABB の外接球。凹形状では早めに当たる
         struct MotionSphere
         {
             // Owner のワールド位置からの相対。
@@ -215,7 +214,8 @@ namespace ReplayEngine::Components
         };
         MotionSphere BuildMotionSphere() const;
 
-        void ResolveGround(const MotionSphere& shape);
+        void ResolveGround(const MotionSphere& shape,
+            const DirectX::XMFLOAT3& previous_position);
         void ResolveWalls(const MotionSphere& shape,
             const DirectX::XMFLOAT3& previous_position);
 

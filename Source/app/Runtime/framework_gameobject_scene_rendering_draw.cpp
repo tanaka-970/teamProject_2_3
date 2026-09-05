@@ -926,7 +926,7 @@ bool framework::build_dx12_static_scene(
         if (source_item.material_slots == nullptr ||
             subset_index >= static_cast<std::size_t>(source_item.material_slot_count))
             return nullptr;
-        return &source_item.material_slots[subset_index];
+        return source_item.material_slots[subset_index];
     };
 
     const auto make_mesh_source = [&submission, &mesh_source_keys, this](

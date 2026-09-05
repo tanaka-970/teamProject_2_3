@@ -236,8 +236,8 @@ namespace ReplayEngine::Scene
             XMMATRIX world = XMMatrixTranslation(center.x, center.y, center.z);
             if (owner != nullptr)
             {
-                const XMFLOAT3 euler = owner->GetTransform().LocalRotationEuler();
-                world = XMMatrixRotationRollPitchYaw(euler.x, euler.y, euler.z) * world;
+                const XMFLOAT4 quaternion = owner->GetTransform().WorldRotationQuaternion();
+                world = XMMatrixRotationQuaternion(XMLoadFloat4(&quaternion)) * world;
             }
 
             XMFLOAT4X4 world_matrix{};
@@ -337,11 +337,13 @@ namespace ReplayEngine::Scene
 
             best_fraction = shape_hit.fraction;
             hit.center = shape_hit.center;
+            hit.position = shape_hit.position;
             hit.normal = shape_hit.normal;
             hit.fraction = shape_hit.fraction;
             hit.source.backend = CollisionBackend::SceneCollider;
             hit.source.object = entry.object;
             hit.source.collider = entry.collider;
+            hit.started_overlapping = shape_hit.started_overlapping;
             hit.valid = true;
             found = true;
         }

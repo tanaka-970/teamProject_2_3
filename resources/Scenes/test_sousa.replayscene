@@ -33,7 +33,7 @@ OBJECT
   PARENT 0
   TRANSFORM 0 0 2.9543826580047607 -0 0 -0 1 1 1
   PREFAB "" 0 0
-  COMPONENT_COUNT 4
+  COMPONENT_COUNT 5
   COMPONENT "LandscapeComponent" 1
     STABLE_ID 2
     TYPE_GUID "00000000000000000000000000000000"
@@ -143,13 +143,31 @@ OBJECT
     PROPERTY "effects[0].brush_pattern_weight_15" float 0
     PROPERTY "effects[0].waveform" enum 0
   END_COMPONENT
+  COMPONENT "MeshColliderComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "collider_key" int 2
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask 255
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "debug_draw" bool 1
+    PROPERTY "mesh_source" enum 0
+    PROPERTY "mesh_asset" asset ""
+    PROPERTY "cook_cell_size" float 4
+    PROPERTY "double_sided" bool 1
+    PROPERTY "debug_draw_wireframe" bool 0
+  END_COMPONENT
 END_OBJECT
 OBJECT
   ID 4
   NAME "GameObject"
   ENABLED 1
   PARENT 0
-  TRANSFORM -16.95484733581543 0.53155148029327393 3.6521873474121094 0 4.5002608299255371 0 0.99999988079071045 1 0.99999988079071045
+  TRANSFORM 7.4718108177185059 3.1567895412445068 1.1415945291519165 -0 -1.5511405467987061 0 0.99999988079071045 1 0.99999988079071045
   PREFAB "" 0 0
   COMPONENT_COUNT 9
   COMPONENT "PlayerInputComponent" 1
@@ -333,7 +351,7 @@ OBJECT
     PROPERTY "effects[0].brush_pattern_weight_15" float 0
     PROPERTY "effects[0].waveform" enum 0
   END_COMPONENT
-  COMPONENT "ScriptComponent" 1
+  COMPONENT "ScriptComponent" 0
     STABLE_ID 10
     TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
     TYPE_MODULE "RePlayEngine.Scripting"

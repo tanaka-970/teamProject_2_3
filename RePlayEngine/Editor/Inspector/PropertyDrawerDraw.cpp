@@ -535,7 +535,7 @@ namespace ReplayEngine::Editor
                         if (collider == nullptr || collider->PendingDestroy()) continue;
 
                         // 候補を制限する。
-                        // Mesh Collider と Trigger Collider は移動用に使えないので出さない。
+                        // Trigger と移動形状へ落とせない Collider は候補に出さない。
                         if (!collider->UsableAsCharacterShape()) continue;
                         if (collider->is_trigger) continue;
 
@@ -556,6 +556,13 @@ namespace ReplayEngine::Editor
             {
                 ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
                     u8"⚠ 移動用 Collider が設定されていません");
+            }
+            else if (selected_collider != nullptr &&
+                selected_collider->Shape() == Components::ColliderShape::Mesh)
+            {
+                ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f),
+                    u8"⚠ Mesh は AABB の外接球で近似されます");
+                ImGui::TextWrapped(u8"凹形状や細長い形状では、見た目より早く衝突します。");
             }
             break;
         }

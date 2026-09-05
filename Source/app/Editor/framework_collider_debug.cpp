@@ -640,6 +640,36 @@ void framework::draw_collision_diagnostics_panel()
     ImGui::TextDisabled(u8"Mesh は既定で境界ボックスのみです。"
         u8"三角形は Collider 側の「三角形を表示」も有効にしたものだけ描かれます。");
 
+    // どの色が何なのかを画面から読めるようにする。線の色だけでは判別できない。
+    ImGui::Spacing();
+    ImGui::TextUnformatted(u8"色の見かた");
+    ImGui::Separator();
+    const struct
+    {
+        std::uint32_t color;
+        const char* label;
+    } collider_color_legend[] = {
+        { ReplayEngine::Editor::ColliderDebugColors::primary,
+            u8"Character Motor が移動に使っている Collider" },
+        { ReplayEngine::Editor::ColliderDebugColors::blocking,
+            u8"通常の当たり判定（押し戻す）" },
+        { ReplayEngine::Editor::ColliderDebugColors::trigger,
+            u8"Trigger（通過する。押し戻さない）" },
+        { ReplayEngine::Editor::ColliderDebugColors::disabled,
+            u8"無効。当たり判定に入っていない" },
+        { ReplayEngine::Editor::ColliderDebugColors::cook_failed,
+            u8"Mesh の Cook 失敗。当たり判定が無い状態" },
+        { ReplayEngine::Editor::ColliderDebugColors::bounds,
+            u8"境界ボックス" },
+    };
+    for (const auto& legend : collider_color_legend)
+    {
+        ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(legend.color), u8"■");
+        ImGui::SameLine();
+        ImGui::TextUnformatted(legend.label);
+    }
+    ImGui::TextDisabled(u8"橙が出ていなければ、Motor に移動用 Collider が設定されていません。");
+
     ImGui::End();
 }
 
