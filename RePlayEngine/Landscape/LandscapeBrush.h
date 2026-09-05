@@ -9,6 +9,7 @@ namespace ReplayEngine::Landscape
         Smooth,
         Flatten,
         Noise,
+        Subdivide,
     };
 
     enum class LandscapeSculptDirection
@@ -24,6 +25,7 @@ namespace ReplayEngine::Landscape
         float falloff = 0.5f;
         float flatten_height = 0.0f;
         float noise_scale = 0.35f;
+        float target_edge_length = 1.0f;
         LandscapeSculptDirection direction = LandscapeSculptDirection::LocalY;
     };
 }

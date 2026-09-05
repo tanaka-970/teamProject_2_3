@@ -4,6 +4,7 @@
 #include "LandscapeUndoCommand.h"
 
 #include <DirectXMath.h>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -23,6 +24,9 @@ namespace ReplayEngine::Landscape
         // v1 compatibility: Landscape local y=0 のブラシ中心。
         bool ApplySample(float local_x, float local_z, float delta_time)
         { return ApplySample({ local_x, 0.0f, local_z }, delta_time); }
+        static bool ApplySubdivideSample(LandscapeData& data,
+            const DirectX::XMFLOAT3& local_center, std::size_t hit_face,
+            const LandscapeBrush& brush);
 
         std::unique_ptr<LandscapeUndoCommand> EndStroke();
         void CancelStroke();

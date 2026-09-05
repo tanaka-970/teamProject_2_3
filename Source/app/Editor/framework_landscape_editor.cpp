@@ -13,15 +13,12 @@
 #include <DirectXMath.h>
 
 #include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
-#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "framework_landscape_editorInternal.h"
 
@@ -125,7 +122,8 @@ void framework::draw_landscape_editor_toolbar()
     if (landscape_edit_mode == 0)
     {
         const char* brush_modes[] = {
-            u8"盛り上げる", u8"掘り下げる", u8"なめらかにする", u8"平らにする", u8"でこぼこにする"
+            u8"盛り上げる", u8"掘り下げる", u8"なめらかにする", u8"平らにする",
+            u8"でこぼこにする", u8"細かくする"
         };
         ImGui::SetNextItemWidth(110.0f);
         ImGui::Combo(u8"ブラシ", &landscape_brush_mode,
@@ -171,80 +169,13 @@ void framework::draw_landscape_editor_toolbar()
             ImGui::DragFloat(u8"でこぼこの細かさ", &landscape_brush.noise_scale,
                 0.01f, 0.001f, 100.0f, "%.3f");
         }
-
-        constexpr std::size_t maximum_brush_subdivide_faces = 256;
-        const std::size_t subdivision_capacity = (std::min)({
-            maximum_brush_subdivide_faces,
-            (ReplayEngine::Landscape::LandscapeData::maximum_vertices - data.VertexCount()) / 3,
-            (ReplayEngine::Landscape::LandscapeData::maximum_indices - data.Indices().size()) / 9 });
-        const bool can_subdivide_brush = object_editor_context.CanEdit() &&
-            !landscape_editor_tool.StrokeActive() && landscape_brush_hover_valid &&
-            landscape_brush_hover_object == object->ID() && subdivision_capacity > 0;
+        if (landscape_brush_mode == static_cast<int>(ReplayEngine::Landscape::LandscapeBrushMode::Subdivide))
         {
-            DisabledScope disabled(!can_subdivide_brush);
-            if (ImGui::Button(u8"ブラシ範囲を細かくする") && can_subdivide_brush)
-            {
-                std::vector<std::pair<float, std::size_t>> faces;
-                const float radius_sq = landscape_brush.radius * landscape_brush.radius;
-                for (std::size_t face = 0; face < data.FaceCount(); ++face)
-                {
-                    float nearest_sq = (std::numeric_limits<float>::max)();
-                    const std::size_t offset = face * 3;
-                    for (int corner = 0; corner < 3; ++corner)
-                    {
-                        const auto& position = data.Vertices()[data.Indices()[offset + corner]].position;
-                        const float dx = position.x - landscape_brush_hover_position.x;
-                        const float dy = position.y - landscape_brush_hover_position.y;
-                        const float dz = position.z - landscape_brush_hover_position.z;
-                        const float distance_sq = landscape_brush.direction ==
-                            ReplayEngine::Landscape::LandscapeSculptDirection::LocalY
-                            ? dx * dx + dz * dz : dx * dx + dy * dy + dz * dz;
-                        nearest_sq = (std::min)(nearest_sq, distance_sq);
-                    }
-                    if (face == landscape_brush_hover_face) nearest_sq = -1.0f;
-                    if (nearest_sq <= radius_sq) faces.emplace_back(nearest_sq, face);
-                }
-
-                const std::size_t found_faces = faces.size();
-                if (faces.size() > subdivision_capacity)
-                {
-                    std::nth_element(faces.begin(), faces.begin() + subdivision_capacity, faces.end());
-                    faces.resize(subdivision_capacity);
-                }
-                std::sort(faces.begin(), faces.end(), [](const auto& left, const auto& right)
-                { return left.second < right.second; });
-
-                if (faces.empty())
-                {
-                    object_editor_context.SetStatus(u8"ブラシ範囲に分割できる面がありません");
-                }
-                else
-                {
-                    object_editor_context.BeginEdit(u8"地形のブラシ範囲を分割");
-                    data.BeginTopologyBatch();
-                    bool succeeded = true;
-                    for (const auto& face : faces)
-                        if (!data.SubdivideFace(face.second)) { succeeded = false; break; }
-                    data.EndTopologyBatch();
-                    if (succeeded)
-                    {
-                        object_editor_context.CommitEdit();
-                        std::string status = u8"ブラシ範囲の面を " +
-                            std::to_string(faces.size()) + u8" 枚分割しました";
-                        if (found_faces > faces.size()) status += u8"（1回の上限まで）";
-                        object_editor_context.SetStatus(status);
-                        landscape_brush_hover_valid = false;
-                    }
-                    else
-                    {
-                        object_editor_context.CancelEdit();
-                        object_editor_context.SetStatus(u8"ブラシ範囲の分割に失敗しました");
-                    }
-                }
-            }
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(100.0f);
+            ImGui::DragFloat(u8"目標の細かさ", &landscape_brush.target_edge_length,
+                0.05f, 0.01f, 256.0f, "%.2f");
         }
-        ImGui::SameLine();
-        ImGui::TextDisabled(u8"1回につき最大256面。カーソルを地形に合わせて押します");
         ImGui::TextDisabled(u8"左ドラッグ: 編集 | Ctrl/Alt+左クリック: 通常選択 | Esc: 地形編集を終了 | 値は地形内の座標");
     }
     else
@@ -379,6 +310,8 @@ void framework::draw_landscape_editor_toolbar()
 void framework::reset_landscape_editor_state(bool rollback_stroke)
 {
 #ifdef USE_IMGUI
+    const bool subdivide_stroke = landscape_stroke_transaction &&
+        !landscape_editor_tool.StrokeActive();
     std::unique_ptr<ReplayEngine::Landscape::LandscapeUndoCommand> command;
     if (landscape_editor_tool.StrokeActive())
     {
@@ -386,7 +319,7 @@ void framework::reset_landscape_editor_state(bool rollback_stroke)
         else command = landscape_editor_tool.EndStroke();
     }
 
-    // Sculpt 中に止めた Collider cook を、選択変更/Scene切替/Play開始でも必ず解除する。
+    // ブラシ中に止めた衝突形状の再構築を、選択変更やシーン切替でも必ず解除する。
     // LandscapeEditorTool が保持する非所有 data pointer も Scene を跨いで残さない。
     ReplayEngine::Scene::Scene& scene = active_object_scene();
     for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
@@ -398,15 +331,19 @@ void framework::reset_landscape_editor_state(bool rollback_stroke)
     }
     if (landscape_stroke_transaction)
     {
-        if (!rollback_stroke && command != nullptr) object_editor_context.CommitLandscapeEdit(
-            landscape_stroke_object, std::move(command));
+        if (subdivide_stroke)
+        {
+            // トポロジー編集は取り消すだけでは復元されないため、変更済みなら中断時も履歴へ確定する。
+            if (landscape_subdivide_stroke_changed) object_editor_context.CommitEdit();
+            else object_editor_context.CancelEdit();
+        }
+        else if (!rollback_stroke && command != nullptr)
+            object_editor_context.CommitLandscapeEdit(landscape_stroke_object, std::move(command));
         landscape_stroke_transaction = false;
+        landscape_subdivide_stroke_changed = false;
         landscape_stroke_object = ReplayEngine::Core::ObjectID::Invalid();
     }
     landscape_edit_enabled = false;
-    landscape_brush_hover_valid = false;
-    landscape_brush_hover_face = no_face;
-    landscape_brush_hover_object = ReplayEngine::Core::ObjectID::Invalid();
     landscape_selected_face = no_face;
     landscape_bridge_a0 = landscape_bridge_a1 = no_vertex;
     landscape_bridge_b0 = landscape_bridge_b1 = no_vertex;

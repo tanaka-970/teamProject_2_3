@@ -269,10 +269,6 @@
     int landscape_brush_preview_mode{ 1 }; // 0=Ring, 1=Falloff, 2=Grid, 3=Contour, 4=Grid+Contour
     ReplayEngine::Landscape::LandscapeBrush landscape_brush{};
     ReplayEngine::Landscape::LandscapeEditorTool landscape_editor_tool;
-    bool landscape_brush_hover_valid{ false };
-    DirectX::XMFLOAT3 landscape_brush_hover_position{};
-    std::size_t landscape_brush_hover_face{ static_cast<std::size_t>(-1) };
-    ReplayEngine::Core::ObjectID landscape_brush_hover_object;
     std::size_t landscape_selected_face{ static_cast<std::size_t>(-1) };
     // Bridge は同じ mesh 上の 2 edge を順に選ぶ。Editor transient state だけなので
     // Component/Scene には保存しない。
@@ -281,6 +277,7 @@
     std::uint32_t landscape_bridge_b0{ static_cast<std::uint32_t>(-1) };
     std::uint32_t landscape_bridge_b1{ static_cast<std::uint32_t>(-1) };
     bool landscape_stroke_transaction{ false };
+    bool landscape_subdivide_stroke_changed{ false };
     ReplayEngine::Core::ObjectID landscape_stroke_object;
     float landscape_extrude_distance{ 1.0f };
     float landscape_inset_amount{ 0.25f };
