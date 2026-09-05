@@ -375,7 +375,8 @@ void framework::draw_project_panel()
                 std::vector<std::string> action_names;
                 action_names.reserve(editing_input.Actions().size());
                 for (const auto& pair : editing_input.Actions())
-                    if (pair.second.action_map != "Editor") action_names.push_back(pair.first);
+                    if (pair.second.action_map != "Editor" && pair.second.action_map != "Motion")
+                        action_names.push_back(pair.first);
                 std::sort(action_names.begin(), action_names.end());
                 if (ImGui::TreeNodeEx("Actions", ImGuiTreeNodeFlags_DefaultOpen))
                 {

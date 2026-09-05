@@ -103,7 +103,7 @@ void framework::initialize_object_scene()
         object_editor_context.SetStatus("EditorHelp: " + editor_help_error);
     }
 
-    // Gameplay は ProjectSettings の Asset、Editor は InputBindings.ini を正本として読む。
+    // Gameplay は ProjectSettings の Asset、Editor/Motion は InputBindings.ini を正本として読む。
     if (!project_settings.InputActionAssetGuid().empty())
     {
         load_active_input_action_asset();

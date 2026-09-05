@@ -16,6 +16,11 @@ namespace GameInput
         {
             return (std::max)(minimum, (std::min)(maximum, value));
         }
+
+        bool IsEditorToolActionMap(std::string_view action_map) noexcept
+        {
+            return action_map == "Editor" || action_map == "Motion";
+        }
     }
 
     InputState::InputState()
@@ -98,6 +103,42 @@ namespace GameInput
         set_jump_state(true, true);
         input.keyboard_previous_[VK_CONTROL] = 0x80u;
         if (!expect_stable("modifier released", false, false, true)) return false;
+
+        struct ExpectedMotionAction final
+        {
+            const char* name;
+            int key;
+            std::uint8_t modifiers;
+            int secondary_key = 0;
+            std::uint8_t secondary_modifiers = ActionModifierNone;
+        };
+        constexpr ExpectedMotionAction expected_motion_actions[] = {
+            { u8"キーを追加", 'S', ActionModifierNone, 'S', ActionModifierShift },
+            { u8"キーを削除", VK_DELETE, ActionModifierNone },
+            { u8"キーを複製", 'D', ActionModifierCtrl },
+            { u8"キーをコピー", 'C', ActionModifierCtrl },
+            { u8"キーを貼り付け", 'V', ActionModifierCtrl },
+            { u8"再生/停止", VK_SPACE, ActionModifierNone },
+            { u8"先頭へ移動", VK_HOME, ActionModifierNone },
+            { u8"末尾へ移動", VK_END, ActionModifierNone },
+            { u8"1コマ進む", VK_NEXT, ActionModifierNone },
+            { u8"1コマ戻る", VK_PRIOR, ActionModifierNone },
+            { u8"プリセットを適用", VK_F9, ActionModifierNone },
+        };
+        for (const auto& expected : expected_motion_actions)
+        {
+            const auto found = input.actions_.find(expected.name);
+            if (found == input.actions_.end() || found->second.action_map != "Motion" ||
+                found->second.keyboard_primary != expected.key ||
+                found->second.keyboard_primary_modifiers != expected.modifiers ||
+                found->second.keyboard_secondary != expected.secondary_key ||
+                found->second.keyboard_secondary_modifiers != expected.secondary_modifiers ||
+                found->second.gamepad_button != 0)
+            {
+                error = std::string("motion default binding mismatch: ") + expected.name;
+                return false;
+            }
+        }
 
         const std::filesystem::path compatibility_path =
             std::filesystem::temp_directory_path() /
@@ -195,6 +236,19 @@ namespace GameInput
         actions_[u8"停止"] = { VK_F5, 0, 0, "Editor", ActionModifierShift };
         actions_[u8"全画面"] = { VK_F11, VK_RETURN, 0, "Editor",
             ActionModifierNone, ActionModifierAlt };
+
+        actions_[u8"キーを追加"] = { 'S', 'S', 0, "Motion",
+            ActionModifierNone, ActionModifierShift };
+        actions_[u8"キーを削除"] = { VK_DELETE, 0, 0, "Motion" };
+        actions_[u8"キーを複製"] = { 'D', 0, 0, "Motion", ActionModifierCtrl };
+        actions_[u8"キーをコピー"] = { 'C', 0, 0, "Motion", ActionModifierCtrl };
+        actions_[u8"キーを貼り付け"] = { 'V', 0, 0, "Motion", ActionModifierCtrl };
+        actions_[u8"再生/停止"] = { VK_SPACE, 0, 0, "Motion" };
+        actions_[u8"先頭へ移動"] = { VK_HOME, 0, 0, "Motion" };
+        actions_[u8"末尾へ移動"] = { VK_END, 0, 0, "Motion" };
+        actions_[u8"1コマ進む"] = { VK_NEXT, 0, 0, "Motion" };
+        actions_[u8"1コマ戻る"] = { VK_PRIOR, 0, 0, "Motion" };
+        actions_[u8"プリセットを適用"] = { VK_F9, 0, 0, "Motion" };
 
         axes_["MoveX"] = { 'A', VK_LEFT, 'D', VK_RIGHT,
             GamepadAxis::LeftX, 0.18f };
@@ -486,20 +540,20 @@ namespace GameInput
     bool InputState::LoadActionAsset(const std::filesystem::path& path, std::string& error)
     {
         error.clear();
-        std::unordered_map<std::string, ActionBinding> editor_actions;
+        std::unordered_map<std::string, ActionBinding> tool_actions;
         for (const auto& entry : actions_)
-            if (entry.second.action_map == "Editor") editor_actions[entry.first] = entry.second;
+            if (IsEditorToolActionMap(entry.second.action_map)) tool_actions[entry.first] = entry.second;
         ResetDefaultBindings();
-        const auto restore_editor_actions = [&]()
+        const auto restore_tool_actions = [&]()
         {
-            for (const auto& entry : editor_actions) actions_[entry.first] = entry.second;
+            for (const auto& entry : tool_actions) actions_[entry.first] = entry.second;
         };
 
         std::ifstream stream(path, std::ios::binary);
         if (!stream)
         {
             error = "Input Action Asset が見つかりません: " + path.generic_string();
-            restore_editor_actions();
+            restore_tool_actions();
             return false;
         }
 
@@ -521,7 +575,7 @@ namespace GameInput
         {
             error = "Input Action Asset の形式が不正です。hard-coded default を使用します。";
             ResetDefaultBindings();
-            restore_editor_actions();
+            restore_tool_actions();
             return false;
         }
 
@@ -546,7 +600,7 @@ namespace GameInput
             if (!(row >> std::quoted(name) >> std::quoted(map))) continue;
             if (kind == "action")
             {
-                if (map == "Editor") continue;
+                if (IsEditorToolActionMap(map)) continue;
                 ActionBinding binding{};
                 const auto existing = actions_.find(name);
                 if (existing != actions_.end()) binding = existing->second;
@@ -586,27 +640,27 @@ namespace GameInput
         {
             error = "Input Action Asset の読み取り中に I/O error が発生しました。";
             ResetDefaultBindings();
-            restore_editor_actions();
+            restore_tool_actions();
             return false;
         }
 
         for (const auto& entry : default_actions)
         {
-            if (entry.second.action_map == "Editor") continue;
+            if (IsEditorToolActionMap(entry.second.action_map)) continue;
             if (loaded_actions.find(entry.first) == loaded_actions.end())
             {
                 error = "既存 Action が不足しています: " + entry.first +
                     "。hard-coded default を使用します。";
                 ResetDefaultBindings();
-                restore_editor_actions();
+                restore_tool_actions();
                 return false;
             }
         }
         for (const auto& entry : default_actions)
-            if (entry.second.action_map == "Editor" &&
+            if (IsEditorToolActionMap(entry.second.action_map) &&
                 loaded_actions.find(entry.first) == loaded_actions.end())
                 loaded_actions[entry.first] = entry.second;
-        for (const auto& entry : editor_actions) loaded_actions[entry.first] = entry.second;
+        for (const auto& entry : tool_actions) loaded_actions[entry.first] = entry.second;
         for (const auto& entry : default_axes)
         {
             if (loaded_axes.find(entry.first) == loaded_axes.end())
@@ -614,7 +668,7 @@ namespace GameInput
                 error = "既存 Axis が不足しています: " + entry.first +
                     "。hard-coded default を使用します。";
                 ResetDefaultBindings();
-                restore_editor_actions();
+                restore_tool_actions();
                 return false;
             }
         }
@@ -653,7 +707,7 @@ namespace GameInput
             if (std::find(maps.begin(), maps.end(), value) == maps.end()) maps.push_back(value);
         };
         for (const auto& entry : actions_)
-            if (entry.second.action_map != "Editor") add_map(entry.second.action_map);
+            if (!IsEditorToolActionMap(entry.second.action_map)) add_map(entry.second.action_map);
         for (const auto& entry : axes_) add_map(entry.second.action_map);
         std::sort(maps.begin(), maps.end());
         for (const std::string& map : maps) stream << "map " << std::quoted(map) << '\n';
@@ -661,7 +715,7 @@ namespace GameInput
         std::vector<std::string> names;
         names.reserve(actions_.size());
         for (const auto& pair : actions_)
-            if (pair.second.action_map != "Editor") names.push_back(pair.first);
+            if (!IsEditorToolActionMap(pair.second.action_map)) names.push_back(pair.first);
         std::sort(names.begin(), names.end());
         for (const std::string& name : names)
         {
@@ -725,7 +779,7 @@ namespace GameInput
                 const auto existing = actions_.find(name);
                 if (existing != actions_.end()) binding = existing->second;
                 if (editor_only && (existing == actions_.end() ||
-                    existing->second.action_map != "Editor")) continue;
+                    !IsEditorToolActionMap(existing->second.action_map))) continue;
                 unsigned int pad_button = 0;
                 if (row >> binding.keyboard_primary >> binding.keyboard_secondary >> pad_button)
                 {

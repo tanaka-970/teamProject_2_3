@@ -8,6 +8,7 @@
 #include <cmath>
 #include <filesystem>
 #include <string>
+#include <string_view>
 
 void framework::draw_editor()
 {
@@ -179,39 +180,50 @@ void framework::draw_editor()
         const ImGuiIO& motion_io = ImGui::GetIO();
         if (!motion_io.WantTextInput)
         {
-            if (!motion_io.KeyCtrl && !motion_io.KeyAlt &&
-                ImGui::IsKeyPressed('S', false))
+            const auto motion_action_pressed = [&](std::string_view name)
+            {
+                const auto found = game_input.Actions().find(std::string(name));
+                if (found == game_input.Actions().end() ||
+                    found->second.action_map != "Motion") return false;
+                const auto matches = [&](int key, std::uint8_t modifiers)
+                {
+                    if (key == 0 || !ImGui::IsKeyPressed(key, false)) return false;
+                    std::uint8_t actual = GameInput::ActionModifierNone;
+                    if (key != VK_CONTROL && key != VK_LCONTROL && key != VK_RCONTROL &&
+                        motion_io.KeyCtrl) actual |= GameInput::ActionModifierCtrl;
+                    if (key != VK_SHIFT && key != VK_LSHIFT && key != VK_RSHIFT &&
+                        motion_io.KeyShift) actual |= GameInput::ActionModifierShift;
+                    if (key != VK_MENU && key != VK_LMENU && key != VK_RMENU &&
+                        motion_io.KeyAlt) actual |= GameInput::ActionModifierAlt;
+                    return actual == (modifiers & GameInput::ActionModifierAll);
+                };
+                return matches(found->second.keyboard_primary,
+                        found->second.keyboard_primary_modifiers) ||
+                    matches(found->second.keyboard_secondary,
+                        found->second.keyboard_secondary_modifiers);
+            };
+            if (motion_action_pressed(u8"キーを追加"))
                 add_motion_key_at_preview_time();
-            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
-                ImGui::IsKeyPressed(VK_DELETE, false))
+            if (motion_action_pressed(u8"キーを削除"))
                 delete_motion_keys();
-            if (motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
-                ImGui::IsKeyPressed('D', false))
+            if (motion_action_pressed(u8"キーを複製"))
                 duplicate_motion_keys();
-            if (motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
-                ImGui::IsKeyPressed('C', false))
+            if (motion_action_pressed(u8"キーをコピー"))
                 copy_motion_keys();
-            if (motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
-                ImGui::IsKeyPressed('V', false))
+            if (motion_action_pressed(u8"キーを貼り付け"))
                 paste_motion_keys();
-            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
-                ImGui::IsKeyPressed(VK_SPACE, false))
+            if (motion_action_pressed(u8"再生/停止"))
                 toggle_motion_preview_playback();
-            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
-                ImGui::IsKeyPressed(VK_HOME, false))
+            if (motion_action_pressed(u8"先頭へ移動"))
                 seek_motion_preview_time(0.0f);
-            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
-                ImGui::IsKeyPressed(VK_END, false))
+            if (motion_action_pressed(u8"末尾へ移動"))
                 seek_motion_preview_time(motion_editor_loaded
                     ? motion_editor_asset.duration : motion_editor_composition.duration);
-            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
-                ImGui::IsKeyPressed(VK_NEXT, false))
+            if (motion_action_pressed(u8"1コマ進む"))
                 step_motion_preview_frames(1);
-            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
-                ImGui::IsKeyPressed(VK_PRIOR, false))
+            if (motion_action_pressed(u8"1コマ戻る"))
                 step_motion_preview_frames(-1);
-            if (!motion_io.KeyCtrl && !motion_io.KeyShift && !motion_io.KeyAlt &&
-                ImGui::IsKeyPressed(VK_F9, false))
+            if (motion_action_pressed(u8"プリセットを適用"))
             {
                 const ReplayEngine::Assets::AssetRecord* preset_record =
                     motion_selected_easing_curve.IsAssigned()

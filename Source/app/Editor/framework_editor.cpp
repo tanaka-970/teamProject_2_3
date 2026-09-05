@@ -586,21 +586,25 @@ void framework::set_edit_mode(bool enabled)
     }
 }
 
+std::string framework::action_shortcut(std::string_view name) const
+{
+    const auto found = game_input.Actions().find(std::string(name));
+    if (found == game_input.Actions().end()) return {};
+
+    std::string shortcut;
+    const auto append = [&](int key, std::uint8_t modifiers)
+    {
+        if (key == 0) return;
+        if (!shortcut.empty()) shortcut += " / ";
+        shortcut += ActionKeyDisplayName(key, modifiers);
+    };
+    append(found->second.keyboard_primary, found->second.keyboard_primary_modifiers);
+    append(found->second.keyboard_secondary, found->second.keyboard_secondary_modifiers);
+    return shortcut;
+}
+
 void framework::draw_editor_main_menu()
 {
-    const auto shortcut = [&](std::string_view name)
-    {
-        const auto found = game_input.Actions().find(std::string(name));
-        return found == game_input.Actions().end() ? std::string{} :
-            ActionKeyDisplayName(found->second.keyboard_primary,
-                found->second.keyboard_primary_modifiers);
-    };
-    const std::string save_shortcut = shortcut(u8"保存");
-    const std::string save_as_shortcut = shortcut(u8"名前を付けて保存");
-    const std::string undo_shortcut = shortcut(u8"元に戻す");
-    const std::string redo_shortcut = shortcut(u8"やり直し");
-    const std::string play_shortcut = shortcut(u8"実行");
-    const std::string stop_shortcut = shortcut(u8"停止");
     if (editor_style_history.InTransaction() && !ImGui::IsAnyItemActive())
     {
         editor_style_history.Commit(capture_editor_style_snapshot());
@@ -608,6 +612,8 @@ void framework::draw_editor_main_menu()
     }
     if (ImGui::BeginMenu("File"))
     {
+        const std::string save_shortcut = action_shortcut(u8"保存");
+        const std::string save_as_shortcut = action_shortcut(u8"名前を付けて保存");
         if (ImGui::MenuItem("New Empty Scene")) create_object_scene(u8"新しいシーン", false);
         if (ImGui::MenuItem("New Default Scene")) create_object_scene(u8"新しいシーン", true);
         if (ImGui::MenuItem("Open Scene...")) load_object_scene(true);
@@ -644,6 +650,8 @@ void framework::draw_editor_main_menu()
     }
     if (ImGui::BeginMenu("Edit"))
     {
+        const std::string undo_shortcut = action_shortcut(u8"元に戻す");
+        const std::string redo_shortcut = action_shortcut(u8"やり直し");
         const bool atlas_context = sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus;
         const bool motion_workspace = active_editor_workspace == editor_workspace::motion;
         const bool material_context = !project_browser_focused && !atlas_context &&
@@ -1182,6 +1190,8 @@ void framework::draw_editor_main_menu()
     // 実際にそれで迷子になった。
     if (ImGui::BeginMenu(u8"実行"))
     {
+        const std::string play_shortcut = action_shortcut(u8"実行");
+        const std::string stop_shortcut = action_shortcut(u8"停止");
         if (ImGui::MenuItem(u8"▲ 実行", play_shortcut.c_str(), false,
             !object_scene_play_mode && !object_editor_play_loading))
             enter_object_play_mode();
@@ -1385,13 +1395,15 @@ void framework::draw_input_bindings_panel()
             conflicts.push_back(label);
     };
     const auto collect_conflicts = [&](int key, std::uint8_t modifiers, bool own_action,
-        const std::string& own_name, std::vector<std::string>& conflicts)
+        const std::string& own_name, const std::string& own_map,
+        std::vector<std::string>& conflicts)
     {
         if (key == 0) return;
         for (const auto& entry : game_input.Actions())
         {
             if (own_action && entry.first == own_name) continue;
             const auto& binding = entry.second;
+            if (binding.action_map != own_map) continue;
             if ((binding.keyboard_primary == key &&
                     binding.keyboard_primary_modifiers == modifiers) ||
                 (binding.keyboard_secondary == key &&
@@ -1402,6 +1414,7 @@ void framework::draw_input_bindings_panel()
         {
             if (!own_action && entry.first == own_name) continue;
             const auto& binding = entry.second;
+            if (binding.action_map != own_map) continue;
             if (modifiers == GameInput::ActionModifierNone &&
                 (binding.negative_primary == key || binding.negative_secondary == key ||
                     binding.positive_primary == key || binding.positive_secondary == key))
@@ -1488,9 +1501,9 @@ void framework::draw_input_bindings_panel()
             }
             std::vector<std::string> conflicts;
             collect_conflicts(binding.keyboard_primary,
-                binding.keyboard_primary_modifiers, true, name, conflicts);
+                binding.keyboard_primary_modifiers, true, name, binding.action_map, conflicts);
             collect_conflicts(binding.keyboard_secondary,
-                binding.keyboard_secondary_modifiers, true, name, conflicts);
+                binding.keyboard_secondary_modifiers, true, name, binding.action_map, conflicts);
             draw_conflicts(conflicts);
             ImGui::Unindent();
             ImGui::Separator();
@@ -1549,13 +1562,13 @@ void framework::draw_input_bindings_panel()
             }
             std::vector<std::string> conflicts;
             collect_conflicts(binding.negative_primary, GameInput::ActionModifierNone,
-                false, name, conflicts);
+                false, name, binding.action_map, conflicts);
             collect_conflicts(binding.negative_secondary, GameInput::ActionModifierNone,
-                false, name, conflicts);
+                false, name, binding.action_map, conflicts);
             collect_conflicts(binding.positive_primary, GameInput::ActionModifierNone,
-                false, name, conflicts);
+                false, name, binding.action_map, conflicts);
             collect_conflicts(binding.positive_secondary, GameInput::ActionModifierNone,
-                false, name, conflicts);
+                false, name, binding.action_map, conflicts);
             draw_conflicts(conflicts);
             ImGui::Unindent();
             ImGui::Separator();

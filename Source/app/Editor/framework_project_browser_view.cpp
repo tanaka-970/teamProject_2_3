@@ -374,6 +374,7 @@ bool framework::project_open_entry(const std::filesystem::path& path)
 void framework::draw_project_create_submenu(const std::filesystem::path& target_folder)
 {
     if (!ImGui::BeginMenu("Create")) return;
+    const std::string folder_shortcut = action_shortcut(u8"新規フォルダー");
 
     ImGui::TextDisabled("作成先: %s", target_folder.filename().empty()
         ? "Project" : target_folder.filename().u8string().c_str());
@@ -391,7 +392,7 @@ void framework::draw_project_create_submenu(const std::filesystem::path& target_
         project_tree_reveal_selection_pending = true;
     };
 
-        if (ImGui::MenuItem("Folder"))
+    if (ImGui::MenuItem("Folder", folder_shortcut.c_str()))
     {
         select_target();
         project_create_folder(project_new_item_name);
@@ -509,15 +510,19 @@ void framework::draw_project_entry_context_items(const std::filesystem::path& pa
     const bool directory = std::filesystem::is_directory(path, error) && !error;
     const auto kind = directory ? ReplayEngine::Assets::AssetKind::Unknown : project_kind_for(path);
     const auto* record = directory ? nullptr : asset_database.FindByPath(path);
+    const std::string rename_shortcut = action_shortcut(u8"名前変更");
+    const std::string duplicate_shortcut = action_shortcut(u8"複製");
 
     draw_project_create_submenu(directory ? path : path.parent_path());
     ImGui::Separator();
 
     if (ImGui::MenuItem(directory ? "このフォルダを開く" : "開く", "Enter"))
         project_open_entry(path);
-        if (ImGui::MenuItem("名前を変更", nullptr, false, object_editor_context.CanEdit()))
+    if (ImGui::MenuItem("名前を変更", rename_shortcut.c_str(), false,
+        object_editor_context.CanEdit()))
         project_begin_rename_selected();
-        if (ImGui::MenuItem("複製", nullptr, false, object_editor_context.CanEdit()))
+    if (ImGui::MenuItem("複製", duplicate_shortcut.c_str(), false,
+        object_editor_context.CanEdit()))
         project_duplicate_entry(path);
 
     ImGui::Separator();

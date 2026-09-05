@@ -472,6 +472,7 @@ private:
     void apply_toon_preset(int preset);
     void reset_editor_values();
     void draw_editor();
+    std::string action_shortcut(std::string_view name) const;
     void draw_editor_main_menu();
     void draw_editor_toolbar();
     void open_export_game_dialog();
