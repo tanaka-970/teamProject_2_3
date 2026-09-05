@@ -3348,6 +3348,15 @@ namespace ReplayEngine::Rendering::DX12
         ReleaseRetiredStaticMeshes(completed);
     }
 
+    void D3D12DeviceContext::ReleaseStaticMesh(const std::string& key) noexcept
+    {
+        const auto existing = static_mesh_cache_.find(key);
+        if (existing == static_mesh_cache_.end()) return;
+        RetireStaticMesh(std::move(existing->second));
+        static_mesh_cache_.erase(existing);
+        static_mesh_bounds_cache_.erase(key);
+    }
+
     // 置換で外した静的メッシュは、次に Signal する Fence を越えるまで解放しない。
     void D3D12DeviceContext::RetireStaticMesh(std::unique_ptr<D3D12MeshBuffer> mesh) noexcept
     {
@@ -3358,6 +3367,7 @@ namespace ReplayEngine::Rendering::DX12
         }
         catch (...)
         {
+            mesh.release();
         }
     }
 

@@ -963,6 +963,7 @@ namespace ReplayEngine::Rendering::DX12
         {
             return static_mesh_cache_.find(key) != static_mesh_cache_.end();
         }
+        void ReleaseStaticMesh(const std::string& key) noexcept;
         bool HasSkinnedMesh(const std::string& key) const noexcept
         {
             return skinned_mesh_cache_.find(key) != skinned_mesh_cache_.end();

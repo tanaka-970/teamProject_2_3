@@ -385,8 +385,43 @@ namespace ReplayEngine::Runtime::Detail
             }
         }
 
+        {
+            ReplayEngine::Components::LandscapeRendererComponent load_renderer;
+            const DirectX::XMFLOAT3 camera{ 0.0f, 0.0f, 0.0f };
+            constexpr std::size_t chunk_count = 3;
+            const DirectX::XMFLOAT3 bounds_min[chunk_count] = {
+                { -1.0f, -1.0f, -1.0f }, { 1.5f, -1.0f, -1.0f }, { 2.1f, -1.0f, -1.0f } };
+            const DirectX::XMFLOAT3 bounds_max[chunk_count] = {
+                { 1.0f, 1.0f, 1.0f }, { 5.0f, 1.0f, 1.0f }, { 3.0f, 1.0f, 1.0f } };
+            const auto submitted_count = [&](bool resident)
+            {
+                std::size_t count = 0;
+                for (std::size_t index = 0; index < chunk_count; ++index)
+                {
+                    if (load_renderer.ShouldSubmitChunk(camera, bounds_min[index],
+                        bounds_max[index], resident))
+                        ++count;
+                }
+                return count;
+            };
+
+            load_renderer.load_range = 2.0f;
+            if (submitted_count(false) != 2 ||
+                !load_renderer.ShouldSubmitChunk(camera, bounds_min[2], bounds_max[2], true))
+            {
+                std::fprintf(stderr, "Landscape chunk load range submission count mismatch\n");
+                return 52;
+            }
+            load_renderer.load_range = 0.0f;
+            if (submitted_count(false) != chunk_count)
+            {
+                std::fprintf(stderr, "Landscape unlimited chunk submission count mismatch\n");
+                return 53;
+            }
+        }
+
         std::fprintf(stderr,
-            "Landscape v2 OK: arbitrary mesh, sculpt+undo, topology+bridge, cave/tunnel, raycast, spatial collision cook, save/reload, v1 migration, Component Scene round-trip OK\n");
+            "Landscape v2 OK: arbitrary mesh, sculpt+undo, topology+bridge, cave/tunnel, raycast, chunk load range, spatial collision cook, save/reload, v1 migration, Component Scene round-trip OK\n");
         return 0;
     }
 

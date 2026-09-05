@@ -236,6 +236,12 @@ void framework::draw_editor_toolbar()
     // 選択中のモードはボタンの色でも示す。
     // 形だけだと Scene View を見ていないと分からず、
     // ツールバーを見ても «今どれか» が読み取れなかった。
+    const std::string move_help = std::string(u8"移動（") + action_shortcut(u8"移動ギズモ") +
+        u8"）\n軸線の先端が丸。軸をドラッグするとその方向へ動く。\nドラッグ中に Esc で取り消し。";
+    const std::string rotate_help = std::string(u8"回転（") + action_shortcut(u8"回転ギズモ") +
+        u8"）\n軸まわりの円。円周を掴んで、円に沿って引くと回る。\nドラッグ中に Esc で取り消し。";
+    const std::string scale_help = std::string(u8"拡縮（") + action_shortcut(u8"拡縮ギズモ") +
+        u8"）\n軸線の先端が四角。軸をドラッグするとその軸だけ伸縮する。\nドラッグ中に Esc で取り消し。";
     const auto gizmo_mode_button = [&](const char* label,
         ReplayEngine::Editor::GizmoOperation mode, const char* tooltip)
     {
@@ -252,19 +258,13 @@ void framework::draw_editor_toolbar()
     };
 
     gizmo_mode_button("Move", ReplayEngine::Editor::GizmoOperation::Translate,
-        u8"移動（既定: Shift+W）\n"
-        u8"軸線の先端が丸。軸をドラッグするとその方向へ動く。\n"
-        u8"ドラッグ中に Esc で取り消し。");
+        move_help.c_str());
     ImGui::SameLine();
     gizmo_mode_button("Rotate", ReplayEngine::Editor::GizmoOperation::Rotate,
-        u8"回転（既定: Shift+E）\n"
-        u8"軸まわりの円。円周を掴んで、円に沿って引くと回る。\n"
-        u8"ドラッグ中に Esc で取り消し。");
+        rotate_help.c_str());
     ImGui::SameLine();
     gizmo_mode_button("Scale", ReplayEngine::Editor::GizmoOperation::Scale,
-        u8"拡縮（既定: Shift+R）\n"
-        u8"軸線の先端が四角。軸をドラッグするとその軸だけ伸縮する。\n"
-        u8"ドラッグ中に Esc で取り消し。");
+        scale_help.c_str());
     ImGui::SameLine();
     bool snap = transform_gizmo.SnapEnabled();
     if (ImGui::Checkbox("Snap", &snap)) transform_gizmo.SetSnapEnabled(snap);
@@ -324,13 +324,17 @@ void framework::draw_editor_toolbar()
     // 以前は同じ見た目のボタンが 8 個並ぶ中に "Play" が紛れており、
     // しかもメニューバーにも同名の "Play" があった。
     // どちらを押せばよいか画面から判断できず、実際に迷子になった。
-    const ImVec2 transport_size(96.0f, 0.0f);
+    const std::string play_shortcut = action_shortcut(u8"実行");
+    const std::string play_label = play_shortcut.empty() ? std::string(u8"▶ 実行") :
+        std::string(u8"▶ 実行 (") + play_shortcut + ")";
+    const ImVec2 transport_size((std::max)(96.0f,
+        ImGui::CalcTextSize(play_label.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f), 0.0f);
     if (!object_scene_play_mode)
     {
         ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.16f, 0.62f, 0.28f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.74f, 0.36f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.12f, 0.50f, 0.22f, 1.0f));
-        if (ImGui::Button(u8"▶ 実行 (F5)", transport_size)) enter_object_play_mode();
+        if (ImGui::Button(play_label.c_str(), transport_size)) enter_object_play_mode();
         ImGui::PopStyleColor(3);
         ReplayEngine::Editor::EditorHelp::Item("button.scene.play",
             u8"ゲームを実行します。\n"

@@ -44,7 +44,10 @@ void framework::draw_runtime_mode_banner()
     {
         ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), u8"■ 編集中（停止）");
         ImGui::TextDisabled(u8"物理・入力・C# スクリプトはすべて停止中");
-        ImGui::TextDisabled(u8"動かすには上の緑の「▶ 実行」ボタン、または F5");
+        std::string play_hint = u8"動かすには上の緑の「▶ 実行」ボタン";
+        const std::string play_shortcut = action_shortcut(u8"実行");
+        if (!play_shortcut.empty()) play_hint += std::string(u8"、または ") + play_shortcut;
+        ImGui::TextDisabled("%s", play_hint.c_str());
     }
 
 #ifdef _DEBUG

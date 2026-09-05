@@ -2250,6 +2250,30 @@ bool framework::build_dx12_static_scene(
     // D3D11専用のstatic_meshキャッシュをDX12から参照しないため、編集後のRevisionもキーへ含める。
     if (options.include_auxiliary_geometry)
     {
+        const DirectX::XMFLOAT3 camera_position = viewport_eye_position();
+        const auto transform_bounds = [](const DirectX::XMFLOAT3& local_min,
+            const DirectX::XMFLOAT3& local_max, const DirectX::XMFLOAT4X4& world,
+            DirectX::XMFLOAT3& world_min, DirectX::XMFLOAT3& world_max) noexcept
+        {
+            world_min = { FLT_MAX, FLT_MAX, FLT_MAX };
+            world_max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+            for (std::uint32_t corner_index = 0; corner_index < 8; ++corner_index)
+            {
+                const DirectX::XMFLOAT3 local{
+                    (corner_index & 1u) != 0 ? local_max.x : local_min.x,
+                    (corner_index & 2u) != 0 ? local_max.y : local_min.y,
+                    (corner_index & 4u) != 0 ? local_max.z : local_min.z };
+                DirectX::XMFLOAT3 transformed{};
+                DirectX::XMStoreFloat3(&transformed, DirectX::XMVector3TransformCoord(
+                    DirectX::XMLoadFloat3(&local), DirectX::XMLoadFloat4x4(&world)));
+                world_min.x = (std::min)(world_min.x, transformed.x);
+                world_min.y = (std::min)(world_min.y, transformed.y);
+                world_min.z = (std::min)(world_min.z, transformed.z);
+                world_max.x = (std::max)(world_max.x, transformed.x);
+                world_max.y = (std::max)(world_max.y, transformed.y);
+                world_max.z = (std::max)(world_max.z, transformed.z);
+            }
+        };
         for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
         {
             const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
@@ -2263,6 +2287,12 @@ bool framework::build_dx12_static_scene(
             const std::string object_key = "landscape:" +
                 std::to_string(object->ID().Value());
             auto& cache = landscape_gpu_mesh_cache[object->ID().Value()];
+            const DirectX::XMFLOAT4X4 object_world =
+                object->GetTransform().WorldMatrixFloat4x4();
+            const float uv_tiling = std::isfinite(renderer->uv_tiling)
+                ? std::clamp(renderer->uv_tiling, 0.0001f, 10000.0f) : 1.0f;
+            const std::string base_color_texture_key =
+                add_asset_texture(renderer->base_color_texture);
 
             // チャンクごとに別メッシュとして持つ。塗った所だけ載せ替えられ、
             // 画面外のチャンクは視錐台で落とせる。
@@ -2271,16 +2301,30 @@ bool framework::build_dx12_static_scene(
             cache.revision = data.Revision();
 
             const auto& chunks = data.Chunks();
-            if (source_changed || cache.chunk_revisions.size() != chunks.size())
+            if (source_changed || cache.chunk_revisions.size() != chunks.size() ||
+                cache.uv_tiling != uv_tiling)
                 cache.chunk_revisions.assign(chunks.size(), 0);
+            cache.uv_tiling = uv_tiling;
             for (std::size_t chunk_index = 0; chunk_index < chunks.size(); ++chunk_index)
             {
                 const auto& chunk = chunks[chunk_index];
                 if (chunk.indices.empty()) continue;
 
                 const std::string mesh_key = object_key + ":" + std::to_string(chunk_index);
+                const bool resident = dx12_device_context.HasStaticMesh(mesh_key);
+                DirectX::XMFLOAT3 world_bounds_min{};
+                DirectX::XMFLOAT3 world_bounds_max{};
+                transform_bounds(chunk.bounds_min, chunk.bounds_max, object_world,
+                    world_bounds_min, world_bounds_max);
+                if (!renderer->ShouldSubmitChunk(camera_position, world_bounds_min,
+                    world_bounds_max, resident))
+                {
+                    if (resident) dx12_device_context.ReleaseStaticMesh(mesh_key);
+                    cache.chunk_revisions[chunk_index] = 0;
+                    continue;
+                }
                 if (cache.chunk_revisions[chunk_index] != chunk.revision ||
-                    !dx12_device_context.HasStaticMesh(mesh_key))
+                    !resident)
                 {
                     REPLAY_PROFILE_SCOPE("Landscape/ChunkUpload");
                     // このチャンクが使う頂点だけを詰め直す。境界の頂点は隣とも重複する。
@@ -2306,7 +2350,7 @@ bool framework::build_dx12_static_scene(
                         D3D12StaticVertex vertex;
                         vertex.position = input.position;
                         vertex.normal = input.normal;
-                        vertex.texcoord = input.uv;
+                        vertex.texcoord = { input.uv.x * uv_tiling, input.uv.y * uv_tiling };
                         source.vertices.push_back(vertex);
                         source.indices.push_back(local);
                     }
@@ -2320,8 +2364,9 @@ bool framework::build_dx12_static_scene(
                 draw.owner_id = object->ID().Value();
                 draw.rendering_layer = 0;
                 draw.motion_key = std::to_string(object->ID().Value()) + ":" + mesh_key;
-                draw.world = object->GetTransform().WorldMatrixFloat4x4();
+                draw.world = object_world;
                 draw.base_color = renderer->tint;
+                draw.base_color_texture_key = base_color_texture_key;
                 draw.double_sided = renderer->double_sided;
                 draw.cast_shadow = renderer->cast_shadow;
                 draw.receive_shadow = renderer->receive_shadow;

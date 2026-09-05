@@ -760,6 +760,9 @@ public static class ComponentCatalog
         new("LandscapeRendererComponent", "Landscape Renderer", "Landscape", new ComponentPropertyEntry[]
         {
             new("tint", "color", false, true),
+            new("base_color_texture", "asset", false, true),
+            new("uv_tiling", "float", false, true),
+            new("load_range", "float", false, true),
             new("visible", "bool", false, true),
             new("cast_shadow", "bool", false, true),
             new("receive_shadow", "bool", false, true),
