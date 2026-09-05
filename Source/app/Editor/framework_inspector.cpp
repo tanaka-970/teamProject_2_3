@@ -310,12 +310,14 @@ void framework::draw_landscape_model_inspector(ReplayEngine::Core::Component& co
     auto* landscape = static_cast<ReplayEngine::Components::LandscapeComponent*>(&component);
     // どのモデルから作った地形なのかを、閉じていても分かるよう見出しへ出す。
     std::string current_name;
+    std::string current_path;
     if (!landscape->source_model_asset.empty())
     {
         for (const auto& record : asset_database.Records())
             if (record.guid == landscape->source_model_asset)
             {
                 current_name = record.display_name;
+                current_path = record.source_path.generic_u8string();
                 break;
             }
         if (current_name.empty()) current_name = u8"（見つからないモデル）";
@@ -326,25 +328,38 @@ void framework::draw_landscape_model_inspector(ReplayEngine::Core::Component& co
         current_name + "###LandscapeSourceModel";
     if (!ImGui::CollapsingHeader(header.c_str())) return;
 
-    ImGui::TextDisabled(u8"作成元モデル: %s", current_name.c_str());
+    if (current_path.empty())
+        ImGui::TextDisabled(u8"作成元モデル: %s", current_name.c_str());
+    else
+        ImGui::TextDisabled(u8"作成元モデル: %s  (%s)",
+            current_name.c_str(), current_path.c_str());
     static std::array<char, 96> model_filter{};
     ImGui::SetNextItemWidth(-1.0f);
     ImGui::InputTextWithHint("##LandscapeModelFilter", u8"モデルを検索...",
         model_filter.data(), model_filter.size());
     ImGui::TextDisabled(u8"選ぶとこの地形をそのモデルの形で作り直します。骨やアニメーションを持つモデルは使えません。");
-    if (ImGui::BeginChild("LandscapeModelList", ImVec2(0.0f, 120.0f), true))
+    if (ImGui::BeginChild("LandscapeModelList", ImVec2(0.0f, 180.0f), true))
     {
         for (const auto& record : asset_database.Records())
         {
             if (record.kind != ReplayEngine::Assets::AssetKind::Model) continue;
+            // 名前だけでは区別が付かないので、検索も表示もファイルの場所を含める。
+            const std::string model_path = record.source_path.generic_u8string();
             if (model_filter[0] != '\0' &&
-                record.display_name.find(model_filter.data()) == std::string::npos)
+                record.display_name.find(model_filter.data()) == std::string::npos &&
+                model_path.find(model_filter.data()) == std::string::npos)
                 continue;
             ImGui::PushID(record.guid.c_str());
             const bool is_current = record.guid == landscape->source_model_asset;
-            const std::string label = is_current
-                ? std::string(u8"● ") + record.display_name : record.display_name;
-            if (ImGui::Button(label.c_str()))
+            const std::string label = (is_current ? std::string(u8"● ")
+                : std::string(u8"   ")) + record.display_name;
+            const bool picked = ImGui::Selectable(label.c_str(), is_current,
+                ImGuiSelectableFlags_None, ImVec2(170.0f, 0.0f));
+            if (ImGui::IsItemHovered() && !model_path.empty())
+                ImGui::SetTooltip("%s", model_path.c_str());
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", model_path.c_str());
+            if (picked)
             {
                 std::string message;
                 object_editor_context.BeginEdit(u8"モデルから地形を作る");
