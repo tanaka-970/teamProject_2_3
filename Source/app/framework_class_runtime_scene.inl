@@ -199,8 +199,8 @@
     std::unordered_map<std::string, std::unique_ptr<static_mesh>> builtin_primitive_mesh_cache;
     struct landscape_gpu_cache_entry
     {
+        const void* source = nullptr;
         std::uint64_t revision = 0;
-        std::unique_ptr<static_mesh> mesh;
     };
     std::unordered_map<std::uint64_t, landscape_gpu_cache_entry> landscape_gpu_mesh_cache;
 

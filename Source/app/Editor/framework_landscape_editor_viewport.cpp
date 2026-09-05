@@ -30,7 +30,7 @@ bool framework::handle_landscape_viewport_edit()
     // Stroke の終了だけは Viewport の外へ出ても受け取る。
     if (landscape_editor_tool.StrokeActive() && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
     {
-        const auto command = landscape_editor_tool.EndStroke();
+        auto command = landscape_editor_tool.EndStroke();
 
         // ドラッグ中に止めていた Collision Cook を解除する。
         // Scene 内の一時フラグを全件解除しておけば、選択が途中で変わっても残らない。
@@ -46,9 +46,10 @@ bool framework::handle_landscape_viewport_edit()
 
         if (landscape_stroke_transaction)
         {
-            if (command != nullptr) object_editor_context.CommitEdit();
-            else object_editor_context.CancelEdit();
+            if (command != nullptr) object_editor_context.CommitLandscapeEdit(
+                landscape_stroke_object, std::move(command));
             landscape_stroke_transaction = false;
+            landscape_stroke_object = ReplayEngine::Core::ObjectID::Invalid();
         }
         return true;
     }
@@ -328,20 +329,23 @@ bool framework::handle_landscape_viewport_edit()
         !landscape_editor_tool.StrokeActive())
     {
         landscape_brush_mode = (std::max)(0, (std::min)(landscape_brush_mode, 4));
-        object_editor_context.BeginEdit("Landscape Sculpt");
         landscape_stroke_transaction = landscape_editor_tool.BeginStroke(
             landscape->Data(),
             static_cast<ReplayEngine::Landscape::LandscapeBrushMode>(landscape_brush_mode),
             landscape_brush);
         if (!landscape_stroke_transaction)
         {
-            object_editor_context.CancelEdit();
+            landscape_stroke_object = ReplayEngine::Core::ObjectID::Invalid();
         }
-        else if (auto* collider = object->GetComponent<
-            ReplayEngine::Components::LandscapeColliderComponent>())
+        else
         {
-            // Sculpt 中は古い collision を維持し、release 後に 1 回だけ recook。
-            collider->BeginInteractiveEdit();
+            landscape_stroke_object = object->ID();
+            if (auto* collider = object->GetComponent<
+                ReplayEngine::Components::LandscapeColliderComponent>())
+            {
+                // Sculpt 中は古い collision を維持し、release 後に 1 回だけ recook。
+                collider->BeginInteractiveEdit();
+            }
         }
     }
 

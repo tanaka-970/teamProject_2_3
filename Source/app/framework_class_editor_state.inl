@@ -277,6 +277,7 @@
     std::uint32_t landscape_bridge_b0{ static_cast<std::uint32_t>(-1) };
     std::uint32_t landscape_bridge_b1{ static_cast<std::uint32_t>(-1) };
     bool landscape_stroke_transaction{ false };
+    ReplayEngine::Core::ObjectID landscape_stroke_object;
     float landscape_extrude_distance{ 1.0f };
     float landscape_inset_amount{ 0.25f };
     float landscape_tunnel_depth{ 8.0f };

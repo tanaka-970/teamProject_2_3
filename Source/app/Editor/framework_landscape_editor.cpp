@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <limits>
+#include <memory>
 #include <string>
 
 #include "framework_landscape_editorInternal.h"
@@ -333,11 +334,11 @@ void framework::draw_landscape_editor_toolbar()
 void framework::reset_landscape_editor_state(bool rollback_stroke)
 {
 #ifdef USE_IMGUI
-    bool had_command = false;
+    std::unique_ptr<ReplayEngine::Landscape::LandscapeUndoCommand> command;
     if (landscape_editor_tool.StrokeActive())
     {
         if (rollback_stroke) landscape_editor_tool.CancelStroke();
-        else had_command = landscape_editor_tool.EndStroke() != nullptr;
+        else command = landscape_editor_tool.EndStroke();
     }
 
     // Sculpt 中に止めた Collider cook を、選択変更/Scene切替/Play開始でも必ず解除する。
@@ -352,9 +353,10 @@ void framework::reset_landscape_editor_state(bool rollback_stroke)
     }
     if (landscape_stroke_transaction)
     {
-        if (!rollback_stroke && had_command) object_editor_context.CommitEdit();
-        else object_editor_context.CancelEdit();
+        if (!rollback_stroke && command != nullptr) object_editor_context.CommitLandscapeEdit(
+            landscape_stroke_object, std::move(command));
         landscape_stroke_transaction = false;
+        landscape_stroke_object = ReplayEngine::Core::ObjectID::Invalid();
     }
     landscape_edit_enabled = false;
     landscape_selected_face = no_face;

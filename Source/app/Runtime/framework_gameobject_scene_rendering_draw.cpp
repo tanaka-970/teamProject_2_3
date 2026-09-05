@@ -2260,11 +2260,14 @@ bool framework::build_dx12_static_scene(
 
             const auto& data = landscape->Data();
             const std::string mesh_key = "landscape:" +
-                std::to_string(object->ID().Value()) + ":" + std::to_string(data.Revision());
-            if (!dx12_device_context.HasStaticMesh(mesh_key))
+                std::to_string(object->ID().Value());
+            auto& cache = landscape_gpu_mesh_cache[object->ID().Value()];
+            if (cache.source != &data || cache.revision != data.Revision() ||
+                !dx12_device_context.HasStaticMesh(mesh_key))
             {
                 D3D12StaticMeshSource source;
                 source.key = mesh_key;
+                source.replace_existing = true;
                 source.vertices.reserve(data.Vertices().size());
                 for (const auto& input : data.Vertices())
                 {
@@ -2276,6 +2279,8 @@ bool framework::build_dx12_static_scene(
                 }
                 source.indices = data.Indices();
                 submission.mesh_sources.push_back(std::move(source));
+                cache.source = &data;
+                cache.revision = data.Revision();
             }
 
             D3D12StaticDrawItem draw;

@@ -171,6 +171,7 @@ namespace ReplayEngine::Landscape
     {
         data_ = nullptr;
         if (command_ != nullptr && command_->Empty()) command_.reset();
+        if (command_ != nullptr) command_->Seal();
         return std::move(command_);
     }
 

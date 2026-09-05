@@ -51,6 +51,14 @@ namespace ReplayEngine::Editor
         selection_.PruneMissing(*scene_);
     }
 
+    void EditorContext::CommitLandscapeEdit(Core::ObjectID object,
+        std::unique_ptr<Landscape::LandscapeUndoCommand> command)
+    {
+        if (!CanEdit() || command == nullptr) return;
+        history_.CommitLandscape(object, std::move(command), "Landscape Sculpt");
+        MarkDirty();
+    }
+
     void EditorContext::CancelEdit() noexcept
     {
         history_.Cancel();
