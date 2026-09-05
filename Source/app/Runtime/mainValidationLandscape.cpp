@@ -31,6 +31,8 @@
 #include "../../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
 #include "../../../RePlayEngine/Components/Landscape/LandscapeRendererComponent.h"
 #include "../../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
+#include "../../../RePlayEngine/Scene/Services/SceneCollisionWorld.h"
+#include "../../../RePlayEngine/Physics/CollisionLayers.h"
 #include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../../RePlayEngine/Rendering/Materials/MaterialAsset.h"
 #include "../../../RePlayEngine/Scene/Runtime/Scene.h"
@@ -251,6 +253,88 @@ namespace ReplayEngine::Runtime::Detail
         {
             std::fprintf(stderr, "Landscape Component Scene round-trip mismatch\n");
             return 43;
+        }
+
+        // 立っている地形が壁として返るか。足元の床 1 枚に隠されないことを確かめる。
+        {
+            using ReplayEngine::Landscape::LandscapeVertex;
+            std::vector<LandscapeVertex> wall_vertices;
+            std::vector<std::uint32_t> wall_indices;
+            const auto push_quad = [&](float x0, float y0, float x1, float y1)
+            {
+                const std::uint32_t base = static_cast<std::uint32_t>(wall_vertices.size());
+                for (int corner = 0; corner < 4; ++corner)
+                {
+                    LandscapeVertex vertex;
+                    const bool far_side = corner == 1 || corner == 2;
+                    const bool high_side = corner >= 2;
+                    vertex.position = { high_side ? x1 : x0, high_side ? y1 : y0,
+                        far_side ? 5.0f : -5.0f };
+                    wall_vertices.push_back(vertex);
+                }
+                wall_indices.insert(wall_indices.end(),
+                    { base, base + 1, base + 2, base, base + 2, base + 3 });
+            };
+            // 平らな床と、法線 y が 0.17 ほどの急斜面。急斜面は壁の条件を満たす。
+            push_quad(-5.0f, 0.0f, 2.0f, 0.0f);
+            push_quad(2.0f, 0.0f, 2.5f, 3.0f);
+
+            ReplayEngine::Scene::Scene wall_scene("LandscapeWallValidation");
+            auto* wall_ground = wall_scene.CreateGameObject("Ground");
+            auto* wall_landscape = wall_ground != nullptr
+                ? wall_ground->AddComponent<ReplayEngine::Components::LandscapeComponent>() : nullptr;
+            auto* wall_collider = wall_ground != nullptr
+                ? wall_ground->AddComponent<ReplayEngine::Components::LandscapeColliderComponent>() : nullptr;
+            if (wall_landscape == nullptr || wall_collider == nullptr ||
+                !wall_landscape->Data().InitializeMesh(wall_vertices, wall_indices, 1.0f, 0, 0))
+            {
+                std::fprintf(stderr, "Landscape wall scene setup failed\n");
+                return 44;
+            }
+            wall_collider->RefreshGeometryIfChanged();
+
+            ReplayEngine::Scene::SceneCollisionWorld wall_world;
+            wall_world.AttachScene(&wall_scene);
+            wall_scene.Services().SetPhysics(&wall_world);
+            wall_world.Refresh();
+
+            // 床の上に立ったまま、急斜面へ横から向かう。
+            const float radius = 0.38f;
+            const DirectX::XMFLOAT3 start{ 0.0f, radius - 0.01f, 0.0f };
+            const DirectX::XMFLOAT3 end{ 2.2f, radius - 0.01f, 0.0f };
+            ReplayEngine::Scene::CollisionQueryFilter filter;
+            filter.layer = ReplayEngine::Physics::CollisionLayers::Default;
+            filter.mask = ReplayEngine::Physics::CollisionLayers::all_layers_mask;
+
+            ReplayEngine::Scene::SphereSweepHit any_hit{};
+            const bool any_found = wall_world.SweepSphereFiltered(
+                start, end, radius, 1.0f, filter, any_hit);
+
+            ReplayEngine::Scene::SphereSweepHit wall_hit{};
+            const bool wall_found = wall_world.SweepSphereFiltered(
+                start, end, radius, 0.249f, filter, wall_hit);
+
+            wall_scene.Services().SetPhysics(nullptr);
+            wall_world.DetachScene();
+
+            if (!any_found)
+            {
+                std::fprintf(stderr, "Landscape wall setup produced no hit at all\n");
+                return 45;
+            }
+            if (!wall_found)
+            {
+                std::fprintf(stderr,
+                    "Landscape wall not reported: standing contact hides the slope "
+                    "(any_hit normal.y=%.3f)\n", any_hit.normal.y);
+                return 46;
+            }
+            if (wall_hit.normal.y > 0.249f)
+            {
+                std::fprintf(stderr, "Landscape wall hit is not a wall: normal.y=%.3f\n",
+                    wall_hit.normal.y);
+                return 47;
+            }
         }
 
         std::fprintf(stderr,

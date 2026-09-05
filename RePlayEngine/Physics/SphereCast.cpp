@@ -117,7 +117,14 @@ namespace
     bool NormalAllowed(FXMVECTOR normal,
         const ReplayEngine::Physics::SphereCastQuery& query) noexcept
     {
-        const float y = XMVectorGetY(normal);
+        XMVECTOR allowed_normal = normal;
+        if (query.normal_transform != nullptr)
+        {
+            allowed_normal = XMVector3Normalize(XMVector3TransformNormal(
+                normal, XMLoadFloat4x4(query.normal_transform)));
+        }
+        if (query.flip_normal) allowed_normal = XMVectorNegate(allowed_normal);
+        const float y = XMVectorGetY(allowed_normal);
         return y >= query.minimum_normal_y && y <= query.maximum_normal_y;
     }
 

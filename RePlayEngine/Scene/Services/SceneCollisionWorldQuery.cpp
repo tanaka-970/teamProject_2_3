@@ -80,6 +80,7 @@ namespace ReplayEngine::Scene
         const XMFLOAT4X4& inverse_world, bool negative_scale, float local_radius_scale,
         const Physics::Triangle* triangles, std::size_t triangle_count,
         const XMFLOAT3& start, const XMFLOAT3& end, float radius,
+        float minimum_normal_y, float maximum_normal_y,
         Physics::SphereCastHit& hit) const
     {
         if (triangles == nullptr || triangle_count == 0) return false;
@@ -97,9 +98,18 @@ namespace ReplayEngine::Scene
         // 半径もローカルへ。非一様拡縮では真球にならないため、
         // 最も縮む軸で割って安全側（大きめ）に取る。
         query.radius = radius * local_radius_scale;
-        // 法線の向き判定はワールドで行うので、ローカルでは絞らない。
-        query.minimum_normal_y = -1.0f;
-        query.maximum_normal_y = 1.0f;
+        query.minimum_normal_y = minimum_normal_y;
+        query.maximum_normal_y = maximum_normal_y;
+
+        const XMMATRIX normal_matrix = XMMatrixTranspose(inverse);
+        XMFLOAT4X4 normal_transform{};
+        if (minimum_normal_y > -1.0f || maximum_normal_y < 1.0f)
+        {
+            // 法線フィルタは候補選択中にワールド空間で行う。
+            XMStoreFloat4x4(&normal_transform, normal_matrix);
+            query.normal_transform = &normal_transform;
+            query.flip_normal = negative_scale;
+        }
 
         Physics::SphereCastHit local_hit{};
         if (!Physics::CastSphereAgainstTriangles(query, triangles, triangle_count, local_hit))
@@ -117,7 +127,6 @@ namespace ReplayEngine::Scene
             XMVector3TransformCoord(XMLoadFloat3(&local_hit.position), world_matrix));
 
         // 法線は逆行列の転置で変換する。位置と同じ行列では正しくならない。
-        const XMMATRIX normal_matrix = XMMatrixTranspose(inverse);
         XMVECTOR world_normal = XMVector3TransformNormal(
             XMLoadFloat3(&local_hit.normal), normal_matrix);
         world_normal = XMVector3Normalize(world_normal);
@@ -134,6 +143,7 @@ namespace ReplayEngine::Scene
 
     bool SceneCollisionWorld::SweepSingleCollider(const Components::ColliderComponent& collider,
         const XMFLOAT3& start, const XMFLOAT3& end, float radius,
+        float minimum_normal_y, float maximum_normal_y,
         Physics::SphereCastHit& hit) const
     {
         switch (collider.Shape())
@@ -176,7 +186,7 @@ namespace ReplayEngine::Scene
             return SweepLocalTriangles(landscape.WorldMatrix(), landscape.InverseWorldMatrix(),
                 landscape.NegativeScale(), landscape.LocalRadiusScale(),
                 scratch_triangles_.data(), scratch_triangles_.size(),
-                start, end, radius, hit);
+                start, end, radius, minimum_normal_y, maximum_normal_y, hit);
         }
 
         case Components::ColliderShape::Mesh:
@@ -216,7 +226,7 @@ namespace ReplayEngine::Scene
             return SweepLocalTriangles(mesh.WorldMatrix(), mesh.InverseWorldMatrix(),
                 mesh.NegativeScale(), mesh.LocalRadiusScale(),
                 scratch_triangles_.data(), scratch_triangles_.size(),
-                start, end, radius, hit);
+                start, end, radius, minimum_normal_y, maximum_normal_y, hit);
         }
 
         case Components::ColliderShape::Box:
@@ -248,7 +258,8 @@ namespace ReplayEngine::Scene
 
             // 回転と平行移動しか入っていないので、半径は等倍のままでよい。
             return SweepLocalTriangles(world_matrix, inverse_matrix, false, 1.0f,
-                triangles, Physics::box_triangle_count, start, end, radius, hit);
+                triangles, Physics::box_triangle_count, start, end, radius,
+                minimum_normal_y, maximum_normal_y, hit);
         }
 
         case Components::ColliderShape::Capsule:
@@ -323,7 +334,8 @@ namespace ReplayEngine::Scene
             if (collider == nullptr || !collider->BlocksMovement()) continue;
 
             Physics::SphereCastHit shape_hit{};
-            if (!SweepSingleCollider(*collider, start, end, radius, shape_hit)) continue;
+            if (!SweepSingleCollider(*collider, start, end, radius,
+                minimum_normal_y, maximum_normal_y, shape_hit)) continue;
 
             // 面の向きでの絞り込みはワールド空間で行う。
             // 床と壁の区別は「ワールドでの上向き成分」で決まるため。
@@ -448,7 +460,8 @@ namespace ReplayEngine::Scene
             if (collider == nullptr || !collider->BlocksMovement()) continue;
 
             Physics::SphereCastHit shape_hit{};
-            if (!SweepSingleCollider(*collider, origin, end, 0.0f, shape_hit)) continue;
+            if (!SweepSingleCollider(*collider, origin, end, 0.0f, -1.0f, 1.0f,
+                shape_hit)) continue;
             const float fraction = (std::max)(0.0f, (std::min)(1.0f, shape_hit.fraction));
             hits.push_back(MakeQueryHit(entry, shape_hit.position, shape_hit.normal,
                 fraction * max_distance, fraction));
@@ -478,7 +491,8 @@ namespace ReplayEngine::Scene
             if (collider == nullptr || !collider->BlocksMovement()) continue;
 
             Physics::SphereCastHit shape_hit{};
-            if (!SweepSingleCollider(*collider, origin, end, radius, shape_hit)) continue;
+            if (!SweepSingleCollider(*collider, origin, end, radius, -1.0f, 1.0f,
+                shape_hit)) continue;
             const float fraction = (std::max)(0.0f, (std::min)(1.0f, shape_hit.fraction));
             const XMFLOAT3 point = Add(shape_hit.center, Scale(shape_hit.normal, -radius));
             hits.push_back(MakeQueryHit(entry, point, shape_hit.normal,
@@ -502,7 +516,8 @@ namespace ReplayEngine::Scene
             const Components::ColliderComponent* collider = Resolve(entry);
             if (collider == nullptr) continue;
             Physics::SphereCastHit shape_hit{};
-            if (!SweepSingleCollider(*collider, center, center, radius, shape_hit)) continue;
+            if (!SweepSingleCollider(*collider, center, center, radius, -1.0f, 1.0f,
+                shape_hit)) continue;
             hits.push_back(MakeQueryHit(entry, shape_hit.position, shape_hit.normal, 0.0f, 0.0f));
         }
         return !hits.empty();
@@ -523,7 +538,8 @@ namespace ReplayEngine::Scene
             if (collider == nullptr) continue;
             Physics::SphereCastHit shape_hit{};
             // Capsule は線分上を移動する球の体積と同値。
-            if (!SweepSingleCollider(*collider, point_a, point_b, radius, shape_hit)) continue;
+            if (!SweepSingleCollider(*collider, point_a, point_b, radius, -1.0f, 1.0f,
+                shape_hit)) continue;
             hits.push_back(MakeQueryHit(entry, shape_hit.position, shape_hit.normal, 0.0f, 0.0f));
         }
         return !hits.empty();
