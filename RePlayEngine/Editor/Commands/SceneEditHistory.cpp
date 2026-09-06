@@ -27,7 +27,7 @@ namespace ReplayEngine::Editor
 
         in_transaction_ = true;
         pending_label_ = std::move(label);
-        CaptureScene(scene, pending_before_);
+        CaptureScene(scene, pending_before_, Scene::Serialization::SceneCaptureMode::Undo);
     }
 
     void SceneEditHistory::Commit(const Scene::Scene& scene)
@@ -38,7 +38,7 @@ namespace ReplayEngine::Editor
         Entry entry;
         entry.label = std::move(pending_label_);
         entry.before = std::move(pending_before_);
-        CaptureScene(scene, entry.after);
+        CaptureScene(scene, entry.after, Scene::Serialization::SceneCaptureMode::Undo);
 
         pending_label_.clear();
         pending_before_.Clear();

@@ -1,4 +1,4 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "skinned_mesh.h"
 #include "gltf_model.h"
 #include "../Editor/GoldenImageState.h"
@@ -231,6 +231,7 @@ void framework::apply_pending_resize()
 
 bool framework::uninitialize()
 {
+    if (!standalone_game_mode) flush_editor_camera_preset_save();
     // Scene View の視点を残す。再起動後に同じ場所から再開できる。
     // 失敗しても続行する（次回は既定位置になるだけ）。
     if (!standalone_game_mode) save_editor_camera_state();

@@ -26,8 +26,14 @@ namespace ReplayEngine::Landscape
         RecordPosition(index, position, changed);
     }
 
+    void LandscapeUndoCommand::BeginTopology(const LandscapeData& data)
+    { topology_before_ = topology_after_ = data.CaptureGeometry(); }
+    void LandscapeUndoCommand::EndTopology(const LandscapeData& data)
+    { topology_after_ = data.CaptureGeometry(); }
+
     void LandscapeUndoCommand::Undo(LandscapeData& data) const
     {
+        if (topology_before_) { data.RestoreGeometry(topology_before_); return; }
         for (const Sample& sample : samples_)
         {
             if (sample.index >= data.VertexCount()) continue;
@@ -43,10 +49,12 @@ namespace ReplayEngine::Landscape
             data.SetVertexPosition(sample.index, target, false);
         }
         data.FinalizeGeometryEdit();
+        data.FinishSculpt();
     }
 
     void LandscapeUndoCommand::Redo(LandscapeData& data) const
     {
+        if (topology_after_) { data.RestoreGeometry(topology_after_); return; }
         for (const Sample& sample : samples_)
         {
             if (sample.index >= data.VertexCount()) continue;
@@ -60,6 +68,7 @@ namespace ReplayEngine::Landscape
             data.SetVertexPosition(sample.index, target, false);
         }
         data.FinalizeGeometryEdit();
+        data.FinishSculpt();
     }
 
     void LandscapeUndoCommand::Seal()

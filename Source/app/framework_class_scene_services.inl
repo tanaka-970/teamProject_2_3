@@ -1,4 +1,4 @@
-﻿// Scene/Runtime/描画提出/カメラ/衝突/Project Browser 接続。
+// Scene/Runtime/描画提出/カメラ/衝突/Project Browser 接続。
 // framework_class.h の class framework 内部からのみ include する。
 
     // --- GameObject / Component 基盤との接続 -------------------------------
@@ -180,6 +180,7 @@ private:
     const ReplayEngine::Editor::EditorCameraPreset& active_editor_camera_preset() const;
     bool switch_editor_camera_preset(const std::string& preset_id);
     bool save_active_editor_camera_preset();
+    void flush_editor_camera_preset_save();
     bool make_active_editor_camera_preset_personal_copy();
 
     // 編集カメラ状態の保存・復元。Scene ファイルには一切書き込まない。

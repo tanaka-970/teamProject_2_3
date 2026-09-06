@@ -1,4 +1,4 @@
-﻿#include "skinned_mesh.h"
+#include "skinned_mesh.h"
 
 #include "tinygltf-release/tiny_gltf.h"
 #include "../../RePlayEngine/Assets/TextureCompressor.h"
@@ -705,6 +705,7 @@ bool skinned_mesh::import_gltf(const std::filesystem::path& filename, float requ
         gltf_materials_.emplace(default_material_id, gltf_material_info{});
     }
 
+    InvalidateMaterialSubsetNames();
     meshes.clear();
     for (std::size_t ordered_node = 0; ordered_node < ordered_to_original.size(); ++ordered_node)
     {

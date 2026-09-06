@@ -1,4 +1,4 @@
-﻿#include "misc.h"
+#include "misc.h"
 #include "skinned_mesh.h"
 #include<fstream>
 #include <sstream>
@@ -63,6 +63,7 @@ void fetch_bone_influences(const FbxMesh* fbx_mesh,
 #if REPLAY_ENABLE_FBX_IMPORTER
 void skinned_mesh::fetch_meshes(FbxScene* fbx_scene, std::vector<mesh>& meshes)
 {
+    InvalidateMaterialSubsetNames();
     for (const scene::node& node : scene_view.nodes)
     {
         if (node.attribute != static_cast<int32_t>(FbxNodeAttribute::EType::eMesh))

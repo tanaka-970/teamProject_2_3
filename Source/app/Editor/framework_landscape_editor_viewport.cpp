@@ -33,32 +33,12 @@ bool framework::handle_landscape_viewport_edit()
     // Stroke の終了だけは Viewport の外へ出ても受け取る。
     if (landscape_stroke_transaction && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
     {
-        const bool subdivide_stroke = !landscape_editor_tool.StrokeActive();
-        std::unique_ptr<ReplayEngine::Landscape::LandscapeUndoCommand> command;
-        if (!subdivide_stroke) command = landscape_editor_tool.EndStroke();
-
-        // ドラッグ中に止めていた Collision Cook を解除する。
-        // Scene 内の一時フラグを全件解除しておけば、選択が途中で変わっても残らない。
-        ReplayEngine::Scene::Scene& release_scene = active_object_scene();
-        for (std::size_t index = 0; index < release_scene.GameObjectCount(); ++index)
-        {
-            auto* release_object = release_scene.GameObjectAt(index);
-            if (release_object == nullptr || release_object->PendingDestroy()) continue;
-            if (auto* release_collider = release_object->GetComponent<
-                ReplayEngine::Components::LandscapeColliderComponent>())
-                release_collider->EndInteractiveEdit();
-        }
-
-        if (subdivide_stroke)
-        {
-            if (landscape_subdivide_stroke_changed) object_editor_context.CommitEdit();
-            else object_editor_context.CancelEdit();
-        }
-        else
-        {
-            if (command != nullptr) object_editor_context.CommitLandscapeEdit(
-                landscape_stroke_object, std::move(command));
-        }
+        auto command = landscape_editor_tool.EndStroke();
+        auto* release_object = active_object_scene().FindGameObjectByID(landscape_stroke_object);
+        if (release_object && !release_object->PendingDestroy())
+            if (auto* collider = release_object->GetComponent<ReplayEngine::Components::LandscapeColliderComponent>())
+                collider->EndInteractiveEdit();
+        if (command) object_editor_context.CommitLandscapeEdit(landscape_stroke_object, std::move(command));
         landscape_stroke_transaction = false;
         landscape_subdivide_stroke_changed = false;
         landscape_stroke_object = ReplayEngine::Core::ObjectID::Invalid();
@@ -143,7 +123,7 @@ bool framework::handle_landscape_viewport_edit()
                 const int preview_mode = (std::max)(0,
                     (std::min)(landscape_brush_preview_mode, 4));
                 static TerrainRingCache terrain_ring_cache;
-                terrain_ring_cache.Prepare(data, hit.position,
+                terrain_ring_cache.Prepare(data, hit,
                     landscape_brush.radius, preview_mode);
                 std::size_t ring_cache_index = 0;
 
@@ -151,14 +131,14 @@ bool framework::handle_landscape_viewport_edit()
                 {
                     DrawBrushFaceInfluence(draw, data, transform, view, projection,
                         width, height, projection_min_x, projection_min_y,
-                        hit.position, landscape_brush.radius);
+                        hit.position, landscape_brush.radius, terrain_ring_cache);
                 }
 
                 if (preview_mode == 2 || preview_mode == 4)
                 {
                     DrawTerrainGridInBrush(draw, data, transform, view, projection,
                         width, height, projection_min_x, projection_min_y,
-                        hit.position, landscape_brush.radius);
+                        hit.position, landscape_brush.radius, terrain_ring_cache);
                 }
 
                 if (preview_mode == 3 || preview_mode == 4)
@@ -194,40 +174,15 @@ bool framework::handle_landscape_viewport_edit()
                     IM_COL32(255, 190, 55, 245), 2.0f,
                     terrain_ring_cache, ring_cache_index++);
 
-                // 穴/崖/洞窟では XZ terrain ring が途切れても、ブラシ自体は消さない。
-                // hit center と同じ投影で screen-space fallback を重ねる。
-                ImVec2 radius_point{};
-                DirectX::XMFLOAT3 radius_local = hit.position;
-                radius_local.x += landscape_brush.radius;
-                float radius_pixels = 12.0f;
-                if (ProjectToScene(radius_local, transform, view, projection, width, height,
-                    projection_min_x, projection_min_y, radius_point))
-                {
-                    const float dx = radius_point.x - center.x;
-                    const float dy = radius_point.y - center.y;
-                    radius_pixels = std::sqrt(dx * dx + dy * dy);
-                }
-                radius_pixels = (std::max)(5.0f, (std::min)(radius_pixels, 4096.0f));
-                draw->AddCircle(center, radius_pixels, IM_COL32(255, 210, 80, 150), 64, 1.25f);
-                draw->AddCircleFilled(center, 3.0f, IM_COL32(255, 238, 180, 255));
-
+                draw->AddCircleFilled(center, 3.0f, IM_COL32(255,238,180,255));
                 constexpr float cross = 0.35f;
-                DirectX::XMFLOAT3 x0{}, x1{}, z0{}, z1{};
-                SampleLandscapeSurfaceAtXZ(data, hit.position.x - cross,
-                    hit.position.z, hit.position.y, x0);
-                SampleLandscapeSurfaceAtXZ(data, hit.position.x + cross,
-                    hit.position.z, hit.position.y, x1);
-                SampleLandscapeSurfaceAtXZ(data, hit.position.x,
-                    hit.position.z - cross, hit.position.y, z0);
-                SampleLandscapeSurfaceAtXZ(data, hit.position.x,
-                    hit.position.z + cross, hit.position.y, z1);
-                x0.y += 0.06f; x1.y += 0.06f; z0.y += 0.06f; z1.y += 0.06f;
-                DrawProjectedLine(draw, transform, view, projection, width, height,
-                    projection_min_x, projection_min_y, x0, x1,
-                    IM_COL32(255, 235, 160, 255), 2.0f);
-                DrawProjectedLine(draw, transform, view, projection, width, height,
-                    projection_min_x, projection_min_y, z0, z1,
-                    IM_COL32(255, 235, 160, 255), 2.0f);
+                DirectX::XMFLOAT3 a{}, b{};
+                if (terrain_ring_cache.Sample(-cross,0,a) && terrain_ring_cache.Sample(cross,0,b))
+                    DrawProjectedLine(draw,transform,view,projection,width,height,
+                        projection_min_x,projection_min_y,a,b,IM_COL32(255,235,160,255),2.0f);
+                if (terrain_ring_cache.Sample(0,-cross,a) && terrain_ring_cache.Sample(0,cross,b))
+                    DrawProjectedLine(draw,transform,view,projection,width,height,
+                        projection_min_x,projection_min_y,a,b,IM_COL32(255,235,160,255),2.0f);
 
                 char radius_text[32]{};
                 std::snprintf(radius_text, sizeof(radius_text),
@@ -353,17 +308,8 @@ bool framework::handle_landscape_viewport_edit()
         landscape_brush_mode = (std::max)(0, (std::min)(landscape_brush_mode, 5));
         const auto brush_mode = static_cast<ReplayEngine::Landscape::LandscapeBrushMode>(
             landscape_brush_mode);
-        if (brush_mode == ReplayEngine::Landscape::LandscapeBrushMode::Subdivide)
-        {
-            object_editor_context.BeginEdit(u8"地形をブラシで細かくする");
-            landscape_stroke_transaction = true;
-            landscape_subdivide_stroke_changed = false;
-        }
-        else
-        {
-            landscape_stroke_transaction = landscape_editor_tool.BeginStroke(
-                landscape->Data(), brush_mode, landscape_brush);
-        }
+        landscape_stroke_transaction = landscape_editor_tool.BeginStroke(
+            landscape->Data(), brush_mode, landscape_brush);
         if (!landscape_stroke_transaction)
         {
             landscape_stroke_object = ReplayEngine::Core::ObjectID::Invalid();

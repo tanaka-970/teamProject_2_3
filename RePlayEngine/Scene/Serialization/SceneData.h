@@ -9,10 +9,12 @@
 #include <DirectXMath.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
+namespace ReplayEngine::Landscape { struct LandscapeGeometry; }
 namespace ReplayEngine::Scene
 {
     class Scene;
@@ -77,6 +79,8 @@ namespace ReplayEngine::Scene::Serialization
         // プロパティ。型が解決できなかった場合も、ここへ読み込んだまま保持する
         // （MissingComponent が丸ごと預かる）。
         Reflection::PropertyBag properties;
+        // Undo-only immutable binary geometry. File captures still use mesh_data.
+        std::shared_ptr<const Landscape::LandscapeGeometry> landscape_geometry;
     };
 
     struct GameObjectData
@@ -213,7 +217,9 @@ namespace ReplayEngine::Scene::Serialization
     // ComponentRegistry で serializable=false の型も保存しない
     // （TransformComponent は GameObject 側の transform として保存済みのため）。
     std::uint64_t SceneCaptureCount() noexcept;
-    void CaptureScene(const Scene& scene, SceneData& output);
+    enum class SceneCaptureMode { File, Undo };
+    void CaptureScene(const Scene& scene, SceneData& output,
+        SceneCaptureMode mode = SceneCaptureMode::File);
 
     // 生きている GameObject が持つ ObjectID 参照を付け替える。
     // Scene 遷移で Persistent 階層を新しい Scene の ID 空間へ移すときに使う。

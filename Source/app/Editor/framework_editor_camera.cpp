@@ -1,4 +1,4 @@
-﻿// Scene View の編集カメラと framework の接続部。
+// Scene View の編集カメラと framework の接続部。
 //
 // 【この 1 ファイルにまとめている理由】
 //   ImGui / Win32 から入力を読むのはここだけ。
@@ -167,6 +167,14 @@ ReplayEngine::Editor::EditorViewportCamera::Ray framework::viewport_picking_ray(
 
 void framework::update_editor_camera(float elapsed_time)
 {
+#ifdef USE_IMGUI
+    if (editor_camera_preset_save_pending)
+    {
+        editor_camera_preset_save_delay -= elapsed_time;
+        if (editor_camera_preset_save_delay <= 0.0f || !ImGui::IsMouseDown(ImGuiMouseButton_Right))
+            flush_editor_camera_preset_save();
+    }
+#endif
     editor_camera_consumed_input = false;
 
 #ifdef USE_IMGUI
@@ -342,10 +350,8 @@ void framework::update_editor_camera(float elapsed_time)
     // RMB+Wheel など profile 自身が値を変更した場合、その user preset へ保存する。
     if (editor_camera.move_speed != move_speed_before_input)
     {
-        const float changed_speed = editor_camera.move_speed;
-        if (!camera_preset.Editable()) make_active_editor_camera_preset_personal_copy();
-        editor_camera.move_speed = changed_speed;
-        save_active_editor_camera_preset();
+        editor_camera_preset_save_pending = true;
+        editor_camera_preset_save_delay = 0.75f;
     }
 
     // ---- マウスロック -------------------------------------------------------

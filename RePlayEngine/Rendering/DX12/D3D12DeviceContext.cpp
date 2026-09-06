@@ -1,4 +1,4 @@
-﻿#include "D3D12DeviceContext.h"
+#include "D3D12DeviceContext.h"
 #include "D3D12ResourceFactory.h"
 #include "D3D12ObjectName.h"
 
@@ -2553,6 +2553,22 @@ namespace ReplayEngine::Rendering::DX12
         {
             return false;
         }
+        return true;
+    }
+
+    bool D3D12DeviceContext::UpdateStaticMeshVertices(const D3D12StaticMeshSource& source) noexcept
+    {
+        const auto existing = static_mesh_cache_.find(source.key);
+        if (existing == static_mesh_cache_.end() || source.vertices.empty()) return false;
+        const auto bytes = source.vertices.size() * sizeof(D3D12StaticVertex);
+        if (bytes > UINT32_MAX) return false;
+        auto mesh = std::make_unique<D3D12MeshBuffer>();
+        if (!mesh->UploadVerticesSharingIndices(device_.Get(), upload_context_, *existing->second,
+            source.vertices.data(), static_cast<std::uint32_t>(bytes), sizeof(D3D12StaticVertex))) return false;
+        mesh->SetDebugName(source.key);
+        // Keep the old VB alive to its fence. The immutable IB is shared by both versions.
+        RetireStaticMesh(std::move(existing->second));
+        existing->second = std::move(mesh);
         return true;
     }
 

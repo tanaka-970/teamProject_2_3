@@ -1,4 +1,4 @@
-﻿#include "D3D12DeviceContext.h"
+#include "D3D12DeviceContext.h"
 #include "D3D12ObjectName.h"
 
 #include <algorithm>
@@ -2014,6 +2014,11 @@ namespace ReplayEngine::Rendering::DX12
         bool upload_ok = true;
         for (const D3D12StaticMeshSource& source : submission.mesh_sources)
         {
+            if (source.vertices_only)
+            {
+                if (allow_static_mesh_cache_replacement && !UpdateStaticMeshVertices(source)) upload_ok = false;
+                continue;
+            }
             if (source.replace_existing && allow_static_mesh_cache_replacement)
             {
                 const auto existing = static_mesh_cache_.find(source.key);
@@ -2136,6 +2141,11 @@ namespace ReplayEngine::Rendering::DX12
         bool upload_ok = true;
         for (const D3D12StaticMeshSource& source : submission.mesh_sources)
         {
+            if (source.vertices_only)
+            {
+                if (options.allow_static_mesh_cache_replacement && !UpdateStaticMeshVertices(source)) upload_ok = false;
+                continue;
+            }
             if (source.replace_existing && options.allow_static_mesh_cache_replacement)
             {
                 const auto existing = static_mesh_cache_.find(source.key);

@@ -10,6 +10,7 @@
 
 #include <DirectXCollision.h>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -24,6 +25,12 @@ namespace ReplayEngine::Landscape
 
     namespace
     {
+        std::uint64_t NextGeometryRevision() noexcept
+        {
+            static std::atomic<std::uint64_t> revision{1};
+            return revision.fetch_add(1, std::memory_order_relaxed);
+        }
+
         bool RayTriangle(const XMFLOAT3& origin, const XMFLOAT3& direction,
             const XMFLOAT3& a, const XMFLOAT3& b, const XMFLOAT3& c,
             float& distance) noexcept
@@ -133,7 +140,9 @@ namespace ReplayEngine::Landscape
             }
         }
 
-        revision_ = 1;
+        revision_ = NextGeometryRevision();
+        geometry_snapshot_.reset();
+        touched_vertices_.clear();
         RecalculateNormals();
         RecalculateBounds();
         BuildChunks();
@@ -157,7 +166,9 @@ namespace ReplayEngine::Landscape
         cell_size_ = grid_cell_hint;
         vertices_ = std::move(vertices);
         indices_ = std::move(indices);
-        revision_ = 1;
+        revision_ = NextGeometryRevision();
+        geometry_snapshot_.reset();
+        touched_vertices_.clear();
         RecalculateNormals();
         RecalculateBounds();
         BuildChunks();
@@ -170,7 +181,7 @@ namespace ReplayEngine::Landscape
         if (vertices_.size() < 3 || indices_.size() < 3 || indices_.size() % 3 != 0 ||
             vertices_.size() > maximum_vertices || indices_.size() > maximum_indices ||
             !std::isfinite(cell_size_) || cell_size_ <= 0.0f) return false;
-        for (std::uint32_t index : indices_) if (index >= vertices_.size()) return false;
+        // Indices are private and validated at import; topology mutators preserve validity.
         return true;
     }
 
@@ -225,6 +236,7 @@ namespace ReplayEngine::Landscape
             std::fabs(before.z - position.z) <= epsilon) return false;
         horizontal_travel_ = (std::max)(horizontal_travel_,
             (std::max)(std::fabs(before.x - position.x), std::fabs(before.z - position.z)));
+        geometry_snapshot_.reset();
         vertices_[index].position = position;
         MarkVertexDirty(index);
         if (finalize) FinalizeGeometryEdit();
@@ -258,7 +270,7 @@ namespace ReplayEngine::Landscape
 
     void LandscapeData::TouchGeometry() noexcept
     {
-        ++revision_;
+        revision_ = NextGeometryRevision();
         if (revision_ == 0) revision_ = 1;
 
         // どこを触ったか分からないときだけ全部を上げる。
@@ -271,7 +283,7 @@ namespace ReplayEngine::Landscape
         // Recompute affected normals from every incident face, including other chunks.
         chunk_dirty_marks_.assign(chunks_.size(), 0);
         normal_vertices_.clear();
-        if (normal_marks_.size() != vertices_.size()) normal_marks_.assign(vertices_.size(), 0);
+        normal_marks_.resize(vertices_.size(), 0);
         if (++normal_generation_ == 0)
         {
             std::fill(normal_marks_.begin(), normal_marks_.end(), 0);
@@ -322,6 +334,7 @@ namespace ReplayEngine::Landscape
 
     void LandscapeData::FinalizeGeometryEdit() noexcept
     {
+        geometry_snapshot_.reset();
         if (topology_batch_depth_ > 0)
         {
             topology_batch_dirty_ = true;
@@ -334,10 +347,21 @@ namespace ReplayEngine::Landscape
         {
             RecalculateNormals();
             RecalculateBounds();
+            touched_vertices_.clear();
             TouchGeometry();
             BuildChunks();
             return;
         }
+
+        bool topology_changed = false;
+        for (std::size_t chunk=0; chunk<chunk_topology_dirty_.size(); ++chunk)
+            if (chunk_topology_dirty_[chunk])
+            {
+                RebuildChunkLayout(chunk);
+                chunk_topology_dirty_[chunk] = 0;
+                topology_changed = true;
+            }
+        if (topology_changed) topology_revision_ = NextGeometryRevision();
 
         // どこを触ったか分かっているときは、法線も境界もそのチャンクだけで済ませる。
         // 全走査すると 1 ストロークごとに全頂点を 3 周することになる。
@@ -423,23 +447,7 @@ namespace ReplayEngine::Landscape
             bounds_max_.y = (std::max)(bounds_max_.y, vertex.position.y);
             bounds_max_.z = (std::max)(bounds_max_.z, vertex.position.z);
         }
-        // The local index layout is immutable until repartition/topology changes.
-        std::vector<std::uint32_t> remap(vertices_.size(), UINT32_MAX);
-        for (LandscapeChunk& chunk : chunks_)
-        {
-            for (const auto vertex : chunk.indices)
-            {
-                if (remap[vertex] == UINT32_MAX)
-                {
-                    remap[vertex] = static_cast<std::uint32_t>(chunk.vertex_map.size());
-                    chunk.vertex_map.push_back(vertex);
-                }
-                chunk.local_indices.push_back(remap[vertex]);
-            }
-            for (const auto vertex : chunk.vertex_map) remap[vertex] = UINT32_MAX;
-            RecalculateChunkBounds(chunk);
-        }
-        horizontal_travel_ = 0.0f;
+        for (LandscapeChunk& chunk : chunks_) RecalculateChunkBounds(chunk);
     }
     bool LandscapeData::Raycast(const XMFLOAT3& origin, const XMFLOAT3& direction,
         float max_distance, LandscapeRayHit& hit) const noexcept
@@ -521,10 +529,12 @@ namespace ReplayEngine::Landscape
     // 三角形を XZ で区切って束ねる。任意 topology なので格子は前提にせず、重心で振り分ける。
     void LandscapeData::BuildChunks()
     {
+        topology_revision_ = NextGeometryRevision();
         chunks_.clear();
         chunk_faces_.clear();
         vertex_chunks_.clear();
         vertex_faces_.clear();
+        vertex_neighbors_.clear();
         chunk_divisions_ = 1;
         if (vertices_.empty() || indices_.size() < 3) return;
 
@@ -540,8 +550,13 @@ namespace ReplayEngine::Landscape
 
         chunks_.resize(static_cast<std::size_t>(divisions) * divisions);
         chunk_faces_.resize(chunks_.size());
+        face_chunks_.resize(FaceCount());
+        face_chunk_offsets_.resize(FaceCount());
+        chunk_topology_dirty_.assign(chunks_.size(),0);
+        subdivision_repartition_pending_ = false;
         vertex_chunks_.resize(vertices_.size());
         vertex_faces_.resize(vertices_.size());
+        vertex_neighbors_.resize(vertices_.size());
         for (int z = 0; z < divisions; ++z)
         {
             for (int x = 0; x < divisions; ++x)
@@ -570,6 +585,8 @@ namespace ReplayEngine::Landscape
 
             const std::uint32_t chunk_index = static_cast<std::uint32_t>(cz * divisions + cx);
             LandscapeChunk& chunk = chunks_[chunk_index];
+            face_chunks_[offset/3] = chunk_index;
+            face_chunk_offsets_[offset/3] = static_cast<std::uint32_t>(chunk.indices.size());
             chunk.indices.push_back(indices_[offset]);
             chunk.indices.push_back(indices_[offset + 1]);
             chunk.indices.push_back(indices_[offset + 2]);
@@ -578,6 +595,9 @@ namespace ReplayEngine::Landscape
             {
                 vertex_chunks_[indices_[offset + corner]].push_back(chunk_index);
                 vertex_faces_[indices_[offset + corner]].push_back(static_cast<std::uint32_t>(offset / 3));
+                for (int other=0; other<3; ++other)
+                    if (indices_[offset+corner] != indices_[offset+other])
+                        vertex_neighbors_[indices_[offset+corner]].push_back(indices_[offset+other]);
             }
         }
 
@@ -586,29 +606,96 @@ namespace ReplayEngine::Landscape
             std::sort(memberships.begin(), memberships.end());
             memberships.erase(std::unique(memberships.begin(), memberships.end()), memberships.end());
         }
-        // The local index layout is immutable until repartition/topology changes.
-        std::vector<std::uint32_t> remap(vertices_.size(), UINT32_MAX);
-        for (LandscapeChunk& chunk : chunks_)
+        for (auto& neighbors : vertex_neighbors_)
         {
-            for (const auto vertex : chunk.indices)
-            {
-                if (remap[vertex] == UINT32_MAX)
-                {
-                    remap[vertex] = static_cast<std::uint32_t>(chunk.vertex_map.size());
-                    chunk.vertex_map.push_back(vertex);
-                }
-                chunk.local_indices.push_back(remap[vertex]);
-            }
-            for (const auto vertex : chunk.vertex_map) remap[vertex] = UINT32_MAX;
-            RecalculateChunkBounds(chunk);
+            std::sort(neighbors.begin(), neighbors.end());
+            neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
+        }
+        chunk_remap_.assign(vertices_.size(),UINT32_MAX);
+        for (std::size_t chunk=0;chunk<chunks_.size();++chunk)
+        {
+            RebuildChunkLayout(chunk);
+            RecalculateChunkBounds(chunks_[chunk]);
         }
         horizontal_travel_ = 0.0f;
+    }
+
+    void LandscapeData::RebuildChunkLayout(std::size_t index)
+    {
+        if (index >= chunks_.size()) return;
+        auto& chunk=chunks_[index];
+        chunk_remap_.resize(vertices_.size(),UINT32_MAX);
+        chunk.vertex_map.clear(); chunk.local_indices.clear();
+        for(const auto vertex:chunk.indices)
+        {
+            if(chunk_remap_[vertex]==UINT32_MAX)
+            {
+                chunk_remap_[vertex]=static_cast<std::uint32_t>(chunk.vertex_map.size());
+                chunk.vertex_map.push_back(vertex);
+            }
+            chunk.local_indices.push_back(chunk_remap_[vertex]);
+        }
+        for(const auto vertex:chunk.vertex_map) chunk_remap_[vertex]=UINT32_MAX;
+    }
+
+    void LandscapeData::UpdateSubdivisionAdjacency(std::size_t face, std::uint32_t a,
+        std::uint32_t b, std::uint32_t c, std::uint32_t first_vertex, std::size_t first_face)
+    {
+        if (face >= face_chunks_.size() || chunks_.empty()) return;
+        const auto chunk_index=face_chunks_[face];
+        if(chunk_index>=chunks_.size()) return;
+        auto& chunk=chunks_[chunk_index];
+        const auto local_offset=face_chunk_offsets_[face];
+        if(local_offset+2>=chunk.indices.size()) return;
+        vertex_faces_.resize(vertices_.size());
+        vertex_neighbors_.resize(vertices_.size());
+        vertex_chunks_.resize(vertices_.size());
+        face_chunks_.resize(FaceCount(),chunk_index);
+        face_chunk_offsets_.resize(FaceCount());
+        for(const auto vertex:{a,b,c})
+        {
+            auto& adjacent=vertex_faces_[vertex];
+            adjacent.erase(std::remove(adjacent.begin(),adjacent.end(),face),adjacent.end());
+        }
+        for(std::uint32_t vertex=first_vertex;vertex<first_vertex+3;++vertex)
+            vertex_chunks_[vertex].push_back(chunk_index);
+        for(int i=0;i<3;++i) chunk.indices[local_offset+i]=indices_[face*3+i];
+        for(std::size_t f=first_face;f<first_face+3;++f)
+        {
+            face_chunk_offsets_[f]=static_cast<std::uint32_t>(chunk.indices.size());
+            chunk_faces_[chunk_index].push_back(static_cast<std::uint32_t>(f));
+            chunk.indices.insert(chunk.indices.end(),indices_.begin()+f*3,indices_.begin()+f*3+3);
+        }
+        for(const std::size_t f:{face,first_face,first_face+1,first_face+2})
+            for(int corner=0;corner<3;++corner)
+                vertex_faces_[indices_[f*3+corner]].push_back(static_cast<std::uint32_t>(f));
+        for(const auto vertex:{a,b,c,first_vertex,first_vertex+1,first_vertex+2})
+        {
+            auto& neighbors=vertex_neighbors_[vertex]; neighbors.clear();
+            for(const auto f:vertex_faces_[vertex])
+                for(int corner=0;corner<3;++corner)
+                {
+                    const auto neighbor=indices_[f*3+corner];
+                    if(neighbor!=vertex) neighbors.push_back(neighbor);
+                }
+            std::sort(neighbors.begin(),neighbors.end());
+            neighbors.erase(std::unique(neighbors.begin(),neighbors.end()),neighbors.end());
+            MarkVertexDirty(vertex);
+        }
+        chunk_topology_dirty_[chunk_index]=1;
+        subdivision_repartition_pending_=true;
     }
 
     const std::vector<std::uint32_t>& LandscapeData::AdjacentFaces(std::size_t vertex) const noexcept
     {
         static const std::vector<std::uint32_t> empty;
         return vertex < vertex_faces_.size() ? vertex_faces_[vertex] : empty;
+    }
+
+    const std::vector<std::uint32_t>& LandscapeData::AdjacentVertices(std::size_t vertex) const noexcept
+    {
+        static const std::vector<std::uint32_t> empty;
+        return vertex < vertex_neighbors_.size() ? vertex_neighbors_[vertex] : empty;
     }
 
     void LandscapeData::QuerySurface(const XMFLOAT3& center, float radius,
@@ -677,11 +764,34 @@ namespace ReplayEngine::Landscape
         return hit.hit;
     }
 
+    std::shared_ptr<const LandscapeGeometry> LandscapeData::CaptureGeometry() const
+    {
+        if (!geometry_snapshot_)
+        {
+            auto snapshot = std::make_shared<LandscapeGeometry>();
+            snapshot->width = width_; snapshot->height = height_; snapshot->cell_size = cell_size_;
+            snapshot->vertices = vertices_; snapshot->indices = indices_;
+            geometry_snapshot_ = std::move(snapshot);
+        }
+        return geometry_snapshot_;
+    }
+
+    void LandscapeData::RestoreGeometry(const std::shared_ptr<const LandscapeGeometry>& geometry)
+    {
+        if (!geometry) return;
+        if (InitializeMesh(geometry->vertices, geometry->indices, geometry->cell_size,
+            geometry->width, geometry->height)) geometry_snapshot_ = geometry;
+    }
+
     void LandscapeData::FinishSculpt()
     {
         RecalculateBounds();
         // Repartition only when horizontal deformation has actually occurred.
-        if (horizontal_travel_ > 1.0e-5f) BuildChunks();
+        if (horizontal_travel_ > 1.0e-5f || subdivision_repartition_pending_)
+        {
+            revision_ = NextGeometryRevision();
+            BuildChunks();
+        }
     }
 
     void LandscapeData::MarkAllDirty() noexcept

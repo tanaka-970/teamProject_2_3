@@ -63,6 +63,7 @@ namespace ReplayEngine::Rendering::DX12
         // 同じFrame slotの動的Line/Trailを再アップロードするときだけ置換する。
         // BeginFrameが該当slotのFenceを待った後なので、GPU使用中のResourceを解放しない。
         bool replace_existing = false;
+        bool vertices_only = false;
     };
 
     struct D3D12StaticTextureSource final
@@ -1047,6 +1048,7 @@ namespace ReplayEngine::Rendering::DX12
         void ReleaseScene3DShadowTargets() noexcept;
         bool CacheSkinnedMeshLocalBounds(const D3D12SkinnedMeshSource& source) noexcept;
         bool EnsureStaticMesh(const D3D12StaticMeshSource& source) noexcept;
+        bool UpdateStaticMeshVertices(const D3D12StaticMeshSource& source) noexcept;
         bool EnsureSkinnedMesh(const D3D12SkinnedMeshSource& source) noexcept;
         bool EnsureStaticTexture(const D3D12StaticTextureSource& source) noexcept;
         bool EnsureSkyEnvironment(const D3D12SkySubmission& sky) noexcept;

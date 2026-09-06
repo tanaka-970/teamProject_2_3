@@ -1,4 +1,4 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "gltf_model.h"
 #include "skinned_mesh.h"
 #include "../../RePlayEngine/Assets/AssetCache.h"
@@ -50,6 +50,9 @@ void framework::refresh_material_editor_preview()
 {
     if (!material_editor_loaded || material_editor_guid.empty() ||
         !material_editor_write_time_valid) return;
+    if (const auto* record = asset_database.FindByGuid(material_editor_guid))
+        ReplayEngine::Rendering::MaterialAsset::PublishShadingMetadata(record->source_path,
+            material_editor_asset.shading_model);
     cached_material_asset preview;
     preview.material = material_editor_asset;
     preview.write_time = material_editor_write_time;

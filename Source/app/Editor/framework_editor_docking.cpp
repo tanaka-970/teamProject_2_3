@@ -12,6 +12,8 @@
 
 void framework::draw_editor()
 {
+    object_inspector_panel.FinishPropertyEdit(object_editor_context);
+    motion_rig_panel_visible = false;
     editor_session_active = true;
 
     // 検索欄の状態はここで毎フレーム倒し、実際に描かれたときだけ立て直す。

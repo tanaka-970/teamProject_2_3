@@ -1,4 +1,4 @@
-﻿// スキンメッシュの CPU データとアニメーションを読み込む。
+// スキンメッシュの CPU データとアニメーションを読み込む。
 #include "misc.h"
 #include "skinned_mesh.h"
 #include<fstream>
@@ -103,4 +103,19 @@ skinned_mesh::skinned_mesh(const std::filesystem::path& source_filename,
 #endif
     }
 
+}
+
+const std::vector<std::string>& skinned_mesh::MaterialSubsetNames() const
+{
+    if (!material_subset_names_valid_)
+    {
+        material_subset_names_.clear();
+        for (const auto& mesh : meshes)
+        {
+            if (mesh.subsets.empty()) material_subset_names_.emplace_back();
+            else for (const auto& subset : mesh.subsets) material_subset_names_.push_back(subset.material_name);
+        }
+        material_subset_names_valid_ = true;
+    }
+    return material_subset_names_;
 }

@@ -1,4 +1,4 @@
-﻿// Editor 選択・Dock/Workspace・Motion/UI/Landscape/Shader/Project 状態。
+// Editor 選択・Dock/Workspace・Motion/UI/Landscape/Shader/Project 状態。
 // framework_class.h の class framework 内部からのみ include する。
 
     enum class editor_selection
@@ -79,6 +79,9 @@
     bool show_motion_inspector_panel{ true };
     bool show_motion_timeline_panel{ true };
     bool show_motion_graph_panel{ true };
+    bool show_all_ai_stage_debug{ false };
+    bool editor_camera_preset_save_pending{ false };
+    float editor_camera_preset_save_delay{ 0.0f };
     bool show_motion_rig_panel{ false };
     bool motion_rig_panel_visible{ false };
     bool show_sprite_atlas_editor_panel{ false };

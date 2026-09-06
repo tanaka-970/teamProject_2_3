@@ -7,6 +7,7 @@
 //   SceneDataDuplicate.cpp  … GameObject 部分木の複製
 
 #include "SceneData.h"
+#include "../../Components/Landscape/LandscapeComponent.h"
 #include "../../Rendering/RenderStats.h"
 #include "SceneDataInternal.h"
 
@@ -152,7 +153,7 @@ namespace ReplayEngine::Scene::Serialization
     namespace { std::atomic<std::uint64_t> scene_capture_count{ 0 }; }
     std::uint64_t SceneCaptureCount() noexcept { return scene_capture_count.load(std::memory_order_relaxed); }
 
-    void CaptureScene(const Scene& scene, SceneData& output)
+    void CaptureScene(const Scene& scene, SceneData& output, SceneCaptureMode mode)
     {
         REPLAY_PROFILE_SCOPE("Scene/Capture");
         scene_capture_count.fetch_add(1, std::memory_order_relaxed);
@@ -245,7 +246,16 @@ namespace ReplayEngine::Scene::Serialization
                     }
 
                     // Capture の中で、預かっている未知プロパティも合流する。
-                    PropertyRegistry::Capture(*component, component_data.properties);
+                    const auto* landscape = dynamic_cast<const Components::LandscapeComponent*>(component);
+                    if (mode == SceneCaptureMode::Undo && landscape != nullptr)
+                    {
+                        // Block retained mesh_data before Capture so an old text copy is never duplicated.
+                        component_data.properties.Set("mesh_data", Reflection::PropertyValue::MakeString(""));
+                        PropertyRegistry::Capture(*component, component_data.properties, false);
+                        component_data.properties.Remove("mesh_data");
+                        component_data.landscape_geometry = landscape->Data().CaptureGeometry();
+                    }
+                    else PropertyRegistry::Capture(*component, component_data.properties);
                 }
 
                 data.components.push_back(std::move(component_data));

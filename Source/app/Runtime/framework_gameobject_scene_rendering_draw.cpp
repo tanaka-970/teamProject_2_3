@@ -1515,7 +1515,8 @@ bool framework::build_dx12_static_scene(
                 std::vector<DirectX::XMFLOAT4X4> bone_globals;
                 bool bone_globals_ready = false;
 
-                if ((show_rig_debug_draw || (show_motion_rig_panel && motion_rig_panel_visible) || has_pose) &&
+                if ((show_rig_debug_draw || (show_motion_rig_panel && motion_rig_panel_visible &&
+                    active_editor_workspace == editor_workspace::motion) || has_pose) &&
                     !mesh.bind_pose.bones.empty())
                 {
                     REPLAY_PROFILE_SCOPE("Item/RigPose");
@@ -1619,7 +1620,8 @@ bool framework::build_dx12_static_scene(
                     }
                 }
 
-                if ((show_rig_debug_draw || (show_motion_rig_panel && motion_rig_panel_visible)) && bone_globals_ready)
+                if ((show_rig_debug_draw || (show_motion_rig_panel && motion_rig_panel_visible &&
+                    active_editor_workspace == editor_workspace::motion)) && bone_globals_ready)
                 {
                     // 上で組んだ行列をそのまま使う。ポーズも表示へ反映される。
                     const DirectX::XMMATRIX object_world =
@@ -2281,7 +2283,7 @@ bool framework::build_dx12_static_scene(
             const auto* landscape = object->GetComponent<ReplayEngine::Components::LandscapeComponent>();
             const auto* renderer = object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>();
             if (landscape == nullptr || renderer == nullptr || !renderer->visible ||
-                !renderer->ActiveInHierarchy() || !landscape->Data().Valid()) continue;
+                !renderer->ActiveInHierarchy() || landscape->Data().FaceCount() == 0) continue;
 
             const auto& data = landscape->Data();
             const std::string object_key = "landscape:" +
@@ -2303,14 +2305,23 @@ bool framework::build_dx12_static_scene(
             const auto& chunks = data.Chunks();
             if (source_changed || cache.chunk_revisions.size() != chunks.size() ||
                 cache.uv_tiling != uv_tiling)
+            {
+                for (std::size_t old=chunks.size();old<cache.chunk_revisions.size();++old)
+                    dx12_device_context.ReleaseStaticMesh(object_key+":"+std::to_string(old));
                 cache.chunk_revisions.assign(chunks.size(), 0);
+                cache.chunk_topology_revisions.assign(chunks.size(), 0);
+            }
             cache.uv_tiling = uv_tiling;
             for (std::size_t chunk_index = 0; chunk_index < chunks.size(); ++chunk_index)
             {
                 const auto& chunk = chunks[chunk_index];
-                if (chunk.indices.empty()) continue;
-
                 const std::string mesh_key = object_key + ":" + std::to_string(chunk_index);
+                if (chunk.indices.empty())
+                {
+                    dx12_device_context.ReleaseStaticMesh(mesh_key);
+                    cache.chunk_revisions[chunk_index]=0;
+                    continue;
+                }
                 const bool resident = dx12_device_context.HasStaticMesh(mesh_key);
                 DirectX::XMFLOAT3 world_bounds_min{};
                 DirectX::XMFLOAT3 world_bounds_max{};
@@ -2327,34 +2338,24 @@ bool framework::build_dx12_static_scene(
                     !resident)
                 {
                     REPLAY_PROFILE_SCOPE("Landscape/ChunkUpload");
-                    // このチャンクが使う頂点だけを詰め直す。境界の頂点は隣とも重複する。
-                    std::unordered_map<std::uint32_t, std::uint32_t> remap;
                     D3D12StaticMeshSource source;
                     source.key = mesh_key;
                     source.replace_existing = true;
-                    source.vertices.reserve(chunk.indices.size());
-                    source.indices.reserve(chunk.indices.size());
-                    for (const std::uint32_t global : chunk.indices)
+                    source.vertices_only = resident &&
+                        cache.chunk_topology_revisions[chunk_index] == data.TopologyRevision();
+                    source.vertices.reserve(chunk.vertex_map.size());
+                    for (const auto global : chunk.vertex_map)
                     {
-                        if (global >= data.Vertices().size()) continue;
-                        const auto found = remap.find(global);
-                        if (found != remap.end())
-                        {
-                            source.indices.push_back(found->second);
-                            continue;
-                        }
-                        const std::uint32_t local =
-                            static_cast<std::uint32_t>(source.vertices.size());
-                        remap.emplace(global, local);
                         const auto& input = data.Vertices()[global];
                         D3D12StaticVertex vertex;
                         vertex.position = input.position;
                         vertex.normal = input.normal;
                         vertex.texcoord = { input.uv.x * uv_tiling, input.uv.y * uv_tiling };
                         source.vertices.push_back(vertex);
-                        source.indices.push_back(local);
                     }
-                    if (source.vertices.empty() || source.indices.empty()) continue;
+                    if (!source.vertices_only) source.indices = chunk.local_indices;
+                    if (source.vertices.empty()) continue;
+                    cache.chunk_topology_revisions[chunk_index] = data.TopologyRevision();
                     submission.mesh_sources.push_back(std::move(source));
                     cache.chunk_revisions[chunk_index] = chunk.revision;
                 }

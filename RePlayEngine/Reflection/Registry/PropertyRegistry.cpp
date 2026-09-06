@@ -87,7 +87,7 @@ namespace ReplayEngine::Reflection
         return nullptr;
     }
 
-    void PropertyRegistry::Capture(const Core::Component& component, PropertyBag& output)
+    void PropertyRegistry::Capture(const Core::Component& component, PropertyBag& output, bool include_custom)
     {
         for (const PropertyDesc& desc : PropertiesOf(component.TypeID()))
         {
@@ -105,7 +105,7 @@ namespace ReplayEngine::Reflection
 
         // PropertyRegistry では表現しきれない値の追加分。
         // 通常の数値・文字列プロパティはここではなく登録側で扱う。
-        component.OnSerialize(output);
+        if (include_custom) component.OnSerialize(output);
 
         // 読み込み時に「この型が知らない」として預かったぶんを書き戻す。
         //

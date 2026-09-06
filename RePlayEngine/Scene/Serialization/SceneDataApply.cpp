@@ -1,4 +1,5 @@
-﻿#include "SceneData.h"
+#include "SceneData.h"
+#include "../../Components/Landscape/LandscapeComponent.h"
 #include "SceneDataInternal.h"
 
 #include "../Runtime/Scene.h"
@@ -253,6 +254,9 @@ namespace ReplayEngine::Scene::Serialization
                     ApplyPropertyAliases(*info, remapped_properties);
                 MigrateSavedProperties(*info, component_data.type_version, saved_properties);
                 PropertyRegistry::Apply(*component, saved_properties, &unknown);
+                if (component_data.landscape_geometry)
+                    if (auto* landscape = dynamic_cast<Components::LandscapeComponent*>(component))
+                        landscape->Data().RestoreGeometry(component_data.landscape_geometry);
                 for (const std::string& name : unknown)
                 {
                     ++report.unknown_properties;

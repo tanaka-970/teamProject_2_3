@@ -23,54 +23,13 @@ namespace ReplayEngine::Landscape
             return fraction * 2.0f - 1.0f;
         }
 
-        float PointSegmentDistanceSq(const DirectX::XMFLOAT3& point,
-            const DirectX::XMFLOAT3& a, const DirectX::XMFLOAT3& b) noexcept
-        {
-            const float ab_x = b.x - a.x;
-            const float ab_y = b.y - a.y;
-            const float ab_z = b.z - a.z;
-            const float ap_x = point.x - a.x;
-            const float ap_y = point.y - a.y;
-            const float ap_z = point.z - a.z;
-            const float length_sq = ab_x * ab_x + ab_y * ab_y + ab_z * ab_z;
-            float t = length_sq > 1.0e-12f
-                ? (ap_x * ab_x + ap_y * ab_y + ap_z * ab_z) / length_sq : 0.0f;
-            t = (std::max)(0.0f, (std::min)(1.0f, t));
-            const float dx = ap_x - ab_x * t;
-            const float dy = ap_y - ab_y * t;
-            const float dz = ap_z - ab_z * t;
-            return dx * dx + dy * dy + dz * dz;
-        }
 
-        bool BrushTouchesFace(const DirectX::XMFLOAT3& center,
-            const DirectX::XMFLOAT3(&positions)[3], const LandscapeBrush& brush) noexcept
-        {
-            const float radius_sq = brush.radius * brush.radius;
-            const bool planar = brush.direction == LandscapeSculptDirection::LocalY;
-            DirectX::XMFLOAT3 brush_center = center;
-            DirectX::XMFLOAT3 triangle[3]{ positions[0], positions[1], positions[2] };
-            if (planar)
-            {
-                brush_center.y = 0.0f;
-                triangle[0].y = triangle[1].y = triangle[2].y = 0.0f;
-            }
-            const DirectX::XMVECTOR a = DirectX::XMLoadFloat3(&triangle[0]);
-            const DirectX::XMVECTOR b = DirectX::XMLoadFloat3(&triangle[1]);
-            const DirectX::XMVECTOR c = DirectX::XMLoadFloat3(&triangle[2]);
-            const DirectX::XMVECTOR cross = DirectX::XMVector3Cross(
-                DirectX::XMVectorSubtract(b, a), DirectX::XMVectorSubtract(c, a));
-            if (DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(cross)) <= 1.0e-12f)
-                return PointSegmentDistanceSq(brush_center, triangle[0], triangle[1]) <= radius_sq ||
-                    PointSegmentDistanceSq(brush_center, triangle[1], triangle[2]) <= radius_sq ||
-                    PointSegmentDistanceSq(brush_center, triangle[2], triangle[0]) <= radius_sq;
-            return DirectX::BoundingSphere(brush_center, brush.radius).Intersects(a, b, c);
-        }
     }
 
     bool LandscapeEditorTool::BeginStroke(LandscapeData& data,
         LandscapeBrushMode mode, const LandscapeBrush& brush)
     {
-        if (StrokeActive() || mode == LandscapeBrushMode::Subdivide ||
+        if (StrokeActive() ||
             !data.Valid() || brush.radius <= 0.0f ||
             brush.strength < 0.0f || !std::isfinite(brush.radius) ||
             !std::isfinite(brush.strength)) return false;
@@ -79,23 +38,7 @@ namespace ReplayEngine::Landscape
         mode_ = mode;
         brush_ = brush;
         command_ = std::make_unique<LandscapeUndoCommand>();
-        adjacency_.clear();
-        if (mode_ == LandscapeBrushMode::Smooth)
-        {
-            adjacency_.resize(data.VertexCount());
-            for (std::size_t vertex = 0; vertex < data.VertexCount(); ++vertex)
-            {
-                auto& neighbors = adjacency_[vertex];
-                for (const auto face : data.AdjacentFaces(vertex))
-                    for (int corner = 0; corner < 3; ++corner)
-                    {
-                        const auto neighbor = data.Indices()[face * 3 + corner];
-                        if (neighbor != vertex) neighbors.push_back(neighbor);
-                    }
-                std::sort(neighbors.begin(), neighbors.end());
-                neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
-            }
-        }
+        if (mode == LandscapeBrushMode::Subdivide) command_->BeginTopology(data);
         return true;
     }
 
@@ -119,6 +62,8 @@ namespace ReplayEngine::Landscape
     bool LandscapeEditorTool::ApplyStrokeSample(const LandscapeRayHit& hit, float delta_time)
     {
         if (!data_ || !hit.hit || !std::isfinite(delta_time) || delta_time <= 0) return false;
+        if (mode_ == LandscapeBrushMode::Subdivide)
+            return ApplySubdivideSample(*data_, hit.position, hit.face_index, brush_);
         bool changed = false;
         const auto previous = previous_hit_;
         if (!previous_hit_valid_) changed = ApplySurfaceSample(hit, delta_time);
@@ -214,10 +159,11 @@ namespace ReplayEngine::Landscape
                 break;
             case LandscapeBrushMode::Smooth:
             {
-                if (index >= adjacency_.size() || adjacency_[index].empty()) break;
+                const auto& neighbors = data_->AdjacentVertices(index);
+                if (neighbors.empty()) break;
                 DirectX::XMFLOAT3 average = before;
                 int count = 1;
-                for (std::uint32_t neighbor : adjacency_[index])
+                for (std::uint32_t neighbor : neighbors)
                 {
                     if (neighbor >= vertices.size()) continue;
                     average.x += vertices[neighbor].position.x;
@@ -265,7 +211,7 @@ namespace ReplayEngine::Landscape
         const DirectX::XMFLOAT3& center, std::size_t hit_face,
         const LandscapeBrush& brush)
     {
-        if (!data.Valid() || brush.radius <= 0.0f || brush.target_edge_length <= 0.0f ||
+        if (data.FaceCount() == 0 || brush.radius <= 0.0f || brush.target_edge_length <= 0.0f ||
             !std::isfinite(brush.radius) || !std::isfinite(brush.target_edge_length)) return false;
 
         constexpr std::size_t maximum_faces_per_sample = 256;
@@ -277,10 +223,11 @@ namespace ReplayEngine::Landscape
 
         const auto& vertices = data.Vertices();
         const auto& indices = data.Indices();
-        const std::size_t face_count = data.FaceCount();
+        static thread_local LandscapeData::SurfaceRegion subdivide_region;
+        data.QuerySurface(center, brush.radius, hit_face, subdivide_region);
         const float target_sq = brush.target_edge_length * brush.target_edge_length;
         std::vector<std::pair<float, std::size_t>> faces;
-        for (std::size_t face = 0; face < face_count; ++face)
+        for (const std::size_t face : subdivide_region.faces)
         {
             const std::size_t offset = face * 3;
             const std::uint32_t a = indices[offset];
@@ -290,7 +237,6 @@ namespace ReplayEngine::Landscape
 
             const DirectX::XMFLOAT3 positions[3]{
                 vertices[a].position, vertices[b].position, vertices[c].position };
-            if (face != hit_face && !BrushTouchesFace(center, positions, brush)) continue;
             float longest_sq = 0.0f;
             float nearest_sq = (std::numeric_limits<float>::max)();
             for (int corner = 0; corner < 3; ++corner)
@@ -306,8 +252,7 @@ namespace ReplayEngine::Landscape
                 const float dx = position.x - center.x;
                 const float dy = position.y - center.y;
                 const float dz = position.z - center.z;
-                const float distance_sq = brush.direction == LandscapeSculptDirection::LocalY
-                    ? dx * dx + dz * dz : dx * dx + dy * dy + dz * dz;
+                const float distance_sq = dx * dx + dy * dy + dz * dz;
                 nearest_sq = (std::min)(nearest_sq, distance_sq);
             }
             // 最長辺が目標以下の面は再分割せず、塗り続けてもここで収束させる。
@@ -336,11 +281,9 @@ namespace ReplayEngine::Landscape
     std::unique_ptr<LandscapeUndoCommand> LandscapeEditorTool::EndStroke()
     {
         if (data_ != nullptr) data_->FinishSculpt();
+        if (data_ && command_ && mode_ == LandscapeBrushMode::Subdivide) command_->EndTopology(*data_);
         previous_hit_valid_ = false;
         data_ = nullptr;
-        adjacency_.clear();
-        candidate_marks_.clear();
-        unindexed_vertices_.clear();
         if (command_ != nullptr && command_->Empty()) command_.reset();
         if (command_ != nullptr) command_->Seal();
         return std::move(command_);
@@ -352,9 +295,6 @@ namespace ReplayEngine::Landscape
         if (data_ != nullptr) data_->FinishSculpt();
         previous_hit_valid_ = false;
         data_ = nullptr;
-        adjacency_.clear();
-        candidate_marks_.clear();
-        unindexed_vertices_.clear();
         command_.reset();
     }
 }

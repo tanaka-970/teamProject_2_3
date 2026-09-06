@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -31,6 +32,14 @@ namespace ReplayEngine::Landscape
         std::size_t face_index = static_cast<std::size_t>(-1);
         DirectX::XMFLOAT3 position{};
         DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+    };
+
+    struct LandscapeGeometry
+    {
+        int width = 0, height = 0;
+        float cell_size = 1;
+        std::vector<LandscapeVertex> vertices;
+        std::vector<std::uint32_t> indices;
     };
 
     class LandscapeData final
@@ -70,6 +79,7 @@ namespace ReplayEngine::Landscape
         std::size_t VertexCount() const noexcept { return vertices_.size(); }
         std::size_t FaceCount() const noexcept { return indices_.size() / 3; }
         std::uint64_t Revision() const noexcept { return revision_; }
+        std::uint64_t TopologyRevision() const noexcept { return topology_revision_; }
         struct SurfaceRegion
         {
             std::vector<std::uint32_t> faces, vertices, face_marks, vertex_marks;
@@ -81,7 +91,10 @@ namespace ReplayEngine::Landscape
         bool ProjectSurface(const DirectX::XMFLOAT3& point, const DirectX::XMFLOAT3& normal,
             float distance, const SurfaceRegion& region, LandscapeRayHit& hit) const;
         const std::vector<std::uint32_t>& AdjacentFaces(std::size_t vertex) const noexcept;
+        const std::vector<std::uint32_t>& AdjacentVertices(std::size_t vertex) const noexcept;
         void FinishSculpt();
+        std::shared_ptr<const LandscapeGeometry> CaptureGeometry() const;
+        void RestoreGeometry(const std::shared_ptr<const LandscapeGeometry>& geometry);
 
         DirectX::XMFLOAT3 VertexPosition(std::size_t index) const noexcept;
         bool SetVertexPosition(std::size_t index, const DirectX::XMFLOAT3& position,
@@ -154,6 +167,10 @@ namespace ReplayEngine::Landscape
 
     private:
         void BuildChunks();
+        void RebuildChunkLayout(std::size_t chunk);
+        void UpdateSubdivisionAdjacency(std::size_t face, std::uint32_t a,
+            std::uint32_t b, std::uint32_t c, std::uint32_t first_new_vertex,
+            std::size_t first_new_face);
         void TouchGeometry() noexcept;
         LandscapeVertex Midpoint(std::uint32_t a, std::uint32_t b) const noexcept;
         static bool IsFinite(const LandscapeVertex& vertex) noexcept;
@@ -168,9 +185,14 @@ namespace ReplayEngine::Landscape
         std::vector<std::vector<std::uint32_t>> chunk_faces_;
         std::vector<std::vector<std::uint32_t>> vertex_chunks_;
         std::vector<std::vector<std::uint32_t>> vertex_faces_;
+        std::vector<std::vector<std::uint32_t>> vertex_neighbors_;
+        std::vector<std::uint32_t> face_chunks_, face_chunk_offsets_, chunk_remap_;
+        std::vector<std::uint8_t> chunk_topology_dirty_;
+        bool subdivision_repartition_pending_ = false;
         std::vector<std::uint32_t> normal_marks_, normal_vertices_;
         std::uint32_t normal_generation_ = 0;
         float horizontal_travel_ = 0.0f;
+        mutable std::shared_ptr<const LandscapeGeometry> geometry_snapshot_;
         // 1 チャンクの目安と、実際に使った分割数（XZ とも同じ数で割る）。
         static constexpr std::size_t chunk_target_vertices = 2048;
         static constexpr int chunk_maximum_divisions = 32;
@@ -180,6 +202,7 @@ namespace ReplayEngine::Landscape
         int topology_batch_depth_ = 0;
         bool topology_batch_dirty_ = false;
         std::uint64_t revision_ = 1;
+        std::uint64_t topology_revision_ = 1;
         mutable std::size_t last_raycast_triangle_test_count_ = 0;
         DirectX::XMFLOAT3 bounds_min_{};
         DirectX::XMFLOAT3 bounds_max_{};
