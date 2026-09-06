@@ -1,0 +1,3944 @@
+REPLAY_SCENE 11
+SCENE "Grow Rush - Result"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 154
+OBJECT
+  ID 1
+  NAME "Camera"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 8 5 -13 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "CameraComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "projection_mode" enum 0
+    PROPERTY "field_of_view_degrees" float 60
+    PROPERTY "near_clip" float 0.1
+    PROPERTY "far_clip" float 300
+    PROPERTY "priority" int 100
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 2
+  NAME "Sun"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0.8 -0.5 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "color" color 1 0.98 0.89 1
+    PROPERTY "intensity" float 1.2
+    PROPERTY "cast_shadows" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 3
+  NAME "Backdrop"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 180 180 180
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.17 0.31 0.38 1
+    PROPERTY "shading_model" enum 3
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 4
+  NAME "Surroundings"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 -0.55 0 0 0 0 95 0.8 95
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.19 0.28 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 5
+  NAME "ArenaBase"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 -0.12 0 0 0 0 27.8 0.4 22.4
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.4 0.48 0.37 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 6
+  NAME "Rim0"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0.2 11.2 0 0 0 28 0.55 0.22
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.69 0.79 0.63 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 7
+  NAME "Rim1"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0.2 -11.2 0 0 0 28 0.55 0.22
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.69 0.79 0.63 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 8
+  NAME "Rim2"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -14 0.2 0 0 0 0 0.22 0.55 22.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.69 0.79 0.63 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 9
+  NAME "Rim3"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 14 0.2 0 0 0 0 0.22 0.55 22.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.69 0.79 0.63 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 10
+  NAME "SceneryTrunk0"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0.0 2.3434786588811365 22.951726765165418 0 0 0 0.6 4.686957317762273 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 11
+  NAME "SceneryCrown0"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0.0 5.35652264887117 22.951726765165418 0 0 0 2.5 4.352174652207825 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.285067781047844 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 12
+  NAME "SceneryTrunk1"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 5.019958551609731 1.8176253619593667 23.361731746415494 0 0 0 0.6 3.6352507239187335 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 13
+  NAME "SceneryCrown1"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 5.019958551609731 4.154572255907125 23.361731746415494 0 0 0 2.5 3.3755899579245385 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.29411231013606587 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 14
+  NAME "SceneryTrunk2"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 11.586208932501252 1.2141010607364116 21.398940824299817 0 0 0 0.6 2.428202121472823 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 15
+  NAME "SceneryCrown2"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 11.586208932501252 2.7750881388260837 21.398940824299817 0 0 0 2.5 2.2547591127961932 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.3271862327404682 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 16
+  NAME "SceneryTrunk3"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 16.43932391957458 2.278468694139874 16.543077595676504 0 0 0 0.6 4.556937388279748 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 17
+  NAME "SceneryCrown3"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 16.43932391957458 5.207928443748284 16.543077595676504 0 0 0 2.5 4.231441860545481 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.2923655539184091 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 18
+  NAME "SceneryTrunk4"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 21.48035001296313 1.8504188465052103 12.395625355618952 0 0 0 0.6 3.7008376930104205 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 19
+  NAME "SceneryCrown4"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 21.48035001296313 4.22952879201191 12.395625355618952 0 0 0 2.5 3.4364921435096765 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34161406193120814 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 20
+  NAME "SceneryTrunk5"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 22.529670658283475 1.5665318640620765 7.253523074609819 0 0 0 0.6 3.133063728124153 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 21
+  NAME "SceneryCrown5"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 22.529670658283475 3.580644260713318 7.253523074609819 0 0 0 2.5 2.909273461829571 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.33241086733137926 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 22
+  NAME "SceneryTrunk6"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 22.438945829981378 2.175901821823043 2.6436486461150968 0 0 0 0.6 4.351803643646086 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 23
+  NAME "SceneryCrown6"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 22.438945829981378 4.97348987845267 2.6436486461150968 0 0 0 2.5 4.040960526242794 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.36795314565119325 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 24
+  NAME "SceneryTrunk7"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 20.940441681531592 0.9334447527138264 -2.927094771476918 0 0 0 0.6 1.8668895054276529 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 25
+  NAME "SceneryCrown7"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 20.940441681531592 2.133588006203032 -2.927094771476918 0 0 0 2.5 1.7335402550399635 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.3713808961089008 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 26
+  NAME "SceneryTrunk8"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 25.88348217106465 0.80744989581898 -9.301846275698795 0 0 0 0.6 1.61489979163796 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 27
+  NAME "SceneryCrown8"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 25.88348217106465 1.8455997618719544 -9.301846275698795 0 0 0 2.5 1.499549806520963 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28441722748609227 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 28
+  NAME "SceneryTrunk9"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 20.077298273325795 1.1094806183230312 -13.511385623877889 0 0 0 0.6 2.2189612366460625 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 29
+  NAME "SceneryCrown9"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 20.077298273325795 2.535955699024072 -13.511385623877889 0 0 0 2.5 2.0604640054570584 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28927773173007454 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 30
+  NAME "SceneryTrunk10"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 14.23044152278826 2.600730760457784 -16.741295079238014 0 0 0 0.6 5.201461520915568 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 31
+  NAME "SceneryCrown10"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 14.23044152278826 5.944527452474936 -16.741295079238014 0 0 0 2.5 4.829928555135885 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.35007908444152536 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 32
+  NAME "SceneryTrunk11"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 9.407552035987113 1.9839922695307013 -19.417551406450002 0 0 0 0.6 3.9679845390614026 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 33
+  NAME "SceneryCrown11"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 9.407552035987113 4.534839473213032 -19.417551406450002 0 0 0 2.5 3.6845570719855885 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.26254958180248317 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 34
+  NAME "SceneryTrunk12"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 5.7524678950082775 2.793871127827948 -20.36349068412198 0 0 0 0.6 5.587742255655896 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 35
+  NAME "SceneryCrown12"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 5.7524678950082775 6.385991149321025 -20.36349068412198 0 0 0 2.5 5.188617808823333 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.26630356988269255 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 36
+  NAME "SceneryTrunk13"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -8.322959505606573e-15 1.8069685851080992 -21.305869666108872 0 0 0 0.6 3.6139371702161984 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 37
+  NAME "SceneryCrown13"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -8.322959505606573e-15 4.130213908818513 -21.305869666108872 0 0 0 2.5 3.355798800915042 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.3001751856339681 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 38
+  NAME "SceneryTrunk14"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -5.5148778210944664 1.5736936850368024 -24.354798667183204 0 0 0 0.6 3.147387370073605 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 39
+  NAME "SceneryCrown14"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -5.5148778210944664 3.5970141372269775 -24.354798667183204 0 0 0 2.5 2.922573986496919 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.31464342751582297 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 40
+  NAME "SceneryTrunk15"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -11.375101518221896 1.9735927824501538 -21.985077740425215 0 0 0 0.6 3.9471855649003076 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 41
+  NAME "SceneryCrown15"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -11.375101518221896 4.511069217028924 -21.985077740425215 0 0 0 2.5 3.665243738836 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.2907093932117548 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 42
+  NAME "SceneryTrunk16"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -13.91443241500626 1.6862465747598177 -17.942526949172468 0 0 0 0.6 3.3724931495196353 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 43
+  NAME "SceneryCrown16"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -13.91443241500626 3.8542778851652977 -17.942526949172468 0 0 0 2.5 3.1316007816968043 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.3215235871569632 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 44
+  NAME "SceneryTrunk17"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -22.43777876514168 2.705621353516904 -12.660622858981082 0 0 0 0.6 5.411242707033808 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 45
+  NAME "SceneryCrown17"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -22.43777876514168 6.18427737946721 -12.660622858981082 0 0 0 2.5 5.024725370817108 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.27502363370105554 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 46
+  NAME "SceneryTrunk18"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -24.5326546208384 0.7585121812229605 -7.692222234891576 0 0 0 0.6 1.517024362445921 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 47
+  NAME "SceneryCrown18"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -24.5326546208384 1.7337421285096242 -7.692222234891576 0 0 0 2.5 1.4086654794140696 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.2743900864824744 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 48
+  NAME "SceneryTrunk19"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -24.580799457993344 1.572361043369836 -3.225622819724213 0 0 0 0.6 3.144722086739672 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 49
+  NAME "SceneryCrown19"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -24.580799457993344 3.593968099131054 -3.225622819724213 0 0 0 2.5 2.9200990805439813 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.2643013920099611 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 50
+  NAME "SceneryTrunk20"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -24.519607891999588 1.9666189157807534 3.0801744136406457 0 0 0 0.6 3.933237831561507 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 51
+  NAME "SceneryCrown20"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -24.519607891999588 4.495128950356008 3.0801744136406457 0 0 0 2.5 3.652292272164257 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.3654794289037562 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 52
+  NAME "SceneryTrunk21"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -25.28363341284903 2.587813647994183 8.584482911624956 0 0 0 0.6 5.175627295988366 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 53
+  NAME "SceneryCrown21"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -25.28363341284903 5.915002623986704 8.584482911624956 0 0 0 2.5 4.805939631989197 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.2918992379741169 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 54
+  NAME "SceneryTrunk22"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -19.81302811359708 1.7103013539513265 13.86769895996476 0 0 0 0.6 3.420602707902653 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 55
+  NAME "SceneryCrown22"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -19.81302811359708 3.909260237603032 13.86769895996476 0 0 0 2.5 3.176273943052464 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.32569026804320644 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 56
+  NAME "SceneryTrunk23"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -16.55712576901076 0.7599640249983058 18.261136665220477 0 0 0 0.6 1.5199280499966117 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 57
+  NAME "SceneryCrown23"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -16.55712576901076 1.7370606285675565 18.261136665220477 0 0 0 2.5 1.4113617607111395 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.27738945218274713 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 58
+  NAME "SceneryTrunk24"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -12.597735445306435 2.6911518650079422 22.620351903292907 0 0 0 0.6 5.3823037300158845 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 59
+  NAME "SceneryCrown24"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -12.597735445306435 6.1512042628752965 22.620351903292907 0 0 0 2.5 4.997853463586178 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.3576743321855836 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 60
+  NAME "SceneryTrunk25"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -5.2854019114875275 2.007918829507834 21.890213421036666 0 0 0 0.6 4.015837659015668 0.6
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.28 0.31 0.23 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 61
+  NAME "SceneryCrown25"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -5.2854019114875275 4.589528753160764 21.890213421036666 0 0 0 2.5 3.7289921119431204 2.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.35226915910333584 0.43 0.35 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 62
+  NAME "SpawnRing0"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -6 0.11 -6 0 0 0 2.0 0.04 2.0
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 3
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 63
+  NAME "SpawnRing1"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 6 0.11 6 0 0 0 2.0 0.04 2.0
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 3
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 64
+  NAME "GardenStem0"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 4.611370582054068 0.786883331613749 -1.6837912716943197 0 0 0 0.18 1.573766663227498 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 65
+  NAME "GardenLeaf0"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 4.611370582054068 1.9672083290343725 -1.6837912716943197 0 0 0 0.9 1.1803249974206234 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 66
+  NAME "GardenStem1"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 5.150418044210268 0.7692190696034225 -5.381333125109872 0 0 0 0.18 1.538438139206845 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 67
+  NAME "GardenLeaf1"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 5.150418044210268 1.923047674008556 -5.381333125109872 0 0 0 0.9 1.1538286044051336 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 68
+  NAME "GardenStem2"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -0.7796611385388559 0.38255581906839153 -7.734568687887927 0 0 0 0.18 0.7651116381367831 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 69
+  NAME "GardenLeaf2"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -0.7796611385388559 0.9563895476709788 -7.734568687887927 0 0 0 0.9 0.5738337286025873 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 70
+  NAME "GardenStem3"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -7.99701876651123 0.2394758076346799 0.6873320501232545 0 0 0 0.18 0.4789516152693598 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 71
+  NAME "GardenLeaf3"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -7.99701876651123 0.5986895190866998 0.6873320501232545 0 0 0 0.9 0.35921371145201986 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 72
+  NAME "GardenStem4"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -0.6061371382244829 0.2741703552925174 5.723657119360388 0 0 0 0.18 0.5483407105850348 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 73
+  NAME "GardenLeaf4"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -0.6061371382244829 0.6854258882312935 5.723657119360388 0 0 0 0.9 0.4112555329387761 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 74
+  NAME "GardenStem5"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -8.181541024630564 0.2647399744333623 2.306712091754717 0 0 0 0.18 0.5294799488667246 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 75
+  NAME "GardenLeaf5"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -8.181541024630564 0.6618499360834057 2.306712091754717 0 0 0 0.9 0.3971099616500434 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 76
+  NAME "GardenStem6"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -1.899226331730068 0.713072709978791 -3.2888268716909437 0 0 0 0.18 1.426145419957582 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 77
+  NAME "GardenLeaf6"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -1.899226331730068 1.7826817749469774 -3.2888268716909437 0 0 0 0.9 1.0696090649681864 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 78
+  NAME "GardenStem7"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 4.480425006876253 0.33517686372446587 0.1173208611494605 0 0 0 0.18 0.6703537274489317 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 79
+  NAME "GardenLeaf7"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 4.480425006876253 0.8379421593111646 0.1173208611494605 0 0 0 0.9 0.5027652955866987 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 80
+  NAME "GardenStem8"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -6.512299140340856 0.7880029982426612 -4.624099373897579 0 0 0 0.18 1.5760059964853224 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 81
+  NAME "GardenLeaf8"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -6.512299140340856 1.970007495606653 -4.624099373897579 0 0 0 0.9 1.1820044973639916 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 82
+  NAME "GardenStem9"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -7.439929106884087 0.933463182039882 -1.4994636803648849 0 0 0 0.18 1.866926364079764 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 83
+  NAME "GardenLeaf9"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -7.439929106884087 2.3336579550997048 -1.4994636803648849 0 0 0 0.9 1.4001947730598228 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 84
+  NAME "GardenStem10"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 6.825947569314533 0.4304851660629185 -1.146303148444499 0 0 0 0.18 0.860970332125837 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 85
+  NAME "GardenLeaf10"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 6.825947569314533 1.0762129151572961 -1.146303148444499 0 0 0 0.9 0.6457277490943777 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 86
+  NAME "GardenStem11"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -6.94509899520606 0.9528638930569212 -1.28074264068273 0 0 0 0.18 1.9057277861138424 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 87
+  NAME "GardenLeaf11"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -6.94509899520606 2.382159732642303 -1.28074264068273 0 0 0 0.9 1.4292958395853816 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 88
+  NAME "GardenStem12"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -1.9751511375327997 0.9203758576131045 3.6868378165415496 0 0 0 0.18 1.840751715226209 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 89
+  NAME "GardenLeaf12"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -1.9751511375327997 2.300939644032761 3.6868378165415496 0 0 0 0.9 1.3805637864196565 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 90
+  NAME "GardenStem13"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 1.1017917059392612 0.3760274263780399 1.5637753749548455 0 0 0 0.18 0.7520548527560798 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 91
+  NAME "GardenLeaf13"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 1.1017917059392612 0.9400685659450997 1.5637753749548455 0 0 0 0.9 0.5640411395670598 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 92
+  NAME "GardenStem14"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 7.432863991779829 0.38596188322289976 -0.9989951500215426 0 0 0 0.18 0.7719237664457995 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 93
+  NAME "GardenLeaf14"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 7.432863991779829 0.9649047080572494 -0.9989951500215426 0 0 0 0.9 0.5789428248343496 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 94
+  NAME "GardenStem15"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 6.871300062772274 0.3444390911201597 -0.8947633099074146 0 0 0 0.18 0.6888781822403194 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 95
+  NAME "GardenLeaf15"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 6.871300062772274 0.8610977278003992 -0.8947633099074146 0 0 0 0.9 0.5166586366802395 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 96
+  NAME "GardenStem16"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -8.3209721703595 0.8578652757338494 -1.5259433997330145 0 0 0 0.18 1.7157305514676988 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 97
+  NAME "GardenLeaf16"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -8.3209721703595 2.1446631893346235 -1.5259433997330145 0 0 0 0.9 1.2867979136007741 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 98
+  NAME "GardenStem17"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 3.716381592617136 0.4395284917997442 -5.667399389324835 0 0 0 0.18 0.8790569835994884 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 99
+  NAME "GardenLeaf17"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 3.716381592617136 1.0988212294993605 -5.667399389324835 0 0 0 0.9 0.6592927376996163 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 100
+  NAME "GardenStem18"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 3.382358806038164 0.5802180503264474 6.523806247027283 0 0 0 0.18 1.1604361006528947 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 101
+  NAME "GardenLeaf18"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 3.382358806038164 1.4505451258161184 6.523806247027283 0 0 0 0.9 0.870327075489671 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 102
+  NAME "GardenStem19"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 8.236406647683168 0.19712988480531288 -4.449292788843229 0 0 0 0.18 0.39425976961062575 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 103
+  NAME "GardenLeaf19"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 8.236406647683168 0.49282471201328215 -4.449292788843229 0 0 0 0.9 0.2956948272079693 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 104
+  NAME "GardenStem20"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 2.8239015028675176 0.31410511457166085 -0.37386745002726585 0 0 0 0.18 0.6282102291433217 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 105
+  NAME "GardenLeaf20"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 2.8239015028675176 0.785262786429152 -0.37386745002726585 0 0 0 0.9 0.4711576718574912 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 106
+  NAME "GardenStem21"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 2.3495843938977607 0.33833392981333393 3.8246048551404606 0 0 0 0.18 0.6766678596266679 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 107
+  NAME "GardenLeaf21"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 2.3495843938977607 0.8458348245333348 3.8246048551404606 0 0 0 0.9 0.5075008947200008 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 108
+  NAME "GardenStem22"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -9.835794547067987 0.8116165781910752 2.9741281346285184 0 0 0 0.18 1.6232331563821505 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 109
+  NAME "GardenLeaf22"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -9.835794547067987 2.029041445477688 2.9741281346285184 0 0 0 0.9 1.2174248672866128 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 110
+  NAME "GardenStem23"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -6.118598325116791 0.40347931234722395 7.2944319260045685 0 0 0 0.18 0.8069586246944479 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 111
+  NAME "GardenLeaf23"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -6.118598325116791 1.0086982808680598 7.2944319260045685 0 0 0 0.9 0.6052189685208359 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 112
+  NAME "GardenStem24"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -1.1403822561201888 0.23336191609038168 -4.447394325075127 0 0 0 0.18 0.46672383218076335 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 113
+  NAME "GardenLeaf24"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -1.1403822561201888 0.5834047902259542 -4.447394325075127 0 0 0 0.9 0.3500428741355725 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 114
+  NAME "GardenStem25"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 3.4973736672636218 0.37528778188744805 -4.33650556366195 0 0 0 0.18 0.7505755637748961 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 115
+  NAME "GardenLeaf25"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 3.4973736672636218 0.9382194547186201 -4.33650556366195 0 0 0 0.9 0.5629316728311721 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 116
+  NAME "GardenStem26"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -2.447958941548767 0.5751510912119759 -3.716597275095369 0 0 0 0.18 1.1503021824239519 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 117
+  NAME "GardenLeaf26"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -2.447958941548767 1.4378777280299397 -3.716597275095369 0 0 0 0.9 0.8627266368179638 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 118
+  NAME "GardenStem27"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0.005248548207401171 0.43761497954078055 -5.82054536575307 0 0 0 0.18 0.8752299590815611 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 119
+  NAME "GardenLeaf27"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0.005248548207401171 1.0940374488519513 -5.82054536575307 0 0 0 0.9 0.6564224693111708 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 1 0.42 0.17 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 120
+  NAME "GardenStem28"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -1.4974387603562338 0.8983164469550657 -3.4789763746196716 0 0 0 0.18 1.7966328939101315 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 121
+  NAME "GardenLeaf28"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -1.4974387603562338 2.245791117387664 -3.4789763746196716 0 0 0 0.9 1.3474746704325984 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 122
+  NAME "GardenStem29"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -4.4116729758556446 0.4696696602374614 -7.6828118505713565 0 0 0 0.18 0.9393393204749227 0.18
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.34 0.23 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 123
+  NAME "GardenLeaf29"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -4.4116729758556446 1.1741741505936534 -7.6828118505713565 0 0 0 0.9 0.704504490356192 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 2
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.13 0.87 0.64 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 124
+  NAME "Director"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.GrowRush.GrowResult"
+    PROPERTY "__script.execution_order" int 0
+    PROPERTY "__script.type_id" string "beea44001a1543a2bfe8807732410003"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 125
+  NAME "Canvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "size_delta" vec2 0 0
+  END_COMPONENT
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "reference_resolution" vec2 1600 900
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 100
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 126
+  NAME "Veil"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1600 900
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.015 0.055 0.065 0.75
+    PROPERTY "fill_amount" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 127
+  NAME "ResultCard"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 15
+    PROPERTY "size_delta" vec2 1120 730
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.055 0.13 0.14 0.98
+    PROPERTY "fill_amount" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 128
+  NAME "Duration"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 318
+    PROPERTY "size_delta" vec2 600 44
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>1分 MATCH</b>"
+    PROPERTY "font_size" float 27.599999999999998
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.74 0.83 0.8 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 129
+  NAME "ResultTitle"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 241
+    PROPERTY "size_delta" vec2 1000 100
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>YOU WIN!</b>"
+    PROPERTY "font_size" float 86.39999999999999
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.13 0.87 0.64 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 130
+  NAME "YouName"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -305 146
+    PROPERTY "size_delta" vec2 260 44
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>YOU</b>"
+    PROPERTY "font_size" float 30.0
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.13 0.87 0.64 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 131
+  NAME "YouTotal"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -305 66
+    PROPERTY "size_delta" vec2 300 112
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>0</b>"
+    PROPERTY "font_size" float 105.6
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.13 0.87 0.64 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 132
+  NAME "YouBarBack"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -305 -8
+    PROPERTY "size_delta" vec2 340 12
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.14 0.23 0.22 1
+    PROPERTY "fill_amount" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 133
+  NAME "YouBar"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -305 -8
+    PROPERTY "size_delta" vec2 340 12
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.13 0.87 0.64 1
+    PROPERTY "fill_amount" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 134
+  NAME "YouArea"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -305 -76
+    PROPERTY "size_delta" vec2 260 54
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>0</b>"
+    PROPERTY "font_size" float 42.0
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.97 0.98 0.9 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 135
+  NAME "YouGrowth"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -305 -137
+    PROPERTY "size_delta" vec2 260 54
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>+ 0</b>"
+    PROPERTY "font_size" float 42.0
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.97 0.98 0.9 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 136
+  NAME "YouTrees"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -305 -192
+    PROPERTY "size_delta" vec2 260 44
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>0</b>"
+    PROPERTY "font_size" float 31.2
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.74 0.83 0.8 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 137
+  NAME "CpuName"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 305 146
+    PROPERTY "size_delta" vec2 260 44
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>CPU</b>"
+    PROPERTY "font_size" float 30.0
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 1 0.42 0.17 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 138
+  NAME "CpuTotal"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 305 66
+    PROPERTY "size_delta" vec2 300 112
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>0</b>"
+    PROPERTY "font_size" float 105.6
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 1 0.42 0.17 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 139
+  NAME "CpuBarBack"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 305 -8
+    PROPERTY "size_delta" vec2 340 12
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.14 0.23 0.22 1
+    PROPERTY "fill_amount" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 140
+  NAME "CpuBar"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 305 -8
+    PROPERTY "size_delta" vec2 340 12
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 1 0.42 0.17 1
+    PROPERTY "fill_amount" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 141
+  NAME "CpuArea"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 305 -76
+    PROPERTY "size_delta" vec2 260 54
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>0</b>"
+    PROPERTY "font_size" float 42.0
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.97 0.98 0.9 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 142
+  NAME "CpuGrowth"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 305 -137
+    PROPERTY "size_delta" vec2 260 54
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>+ 0</b>"
+    PROPERTY "font_size" float 42.0
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.97 0.98 0.9 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 143
+  NAME "CpuTrees"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 305 -192
+    PROPERTY "size_delta" vec2 260 44
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>0</b>"
+    PROPERTY "font_size" float 31.2
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.74 0.83 0.8 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 144
+  NAME "AreaLabel"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -76
+    PROPERTY "size_delta" vec2 180 50
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>面積</b>"
+    PROPERTY "font_size" float 31.2
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.74 0.83 0.8 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 145
+  NAME "GrowthLabel"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -137
+    PROPERTY "size_delta" vec2 180 50
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>成長</b>"
+    PROPERTY "font_size" float 31.2
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.74 0.83 0.8 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 146
+  NAME "TreesLabel"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -192
+    PROPERTY "size_delta" vec2 180 44
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>樹</b>"
+    PROPERTY "font_size" float 28.799999999999997
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.74 0.83 0.8 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 147
+  NAME "ScoreRule"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -244
+    PROPERTY "size_delta" vec2 900 40
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>面積 ＋ 成長 ＝ 合計</b>"
+    PROPERTY "font_size" float 26.4
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.74 0.83 0.8 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 148
+  NAME "Retry"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -228 -313
+    PROPERTY "size_delta" vec2 370 74
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 1
+    PROPERTY "color" color 0.13 0.87 0.64 1
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "normal_color" color 0.13 0.87 0.64 1
+    PROPERTY "hover_color" color 0.25 0.99 0.76 1
+    PROPERTY "pressed_color" color 0.0936 0.6264 0.4608 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 149
+  NAME "RetryLabel"
+  ENABLED 1
+  PARENT 148
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 358 70
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>もう一度  1分</b>"
+    PROPERTY "font_size" float 36.0
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.035 0.09 0.1 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 150
+  NAME "Title"
+  ENABLED 1
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 228 -313
+    PROPERTY "size_delta" vec2 370 74
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 1
+    PROPERTY "color" color 0.67 0.77 0.7 1
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "interactable" bool 1
+    PROPERTY "normal_color" color 0.67 0.77 0.7 1
+    PROPERTY "hover_color" color 0.79 0.89 0.82 1
+    PROPERTY "pressed_color" color 0.4824 0.5544 0.504 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 151
+  NAME "TitleLabel"
+  ENABLED 1
+  PARENT 150
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 358 70
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>タイトル</b>"
+    PROPERTY "font_size" float 36.0
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.035 0.09 0.1 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 152
+  NAME "Loading"
+  ENABLED 0
+  PARENT 125
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1600 900
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 153
+  NAME "LoadingPanel"
+  ENABLED 1
+  PARENT 152
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -360
+    PROPERTY "size_delta" vec2 620 68
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.035 0.09 0.1 1
+    PROPERTY "fill_amount" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 154
+  NAME "LoadingText"
+  ENABLED 1
+  PARENT 152
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -360
+    PROPERTY "size_delta" vec2 590 60
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>…</b>"
+    PROPERTY "font_size" float 32.4
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.97 0.98 0.9 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 0
+  END_COMPONENT
+END_OBJECT
+END_SCENE

@@ -244,10 +244,7 @@ public sealed class GrowMatch
         var fighter = Fighters[team - 1];
         if (!fighter.Alive) return;
         int index = CellAt(fighter.Position);
-        bool nearTree = false;
-        for (int i = 0; i < CellCount; i++)
-            if (Cells[i].Stage == 4 && Vector3.DistanceSquared(CellCenter(i), fighter.Position) < 2.7f * 2.7f) nearTree = true;
-        if (index >= 0 && !nearTree)
+        if (index >= 0)
         {
             var cell = Cells[index]; cell.Team = team; cell.Growth = 20; cell.Revision++;
         }
@@ -261,10 +258,10 @@ public sealed class GrowMatch
         for (int i = 0; i < CellCount; i++)
         {
             if (Cells[i].Stage != 4) continue;
-            int start = random.Next(24);
-            for (int n = 0; n < 24; n++)
+            int start = random.Next(25);
+            for (int n = 0; n < 25; n++)
             {
-                int k = (start + n) % 24;
+                int k = (start + n) % 25;
                 int dx = k % 5 - 2, dz = k / 5 - 2;
                 int x = i % Columns + dx, z = i / Columns + dz;
                 if (x < 0 || z < 0 || x >= Columns || z >= Rows || dx * dx + dz * dz > 8) continue;
@@ -335,9 +332,6 @@ public sealed class GrowCpu
 
 public static class GrowSession
 {
-    public const string TitleScene = "beea44001a1543a2bfe8807732400001";
-    public const string ArenaScene = "beea44001a1543a2bfe8807732400002";
-    public const string ResultScene = "beea44001a1543a2bfe8807732400003";
     public static int Seconds = 60;
     public static GrowScore You, Cpu;
     public static bool HasResult;
