@@ -1,6 +1,7 @@
 ﻿#include "ScriptRuntime.h"
 
 #include "ScriptComponent.h"
+#include "../../Object/GameObject/GameObject.h"
 #include "../../Scene/Runtime/Scene.h"
 
 #include <algorithm>
@@ -295,6 +296,32 @@ namespace ReplayEngine::Scripting
         ++session_generation_;
         world_ = std::make_unique<ScriptWorld>(session_generation_);
         errors_.Clear();
+
+        // Packaged games load the managed DLL without the editor's source scan.
+        // Resolve persisted C# types from that DLL before Scene::Start/Awake.
+        // Include inactive children so enabling them later needs no source files.
+        std::vector<Core::GameObject*> pending = world.RootGameObjects();
+        while (!pending.empty())
+        {
+            Core::GameObject* object = pending.back();
+            pending.pop_back();
+            if (object == nullptr) continue;
+            for (std::size_t i = 0; i < object->ComponentCount(); ++i)
+            {
+                Core::Component* component = object->ComponentAt(i);
+                ScriptComponent* script = component ? ScriptComponent::From(*component) : nullptr;
+                if (script == nullptr || script->Language() != ScriptLanguage::CSharp ||
+                    !script->ScriptType().IsValid() || catalog_.Find(script->ScriptType())) continue;
+                ScriptTypeDescriptor descriptor;
+                descriptor.type_id = script->ScriptType();
+                descriptor.language = script->Language();
+                descriptor.asset_guid = script->ScriptAssetGUID();
+                descriptor.class_name = script->ClassName();
+                descriptor.script_name = script->ClassName();
+                RegisterScriptType(std::move(descriptor));
+            }
+            for (Core::GameObject* child : object->Children()) pending.push_back(child);
+        }
     }
 
     void ScriptRuntime::DestroyWorld()
