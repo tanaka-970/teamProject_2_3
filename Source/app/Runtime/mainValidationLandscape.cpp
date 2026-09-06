@@ -1,4 +1,4 @@
-﻿// Runtime main のうち「Landscape のヘッドレス検証」を持つ。
+// Runtime main のうち「Landscape のヘッドレス検証」を持つ。
 // Landscape topology / serialization / collision の検証関数本体はそのまま移動している。
 #include "framework.h"
 #include "mainInternal.h"
@@ -39,6 +39,9 @@
 #include "../../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
+
+
+#include "mainValidationLandscapeRegression.inl"
 
 namespace ReplayEngine::Runtime::Detail
 {
@@ -433,11 +436,11 @@ namespace ReplayEngine::Runtime::Detail
             chunk_collider->EndInteractiveEdit();
             chunk_collider->RefreshGeometryIfChanged();
 
-            if (chunk_collider->LastRecookedChunkCount() != 4u ||
-                chunk_collider->LastRecookedTriangleCount() != 14450u)
+            if (chunk_collider->LastRecookedChunkCount() != 1u ||
+                chunk_collider->LastRecookedTriangleCount() != 3613u)
             {
                 std::fprintf(stderr,
-                    "Landscape local edit recooked %zu chunks and %zu triangles; expected 4 and 14450\n",
+                    "Landscape local edit recooked %zu chunks and %zu triangles; expected 1 and 3613\n",
                     chunk_collider->LastRecookedChunkCount(),
                     chunk_collider->LastRecookedTriangleCount());
                 return 58;
@@ -554,6 +557,8 @@ namespace ReplayEngine::Runtime::Detail
                 return 53;
             }
         }
+
+        if (!RunLandscapeEditorRegression()) return 70;
 
         std::fprintf(stderr,
             "Landscape v2 OK: arbitrary mesh, sculpt+undo, topology+bridge, cave/tunnel, raycast, chunk load range, chunk collision cook, save/reload, v1 migration, Component Scene round-trip OK\n");
