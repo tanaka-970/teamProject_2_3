@@ -247,7 +247,7 @@ namespace ReplayEngine::Core::Detail
                 MakeProperty("tint", &LandscapeRendererComponent::tint).Display("色").AsColor());
             PropertyRegistry::Register<LandscapeRendererComponent>(
                 MakeProperty("base_color_texture", &LandscapeRendererComponent::base_color_texture)
-                    .Display(u8"ベースカラーテクスチャ").AsAssetPath().OfAssetType("Texture")
+                    .Display(u8"ベースカラーテクスチャ").AsAssetPath().OfAssetType("Image")
                     .Tooltip(u8"地形へ貼る色テクスチャ。未設定なら色だけで描画する。"));
             PropertyRegistry::Register<LandscapeRendererComponent>(
                 MakeProperty("uv_tiling", &LandscapeRendererComponent::uv_tiling)
