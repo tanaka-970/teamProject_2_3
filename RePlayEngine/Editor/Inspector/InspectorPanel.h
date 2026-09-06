@@ -1,8 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include "../ComponentBrowser/AddComponentPanel.h"
 #include "../../Object/Component/ComponentTypeID.h"
 #include "../../Object/Component/MissingComponent.h"
+
+#include "../../Core/ObjectID/ObjectID.h"
 
 #include <cstddef>
 #include <functional>
@@ -54,6 +56,9 @@ namespace ReplayEngine::Editor
         void BeginPropertyEdit(EditorContext& context, const std::string& label);
         bool property_edit_owned_ = false;
         unsigned int property_edit_item_ = 0;
+        std::uint64_t directional_light_world_ = 0;
+        std::uint32_t directional_light_generation_ = 0;
+        std::vector<Core::ObjectID> directional_light_objects_;
         void DrawGameObjectHeader(EditorContext& context, Core::GameObject& object);
         void DrawPrefabHeader(EditorContext& context, Core::GameObject& object);
         void DrawMultiSelection(EditorContext& context,

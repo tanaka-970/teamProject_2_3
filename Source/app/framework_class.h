@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "framework_application.h"
 
@@ -97,11 +97,12 @@
 #include <string>
 
 
-namespace ReplayEngine::Editor { struct GoldenImageState; }
+namespace ReplayEngine::Editor { struct GoldenImageState; struct LandscapeEditorValidation; }
 
 class framework
 {
     friend struct ReplayEngine::Editor::GoldenImageState;
+    friend struct ReplayEngine::Editor::LandscapeEditorValidation;
 
     // framework_class.h 分割一覧:
     //   framework_class_render_state.inl     … DX12 描画状態と基礎状態

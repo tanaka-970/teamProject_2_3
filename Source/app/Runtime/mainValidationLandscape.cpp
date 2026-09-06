@@ -42,6 +42,7 @@
 
 
 #include "mainValidationLandscapeRegression.inl"
+#include "mainValidationLandscapeEditor.inl"
 
 namespace ReplayEngine::Runtime::Detail
 {
@@ -49,7 +50,10 @@ namespace ReplayEngine::Runtime::Detail
     {
         std::istringstream arguments(command_line != nullptr ? command_line : "");
         std::string command;
-        if (!(arguments >> command) || command != "--validate-landscape") return -1;
+        if (!(arguments >> command)) return -1;
+        if (command == "--validate-landscape-editor")
+            return ReplayEngine::Editor::LandscapeEditorValidation::Run();
+        if (command != "--validate-landscape") return -1;
 
         using namespace ReplayEngine::Landscape;
         LandscapeData data;

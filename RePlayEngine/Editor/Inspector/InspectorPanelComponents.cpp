@@ -429,12 +429,26 @@ namespace ReplayEngine::Editor
             int active_directional_lights = 0;
             if (scene != nullptr)
             {
-                for (std::size_t i = 0; i < scene->GameObjectCount(); ++i)
+                if (directional_light_world_ != scene->WorldInstanceID() ||
+                    directional_light_generation_ != scene->StructureGeneration())
                 {
-                    GameObject* candidate = scene->GameObjectAt(i);
-                    if (candidate == nullptr || !candidate->ActiveInHierarchy()) continue;
-                    auto* light = candidate->GetComponent<Components::DirectionalLightComponent>();
-                    if (light != nullptr && light->Enabled()) ++active_directional_lights;
+                    directional_light_objects_.clear();
+                    for (std::size_t i = 0; i < scene->GameObjectCount(); ++i)
+                    {
+                        const auto* candidate = scene->GameObjectAt(i);
+                        if (candidate && candidate->GetComponent<Components::DirectionalLightComponent>())
+                            directional_light_objects_.push_back(candidate->ID());
+                    }
+                    directional_light_world_ = scene->WorldInstanceID();
+                    directional_light_generation_ = scene->StructureGeneration();
+                }
+                // Enabled / parent activation can change without a structural edit.
+                for (const auto id : directional_light_objects_)
+                {
+                    const auto* candidate = scene->FindGameObjectByID(id);
+                    if (!candidate || candidate->PendingDestroy() || !candidate->ActiveInHierarchy()) continue;
+                    const auto* light = candidate->GetComponent<Components::DirectionalLightComponent>();
+                    if (light && light->Enabled()) ++active_directional_lights;
                 }
             }
             if (active_directional_lights > 1)
