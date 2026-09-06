@@ -5,6 +5,7 @@
 #include <DirectXMath.h>
 
 #include <cmath>
+#include <algorithm>
 
 namespace ReplayEngine::Landscape::Detail
 {
@@ -28,10 +29,10 @@ namespace ReplayEngine::Landscape::Detail
         }
     inline XMFLOAT3 Normalize(const XMFLOAT3& value) noexcept
         {
-            const float length_sq = Dot(value, value);
-            if (length_sq <= epsilon * epsilon) return { 0.0f, 1.0f, 0.0f };
-            const float inverse = 1.0f / std::sqrt(length_sq);
-            return Mul(value, inverse);
+            const float scale = (std::max)({std::fabs(value.x),std::fabs(value.y),std::fabs(value.z)});
+            if (!(scale>0) || !std::isfinite(scale)) return {0,1,0};
+            const XMFLOAT3 scaled{value.x/scale,value.y/scale,value.z/scale};
+            return Mul(scaled,1.0f/std::sqrt(Dot(scaled,scaled)));
         }
     inline bool Finite3(const XMFLOAT3& v) noexcept
         { return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z); }

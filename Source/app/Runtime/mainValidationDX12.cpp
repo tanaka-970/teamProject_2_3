@@ -1333,6 +1333,25 @@ namespace ReplayEngine::Runtime::Detail
             if (!Check(context.EndFrame(),
                 "DX12 composition EndFrame", checks))
                 return false;
+            // More than the shared 8 MiB frame heap: the entire UI used to vanish.
+            for (int overflow_frame=0;overflow_frame<4;++overflow_frame)
+            {
+                if (!Check(context.BeginFrame(clear), "ImGui overflow BeginFrame", checks)) return false;
+                ImGui::NewFrame();
+                auto* dense = ImGui::GetForegroundDrawList();
+                for (int triangle=0;triangle<60000;++triangle)
+                    dense->AddTriangleFilled(ImVec2(1,1),ImVec2(2,1),ImVec2(1,2),IM_COL32_WHITE);
+                ImGui::Render();
+                const auto* data = ImGui::GetDrawData();
+                const std::uint64_t bytes = static_cast<std::uint64_t>(data->TotalVtxCount)*sizeof(ImDrawVert)+
+                    static_cast<std::uint64_t>(data->TotalIdxCount)*sizeof(ImDrawIdx);
+                if (!Check(bytes > Rendering::DX12::D3D12DeviceContext::FrameUploadCapacity,
+                    "ImGui stress exceeds shared frame upload capacity", checks)) return false;
+                if (!Check(context.DrawImGui(ImGui::GetDrawData()), "oversized ImGui remains drawable", checks)) return false;
+                if (!Check(context.EndFrame(), "ImGui overflow EndFrame", checks)) return false;
+                if (!Check(context.RuntimeStats().frame_upload_capacity > Rendering::DX12::D3D12DeviceContext::FrameUploadCapacity,
+                    "ImGui overflow pages included in memory stats", checks)) return false;
+            }
             if (owns_imgui_context) ImGui::DestroyContext();
 #else
             if (!Check(false, "DX12 composition ImGui requires USE_IMGUI", checks))

@@ -203,12 +203,22 @@ namespace framework_landscape_editor_detail
         ReplayEngine::Landscape::LandscapeData::SurfaceRegion region;
         DirectX::XMFLOAT3 tangent{}, bitangent{};
         float radius = 0;
+        struct Ring
+        {
+            float radius = -1;
+            int segments = 0;
+            std::vector<DirectX::XMFLOAT3> points;
+            std::vector<unsigned char> valid;
+        };
+        std::vector<Ring> rings;
+        std::uint64_t projection_queries = 0;
         void Prepare(const ReplayEngine::Landscape::LandscapeData& value,
             const ReplayEngine::Landscape::LandscapeRayHit& picked, float value_radius, int)
         {
             if (data == &value && revision == value.Revision() && radius == value_radius &&
                 hit.face_index == picked.face_index && hit.position.x == picked.position.x &&
                 hit.position.y == picked.position.y && hit.position.z == picked.position.z) return;
+            for (auto& ring : rings) ring.segments = 0;
             data = &value; revision = value.Revision(); hit = picked; radius = value_radius;
             value.QuerySurface(hit.position, radius, hit.face_index, region);
             const auto normal = DirectX::XMLoadFloat3(&hit.normal);
@@ -218,10 +228,11 @@ namespace framework_landscape_editor_detail
             DirectX::XMStoreFloat3(&tangent, t);
             DirectX::XMStoreFloat3(&bitangent, DirectX::XMVector3Cross(normal, t));
         }
-        bool Sample(float x, float y, DirectX::XMFLOAT3& point) const
+        bool Sample(float x, float y, DirectX::XMFLOAT3& point)
         {
             const auto target = Add(hit.position, Add(Scale(tangent,x), Scale(bitangent,y)));
             ReplayEngine::Landscape::LandscapeRayHit projected;
+            ++projection_queries;
             if (!data->ProjectSurface(target, hit.normal, radius, region, projected)) return false;
             point = Add(projected.position, Scale(projected.normal, 0.025f));
             return true;
@@ -234,7 +245,7 @@ namespace framework_landscape_editor_detail
         const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& projection,
         float width, float height, float min_x, float min_y,
         const DirectX::XMFLOAT3& center, float radius,
-        ImU32 color, float thickness, TerrainRingCache& cache, std::size_t)
+        ImU32 color, float thickness, TerrainRingCache& cache, std::size_t ring_index)
     {
         ImVec2 center_screen{}, edge_screen{};
         float pixels = 48.0f;
@@ -243,27 +254,38 @@ namespace framework_landscape_editor_detail
             ProjectToScene(edge,transform,view,projection,width,height,min_x,min_y,edge_screen))
             pixels = std::hypot(edge_screen.x-center_screen.x, edge_screen.y-center_screen.y);
         const int segments = (std::max)(16,(std::min)(48,static_cast<int>(pixels * 0.5f)));
-        DirectX::XMFLOAT3 previous{};
-        bool previous_valid = false;
-        for (int i=0; i<=segments; ++i)
+        if (cache.rings.size() <= ring_index) cache.rings.resize(ring_index + 1);
+        auto& ring = cache.rings[ring_index];
+        if (ring.radius != radius || ring.segments != segments)
         {
-            const float angle = DirectX::XM_2PI * i / segments;
-            DirectX::XMFLOAT3 point{};
-            float radial = radius;
-            bool valid = false;
-            for (int iteration=0; iteration<3; ++iteration)
+            ring.radius = radius;
+            ring.segments = segments;
+            ring.points.resize(segments);
+            ring.valid.resize(segments);
+            for (int i=0; i<segments; ++i)
             {
-                valid = cache.Sample(std::cos(angle)*radial, std::sin(angle)*radial, point);
-                if (!valid) break;
-                const float distance = std::sqrt((point.x-center.x)*(point.x-center.x) +
-                    (point.y-center.y)*(point.y-center.y)+(point.z-center.z)*(point.z-center.z));
-                if (distance <= radius * 1.01f) break;
-                radial *= radius / distance;
+                const float angle = DirectX::XM_2PI * i / segments;
+                float radial = radius;
+                bool valid = false;
+                for (int iteration=0; iteration<3; ++iteration)
+                {
+                    valid = cache.Sample(std::cos(angle)*radial, std::sin(angle)*radial, ring.points[i]);
+                    if (!valid) break;
+                    const auto& point = ring.points[i];
+                    const float distance = std::sqrt((point.x-center.x)*(point.x-center.x) +
+                        (point.y-center.y)*(point.y-center.y)+(point.z-center.z)*(point.z-center.z));
+                    if (distance <= radius * 1.01f) break;
+                    radial *= radius / distance;
+                }
+                ring.valid[i] = valid;
             }
-            if (i>0 && previous_valid && valid)
+        }
+        for (int i=0; i<segments; ++i)
+        {
+            const int next = (i+1)%segments;
+            if (ring.valid[i] && ring.valid[next])
                 DrawProjectedLine(draw,transform,view,projection,width,height,min_x,min_y,
-                    previous,point,color,thickness);
-            previous=point; previous_valid=valid;
+                    ring.points[i],ring.points[next],color,thickness);
         }
     }
 
@@ -274,9 +296,14 @@ namespace framework_landscape_editor_detail
         float width, float height, float min_x, float min_y,
         const DirectX::XMFLOAT3&, float, const TerrainRingCache& cache)
     {
-        for (const auto face : cache.region.faces)
+        // A dense local patch must not consume the entire ImGui upload budget.
+        constexpr std::size_t face_budget = 1024;
+        const std::size_t stride = (std::max)(std::size_t{1},
+            (cache.region.faces.size()+face_budget-1)/face_budget);
+        for (std::size_t sample=0;sample<cache.region.faces.size();sample+=stride)
             for (int edge=0;edge<3;++edge)
             {
+                const auto face = cache.region.faces[sample];
                 const auto a=data.VertexPosition(data.Indices()[face*3+edge]);
                 const auto b=data.VertexPosition(data.Indices()[face*3+(edge+1)%3]);
                 const auto normal=data.FaceNormal(face);
@@ -292,8 +319,12 @@ namespace framework_landscape_editor_detail
         float width, float height, float min_x, float min_y,
         const DirectX::XMFLOAT3&, float, const TerrainRingCache& cache)
     {
-        for (const auto face : cache.region.faces)
+        constexpr std::size_t face_budget = 1024;
+        const std::size_t stride = (std::max)(std::size_t{1},
+            (cache.region.faces.size()+face_budget-1)/face_budget);
+        for (std::size_t sample=0;sample<cache.region.faces.size();sample+=stride)
         {
+            const auto face = cache.region.faces[sample];
             ImVec2 screen[3]{};
             bool valid=true;
             const auto normal=data.FaceNormal(face);

@@ -7,6 +7,7 @@
 #include "../../../RePlayEngine/Landscape/LandscapeMeshGenerator.h"
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
+#include "../Editor/framework_landscape_editorInternal.h"
 
 namespace ReplayEngine::Runtime::Detail
 {
@@ -301,6 +302,54 @@ namespace ReplayEngine::Runtime::Detail
             "checkbox begins before setter and captures one Undo pair");
         check(history.Undo() && descriptor->Capture(*heavy.FindGameObjectByID(selected_id)->
             GetComponent<Components::PrimitiveMeshRendererComponent>()).AsBool(),"checkbox first change is undoable");
+        LandscapeData tiny_wall;
+        std::vector<LandscapeVertex> tiny_vertices(3);
+        tiny_vertices[0].position={0,0,0}; tiny_vertices[1].position={0.0001f,0,0}; tiny_vertices[2].position={0,0.0001f,0};
+        tiny_wall.InitializeMesh(std::move(tiny_vertices),{0,1,2});
+        LandscapeRayHit tiny_hit;
+        check(tiny_wall.Raycast({0.00002f,0.00002f,1},{0,0,-1},2,tiny_hit),"tiny vertical triangle remains pickable");
+        check(std::fabs(tiny_wall.FaceNormal(0).z)>0.999f && std::fabs(tiny_wall.Vertices()[0].normal.z)>0.999f,
+            "tiny vertical triangle retains non-Y normal");
+        LandscapeData::SurfaceRegion tiny_region;
+        tiny_wall.QuerySurface(tiny_hit.position,0.001f,tiny_hit.face_index,tiny_region);
+        check(tiny_region.faces.size()==1 && tiny_region.vertices.size()==3,"tiny surface survives candidate query");
+        // The user's reproduction: keep subdividing the exact same patch, then hover it.
+        LandscapeData dense; dense.Initialize(17,17,1);
+        LandscapeBrush fine; fine.radius=3;
+        fine.target_edge_length=0.001f;
+        for (int sample=0;sample<100;++sample)
+        {
+            const auto hit=pick(dense,8.1f,8.1f);
+            LandscapeEditorTool::ApplySubdivideSample(dense,hit.position,hit.face_index,fine);
+        }
+        dense.FinishSculpt();
+        const auto dense_hit=pick(dense,8.1f,8.1f);
+        framework_landscape_editor_detail::TerrainRingCache preview;
+        preview.Prepare(dense,dense_hit,3,4);
+        check(preview.region.faces.size()>4096,"repeated subdivision creates dense preview patch");
+        io.MouseDown[0]=false;
+        ImGui::NewFrame();
+        auto* draw=ImGui::GetForegroundDrawList();
+        const auto& transform=heavy.FindGameObjectByID(ground_id)->GetTransform();
+        const auto view=DirectX::XMMatrixLookAtLH(DirectX::XMVectorSet(8,20,-8,1),
+            DirectX::XMVectorSet(8,0,8,1),DirectX::XMVectorSet(0,1,0,0));
+        const auto projection=DirectX::XMMatrixPerspectiveFovLH(1,1280.0f/720,0.1f,1000);
+        using namespace framework_landscape_editor_detail;
+        DrawBrushFaceInfluence(draw,dense,transform,view,projection,1280,720,0,0,dense_hit.position,3,preview);
+        DrawTerrainGridInBrush(draw,dense,transform,view,projection,1280,720,0,0,dense_hit.position,3,preview);
+        const int before_ring=draw->VtxBuffer.Size;
+        DrawTerrainRing(draw,dense,transform,view,projection,1280,720,0,0,dense_hit.position,3,IM_COL32_WHITE,2,preview,0);
+        check(draw->VtxBuffer.Size>before_ring,"dense patch retains brush ring geometry");
+        const auto queries=preview.projection_queries;
+        preview.Prepare(dense,dense_hit,3,4);
+        DrawTerrainRing(draw,dense,transform,view,projection,1280,720,0,0,dense_hit.position,3,IM_COL32_WHITE,2,preview,0);
+        check(preview.projection_queries==queries,"idle preview reuses ring projections");
+        ImGui::Render();
+        const auto* preview_draw=ImGui::GetDrawData();
+        const std::uint64_t preview_bytes=static_cast<std::uint64_t>(preview_draw->TotalVtxCount)*sizeof(ImDrawVert)+
+            static_cast<std::uint64_t>(preview_draw->TotalIdxCount)*sizeof(ImDrawIdx);
+        results<<"Dense preview faces "<<preview.region.faces.size()<<" upload_bytes "<<preview_bytes<<'\n';
+        check(preview_bytes<2*1024*1024,"dense preview upload bounded below 2 MiB");
         ImGui::DestroyContext(); ImGui::SetCurrentContext(previous_context);
         for(int kind=0;kind<2;++kind)
         {

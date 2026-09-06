@@ -3764,7 +3764,7 @@ namespace ReplayEngine::Rendering::DX12
         }
         frame_resources_[submitted_frame].fence_value = signal_value;
         frame_upload_peak_ = (std::max)(frame_upload_peak_,
-            frame_resources_[submitted_frame].upload_allocator.Used());
+            frame_resources_[submitted_frame].TotalUploadUsed());
         diagnostics_.SetRuntimeStats(BuildRuntimeStats());
         diagnostics_.MarkSubmitted(submitted_frame, signal_value);
         diagnostics_.DrainInfoQueue();
@@ -3851,8 +3851,8 @@ namespace ReplayEngine::Rendering::DX12
         stats.sampler_descriptor_peak = sampler_descriptor_allocator_.PeakUsed();
         stats.sampler_descriptor_fragmentation = sampler_descriptor_allocator_.FragmentationRatio();
         stats.sampler_descriptor_failures = sampler_descriptor_allocator_.AllocationFailures();
-        stats.frame_upload_used = frame_resources_[frame_index_].upload_allocator.Used();
-        stats.frame_upload_capacity = frame_resources_[frame_index_].upload_allocator.Capacity();
+        stats.frame_upload_used = frame_resources_[frame_index_].TotalUploadUsed();
+        stats.frame_upload_capacity = frame_resources_[frame_index_].TotalUploadCapacity();
         stats.frame_upload_peak = frame_upload_peak_;
         stats.upload_wait_count = upload_context_.WaitCount();
         stats.upload_wait_nanoseconds = upload_context_.WaitNanoseconds();

@@ -1294,19 +1294,17 @@ namespace ReplayEngine::Rendering::DX12
             draw_data->TotalVtxCount <= 0 || draw_data->TotalIdxCount <= 0)
             return finish(true);
 
-        D3D12LinearUploadAllocator& allocator = frame_resources_[frame_index_].upload_allocator;
-        D3D12UploadAllocation vertex_upload{};
-        D3D12UploadAllocation index_upload{};
-        D3D12UploadAllocation constant_upload{};
-        const auto allocate = [&allocator](std::uint64_t size, std::uint64_t alignment,
+        const std::uint64_t vertex_size = static_cast<std::uint64_t>(draw_data->TotalVtxCount) * sizeof(ImDrawVert);
+        const std::uint64_t index_size = static_cast<std::uint64_t>(draw_data->TotalIdxCount) * sizeof(ImDrawIdx);
+        // Include alignment padding and the projection constant. Select an entire
+        // page before allocating, so a failed main-heap attempt cannot consume it.
+        auto* allocator = frame_resources_[frame_index_].ImGuiUploadAllocator(
+            device_.Get(), vertex_size+index_size+1024);
+        if (!allocator) return finish(false);
+        D3D12UploadAllocation vertex_upload{}, index_upload{}, constant_upload{};
+        const auto allocate = [allocator](std::uint64_t size, std::uint64_t alignment,
             D3D12UploadAllocation& output) noexcept
-        {
-            return allocator.Allocate(size, alignment, output);
-        };
-        const std::uint64_t vertex_size = static_cast<std::uint64_t>(draw_data->TotalVtxCount) *
-            sizeof(ImDrawVert);
-        const std::uint64_t index_size = static_cast<std::uint64_t>(draw_data->TotalIdxCount) *
-            sizeof(ImDrawIdx);
+        { return allocator->Allocate(size, alignment, output); };
         if (!allocate(vertex_size, 16, vertex_upload) ||
             !allocate(index_size, 4, index_upload))
             return finish(false);

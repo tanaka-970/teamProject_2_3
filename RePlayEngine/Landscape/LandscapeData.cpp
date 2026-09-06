@@ -35,23 +35,27 @@ namespace ReplayEngine::Landscape
             const XMFLOAT3& a, const XMFLOAT3& b, const XMFLOAT3& c,
             float& distance) noexcept
         {
-            // Moller-Trumbore。両面を拾うので determinant の符号では弾かない。
-            const XMFLOAT3 edge1 = Sub(b, a);
-            const XMFLOAT3 edge2 = Sub(c, a);
-            const XMFLOAT3 p = Cross(direction, edge2);
-            const float determinant = Dot(edge1, p);
-            if (std::fabs(determinant) <= epsilon) return false;
-            const float inv = 1.0f / determinant;
-            const XMFLOAT3 t = Sub(origin, a);
-            const float u = Dot(t, p) * inv;
-            if (u < 0.0f || u > 1.0f) return false;
-            const XMFLOAT3 q = Cross(t, edge1);
-            const float v = Dot(direction, q) * inv;
-            if (v < 0.0f || u + v > 1.0f) return false;
-            const float result = Dot(edge2, q) * inv;
-            if (result < 0.0f) return false;
-            distance = result;
-            return true;
+            // Scale-relative, double-precision Moller-Trumbore. A fixed area
+            // epsilon turns valid subdivided triangles into unpickable holes.
+            const double e1x=double(b.x)-a.x, e1y=double(b.y)-a.y, e1z=double(b.z)-a.z;
+            const double e2x=double(c.x)-a.x, e2y=double(c.y)-a.y, e2z=double(c.z)-a.z;
+            const double px=direction.y*e2z-direction.z*e2y;
+            const double py=direction.z*e2x-direction.x*e2z;
+            const double pz=direction.x*e2y-direction.y*e2x;
+            const double determinant=e1x*px+e1y*py+e1z*pz;
+            const double scale=std::sqrt((e1x*e1x+e1y*e1y+e1z*e1z)*(e2x*e2x+e2y*e2y+e2z*e2z));
+            if (scale==0 || std::fabs(determinant)<=scale*1.0e-12) return false;
+            const double tx=double(origin.x)-a.x, ty=double(origin.y)-a.y, tz=double(origin.z)-a.z;
+            const double u=(tx*px+ty*py+tz*pz)/determinant;
+            constexpr double barycentric_tolerance=1.0e-7;
+            if (u < -barycentric_tolerance || u > 1+barycentric_tolerance) return false;
+            const double qx=ty*e1z-tz*e1y, qy=tz*e1x-tx*e1z, qz=tx*e1y-ty*e1x;
+            const double v=(direction.x*qx+direction.y*qy+direction.z*qz)/determinant;
+            if (v < -barycentric_tolerance || u+v > 1+barycentric_tolerance) return false;
+            const double result=(e2x*qx+e2y*qy+e2z*qz)/determinant;
+            if (result < 0 || !std::isfinite(result)) return false;
+            distance=static_cast<float>(result);
+            return std::isfinite(distance);
         }
 
         bool RayBounds(const XMFLOAT3& origin, const XMFLOAT3& direction,
@@ -721,7 +725,9 @@ namespace ReplayEngine::Landscape
             const auto a = XMLoadFloat3(&vertices_[t[0]].position);
             const auto b = XMLoadFloat3(&vertices_[t[1]].position);
             const auto c = XMLoadFloat3(&vertices_[t[2]].position);
-            if (XMVectorGetX(XMVector3LengthSq(XMVector3Cross(b-a,c-a))) <= 1.0e-12f) return;
+            const float edge_product = XMVectorGetX(XMVector3LengthSq(b-a))*XMVectorGetX(XMVector3LengthSq(c-a));
+            const float area_sq = XMVectorGetX(XMVector3LengthSq(XMVector3Cross(b-a,c-a)));
+            if (edge_product==0 || area_sq <= edge_product*1.0e-12f) return;
             if (sphere.Intersects(a, b, c)) region.faces.push_back(face);
         };
         visit(static_cast<std::uint32_t>(seed_face));
