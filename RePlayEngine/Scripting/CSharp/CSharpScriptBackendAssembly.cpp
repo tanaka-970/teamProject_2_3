@@ -101,7 +101,15 @@ namespace ReplayEngine::Scripting::CSharp
     bool CSharpScriptBackend::LoadGameAssembly(
         const std::filesystem::path& assembly_path, std::string& output)
     {
-        if (load_assembly_ == nullptr) return false;
+        if (load_assembly_ == nullptr)
+        {
+            // 理由なしで false を返すと、呼び出し側が空のエラーを出す。
+            // Managed API へ接続できていないことがそのまま原因になる。
+            output = "C# LoadAssembly entry point is missing. "
+                "The Managed API is not connected.";
+            SetLastError(output);
+            return false;
+        }
 
         std::string copy_error;
         const std::filesystem::path load_path =
@@ -158,6 +166,12 @@ namespace ReplayEngine::Scripting::CSharp
 
     bool CSharpScriptBackend::CompileAndReload(CSharpBuildResult* out_build)
     {
+        // 起動時に hostfxr / Managed API の接続へ失敗していると、
+        // load_assembly_ が空のまま何度ビルドしてもロードできない。
+        // Editor の「C# Build & Reload」を押しても永久に直らなくなるため、
+        // ここで一度だけ接続をやり直す。成功していれば Initialize() は即 true。
+        if (!initialized_ && !Initialize()) return false;
+
         last_build_ = CSharpProject::BuildGameScripts(project_root_);
         if (out_build != nullptr) *out_build = last_build_;
 

@@ -882,4 +882,73 @@ namespace ReplayEngine::Scripting::Validation
         runtime->Shutdown();
         return check.Report("csharp-scripting");
     }
+
+    // 起動時のビルド失敗からの復旧。
+    //
+    // ホットリロードの失敗（上の suite で確認済み）とは意味が違う。
+    // ホットリロードは「直前の Assembly を維持する」で足りるが、
+    // 起動直後はまだ何もロードしていないため、維持する相手がいない。
+    // ここで Assembly が 1 つも無いまま Play へ入ると、C# の型が全部
+    // 「C# Assembly is not loaded.」になり、移動も UI ボタンも動かなくなる。
+    //
+    // 【別プロセスに分けてある理由】
+    //   hostfxr_initialize_for_runtime_config は 1 プロセスに 1 回しか通らない。
+    //   同じプロセスで Backend を作り直すと、確かめたい経路の手前で
+    //   0x80008081 で止まってしまい、起動の分岐を通せない。
+    //   確かめたいのは「プロセスの最初の Initialize()」なので、
+    //   その 1 回だけを持つ検証としてここへ独立させる。
+    int RunCSharpStartupRecoveryValidation()
+    {
+        namespace CSharp = ReplayEngine::Scripting::CSharp;
+
+        Checker check(880);
+        Core::RegisterBuiltInComponents();
+
+        const std::filesystem::path root = std::filesystem::current_path();
+        const std::filesystem::path scripts = CSharp::CSharpProject::ScriptsRoot(root);
+        const std::filesystem::path broken_source =
+            scripts / "ValidationStartupBrokenBehaviour.cs";
+        ScopedFileRestore restore_broken(broken_source);
+
+        // 復旧に使う「前回のビルド結果」が無ければ、まず 1 回作る。
+        // ここは壊れたソースを置く前なので普通に成功する。
+        const std::filesystem::path assembly =
+            CSharp::CSharpProject::GameScriptsAssemblyPath(root);
+        std::error_code exists_error;
+        if (!std::filesystem::exists(assembly, exists_error) || exists_error)
+        {
+            const CSharp::CSharpBuildResult seed =
+                CSharp::CSharpProject::BuildGameScripts(root);
+            check.Expect(seed.succeeded, "復旧元にする C# Assembly を用意できる");
+        }
+        check.Expect(std::filesystem::exists(assembly, exists_error) && !exists_error,
+            "ディスクに前回の C# Assembly がある");
+
+        check.Expect(WriteText(broken_source,
+            "using ReplayEngine;\nnamespace ValidationScripts;\n"
+            "public sealed class ValidationStartupBrokenBehaviour : ScriptBehaviour "
+            "{ syntax error }\n"),
+            "起動時ビルドを失敗させる C# ソースを書ける");
+
+        auto runtime = std::make_unique<ScriptRuntime>();
+        auto instance = std::make_unique<CSharp::CSharpScriptBackend>(root);
+        CSharp::CSharpScriptBackend* backend = instance.get();
+        runtime->InstallBackend(std::move(instance));
+        runtime->Initialize();
+
+        check.Expect(!backend->LastBuildResult().succeeded,
+            "起動時の C# ビルドが実際に失敗している");
+        check.Expect(backend->AssemblyLoaded(),
+            "ビルドが失敗しても、ディスクに残った Assembly で C# は動く");
+        check.Expect(backend->StartupUsedExistingAssembly(),
+            "古い Assembly で復旧したことを呼び出し側が判定できる");
+        check.Expect(!backend->StartupDiagnostic().empty(),
+            "起動時のビルド失敗の理由が診断として残る");
+
+        runtime->Shutdown();
+
+        std::error_code remove_error;
+        std::filesystem::remove(broken_source, remove_error);
+        return check.Report("csharp-startup-recovery");
+    }
 }

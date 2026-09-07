@@ -189,6 +189,60 @@ ReplayEngine::Scene::Scene* framework::exclusive_scene_for_render() noexcept
     return scene_manager.IsExclusive() ? object_loading_scene.get() : nullptr;
 }
 
+// 起動時に C# を用意できたかを engine_log.txt へ 1 行残す。
+//
+// 【なぜ要るか】
+//   Initialize() は Editor を止めないために失敗しても true を返す。
+//   その結果、失敗の理由はどこにも出ず、Scene を開いたあとに
+//   型ごとの「C# Assembly is not loaded.」だけが並ぶ。
+//   その行からは、ビルドが失敗したのか hostfxr が無いのかが分からない。
+//   起動のたびに状態を 1 行残しておけば、次に同じことが起きたときに
+//   ログの先頭を見るだけで切り分けられる。
+void framework::log_csharp_startup_state()
+{
+    namespace Scripting = ReplayEngine::Scripting;
+    if (!object_script_runtime) return;
+
+    auto* backend = dynamic_cast<Scripting::CSharp::CSharpScriptBackend*>(
+        object_script_runtime->Backend(Scripting::ScriptLanguage::CSharp));
+    if (backend == nullptr)
+    {
+        log_shutdown_reason("[Script] C# Backend が接続されていません");
+        return;
+    }
+
+    const std::string& diagnostic = backend->StartupDiagnostic();
+    if (backend->AssemblyLoaded() && diagnostic.empty())
+    {
+        log_shutdown_reason("[Script] C# Assembly ロード済み");
+        return;
+    }
+
+    // ビルド出力は複数行になる。1 行に畳んでからログへ出す。
+    std::string reason = diagnostic;
+    for (char& character : reason)
+    {
+        if (character == '\r' || character == '\n') character = ' ';
+    }
+    if (reason.size() > 1024) reason.resize(1024);
+
+    if (backend->AssemblyLoaded())
+    {
+        const std::string message = backend->StartupUsedExistingAssembly()
+            ? "[Script] C# ビルド失敗。ディスクに残っていた前回の Assembly で"
+              "起動しました。ソースより古い可能性があります: " + reason
+            : "[Script] C# Assembly はロード済みですが警告があります: " + reason;
+        log_shutdown_reason(message.c_str());
+        push_editor_log("Warning", message);
+        return;
+    }
+
+    const std::string message = "[Script] C# を用意できませんでした。"
+        "C# の Component はすべて動きません: " + reason;
+    log_shutdown_reason(message.c_str());
+    push_editor_log("Error", message);
+}
+
 void framework::initialize_runtime_services()
 {
     if (object_runtime_context) return;
@@ -212,6 +266,7 @@ void framework::initialize_runtime_services()
         std::make_unique<ReplayEngine::Scripting::CSharp::CSharpScriptBackend>(
             content_root_path(), standalone_game_mode));
     object_script_runtime->Initialize();
+    log_csharp_startup_state();
 
     object_runtime_scenes.SetRuntimeContext(object_runtime_context.get());
     object_runtime_scenes.SetSceneFlowService(object_scene_flow.get());
@@ -401,10 +456,14 @@ void framework::tick_runtime_scene_flow()
 
     // 終了要求はアプリケーション層が受け取る。
     // SceneFlowService はプロセスを落とさないので、ここで初めて実際の終了になる。
+    //
+    // 起動モードで宛先が変わるため、判断は handle_game_quit_request() へ集約する。
+    // 単体ゲームはプロセス終了、エディター内 Play は Play の停止。
     if (object_scene_flow->QuitRequested())
     {
+        const std::string quit_reason = object_scene_flow->QuitReason();
         object_scene_flow->ClearQuitRequest();
-        request_object_scene_action(object_scene_action::exit_application);
+        handle_game_quit_request(quit_reason);
     }
 
     rebind_runtime_world_if_changed();

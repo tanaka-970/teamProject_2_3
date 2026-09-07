@@ -60,6 +60,9 @@
 #include "../../game/game_input.h"
 #include "../../mesh/skinned_mesh.h"
 
+// 終了要求ルーティングの回帰確認。framework の内部へ触るため .inl で持つ。
+#include "mainValidationAppQuit.inl"
+
 namespace ReplayEngine::Runtime::Detail
 {
     std::filesystem::path ValidationFolder()
@@ -975,6 +978,16 @@ namespace ReplayEngine::Runtime::Detail
             return ReplayEngine::Editor::Validation::RunEditorCameraValidation();
         }
 
+        // 終了要求の宛先。単体ゲーム / エディター内 Play / エディター本体で
+        // 意味が違う。混ざると「ゲームを閉じたらエディターが出て閉じられない」
+        // または「Play をやめたつもりが編集ごと落ちる」になる。
+        // 終了コード帯は 2400-2499。
+        if (command == "--validate-app-quit")
+        {
+            ReplayEngine::Core::RegisterBuiltInComponents();
+            return ReplayEngine::Editor::AppQuitValidation::Run();
+        }
+
         // Phase 9。反復と大量データの耐久検査。
         if (command == "--validate-stress")
         {
@@ -1021,6 +1034,15 @@ namespace ReplayEngine::Runtime::Detail
             {
                 ReplayEngine::Core::RegisterBuiltInComponents();
                 return ScriptValidation::RunCSharpScriptValidation();
+            }
+
+            // 起動時の C# ビルド失敗から、ディスクに残った Assembly で
+            // 復旧できるかを、プロセスの最初の Initialize() で確かめる。
+            // hostfxr の初期化は 1 プロセス 1 回なので別コマンドに分ける。
+            if (command == "--validate-csharp-startup-recovery")
+            {
+                ReplayEngine::Core::RegisterBuiltInComponents();
+                return ScriptValidation::RunCSharpStartupRecoveryValidation();
             }
         }
 

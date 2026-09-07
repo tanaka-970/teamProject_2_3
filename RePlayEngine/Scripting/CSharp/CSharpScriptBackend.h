@@ -55,6 +55,21 @@ namespace ReplayEngine::Scripting::CSharp
         const CSharpBuildResult& LastBuildResult() const noexcept { return last_build_; }
         bool AssemblyLoaded() const noexcept { return assembly_loaded_; }
 
+        // 起動時に C# を用意できなかった理由。空なら問題なく用意できた。
+        // Initialize() は Editor を止めないため戻り値だけでは理由が残らない。
+        // 呼び出し側がログへ出せるよう、ここに保持する。
+        const std::string& StartupDiagnostic() const noexcept
+        {
+            return startup_diagnostic_;
+        }
+
+        // 起動時のビルドに失敗し、ディスクに残っていた前回の Assembly で
+        // 復旧したか。true のときスクリプトは動くがソースより古い。
+        bool StartupUsedExistingAssembly() const noexcept
+        {
+            return startup_used_existing_assembly_;
+        }
+
     private:
         struct TypeState final
         {
@@ -66,6 +81,7 @@ namespace ReplayEngine::Scripting::CSharp
         bool LoadManagedApi();
         bool ResolveManagedEntryPoints();
         bool SetNativeApi();
+        bool RecordStartupFailure();
         std::filesystem::path ShadowCopyAssembly(
             const std::filesystem::path& assembly_path, std::string& error) const;
         bool LoadGameAssembly(const std::filesystem::path& assembly_path,
@@ -103,9 +119,11 @@ namespace ReplayEngine::Scripting::CSharp
         mutable std::string last_error_;
         mutable std::string last_error_file_;
         mutable int last_error_line_ = 0;
+        std::string startup_diagnostic_;
 
         bool initialized_ = false;
         bool assembly_loaded_ = false;
         bool packaged_mode_ = false;
+        bool startup_used_existing_assembly_ = false;
     };
 }

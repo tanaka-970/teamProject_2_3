@@ -34,13 +34,22 @@ namespace ReplayEngine::Scripting::CSharp
     ScriptLoadResult CSharpScriptBackend::LoadType(
         const ScriptTypeDescriptor& descriptor, std::uint32_t schema_revision)
     {
+        // 型ごとに 1 行出るメッセージなので、理由が分かっているなら足す。
+        // 「読み込まれていない」だけでは、ビルドが失敗したのか
+        // hostfxr へ接続できていないのかが読み手に分からない。
         if (!initialized_)
         {
-            return ScriptLoadResult::Failure("C# Backend is not initialized.");
+            return ScriptLoadResult::Failure(startup_diagnostic_.empty()
+                ? "C# Backend is not initialized."
+                : "C# Backend is not initialized: " + startup_diagnostic_);
         }
         if (!assembly_loaded_)
         {
-            return ScriptLoadResult::Failure("C# Assembly is not loaded.");
+            const std::string& reason = startup_diagnostic_.empty()
+                ? last_error_ : startup_diagnostic_;
+            return ScriptLoadResult::Failure(reason.empty()
+                ? "C# Assembly is not loaded."
+                : "C# Assembly is not loaded: " + reason);
         }
         if (describe_type_ == nullptr)
         {

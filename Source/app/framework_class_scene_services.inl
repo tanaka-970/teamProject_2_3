@@ -17,9 +17,24 @@
     void execute_pending_object_scene_action();
     void draw_unsaved_object_scene_prompt();
     bool confirm_object_scene_close();
+
+    // 「終了」の宛先を 3 つに分ける唯一の場所。
+    //
+    // 単体ゲーム       … 編集セッションが無いので即座にプロセスを閉じる。
+    // エディター内 Play … Play を止めて編集シーンへ戻す。アプリは終了しない。
+    // エディター本体   … 未保存確認を通してから閉じる。
+    //
+    // ゲームからの終了要求 (SceneFlow の Quit) は handle_game_quit_request()、
+    // アプリそのものを閉じる操作 (File > Exit / ウィンドウの×) は
+    // request_application_quit() を通す。
+    void handle_game_quit_request(const std::string& reason);
+    void request_application_quit();
     void add_recent_object_scene(const std::filesystem::path& path);
     void register_object_scene_asset();
     void discard_object_scene_autosave();
+    // Play へ入る前に C# の Assembly をソースへ追いつかせる。
+    // 保存直後の F5 が古い Assembly で走らないための唯一の同期点。
+    void ensure_csharp_ready_for_play();
     void enter_object_play_mode(bool show_loading_screen = true);
     void exit_object_play_mode();
     bool complete_object_play_mode_start();
@@ -31,6 +46,7 @@
     // World の実体が入れ替わったら、それに紐づくものを全部張り直す。
     // 呼び出しは毎フレームの安全点 1 か所だけ。
     void initialize_runtime_services();
+    void log_csharp_startup_state();
     void tick_runtime_scene_flow();
     void rebind_runtime_world_if_changed();
     void update_editor_play_loading();
