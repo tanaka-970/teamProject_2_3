@@ -425,6 +425,12 @@ bool framework::confirm_object_scene_close()
 // エディターまで閉じてしまうと、Play 前の編集内容ごと消えることになる。
 void framework::handle_game_quit_request(const std::string& reason)
 {
+    // 誰がいつ終了を要求したかを必ず残す。
+    // これが無いと、勝手に閉じたときに「押していないのに終了した」のか
+    // 「押した通りに終了した」のかがログから区別できない。
+    log_shutdown_reason(("終了要求 (" +
+        (reason.empty() ? std::string("理由なし") : reason) + ")").c_str());
+
     if (standalone_game_mode)
     {
         request_application_quit();
