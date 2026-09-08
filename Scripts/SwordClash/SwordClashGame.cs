@@ -312,10 +312,8 @@ public class SwordClashGame : MonoBehaviour
         var a = fighters[0];
         var b = fighters[1];
         if (a == null || b == null) return;
-        hint.text = "A/D 移動  SPACE ジャンプ  J 斬り  K+方向 必殺   |   " +
-            "y " + a.transform.position.Y.ToString("F1") + " / " +
-            b.transform.position.Y.ToString("F1") + "   peak " +
-            a.PeakY.ToString("F1") + " / " + b.PeakY.ToString("F1");
+        hint.text = "peak " + a.PeakY.ToString("F1") + " / " + b.PeakY.ToString("F1") +
+            "   launch " + a.Launch + " | " + b.Launch;
     }
 
     void Apply(int index, UIText? damageText, UIText? stockText, UIImage? gauge)

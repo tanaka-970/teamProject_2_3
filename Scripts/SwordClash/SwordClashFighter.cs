@@ -64,6 +64,10 @@ public class SwordClashFighter : MonoBehaviour
     [ReadOnly]
     public float PeakY;
 
+    // 撃力がどこで死んでいるかを画面で読むための一時表示。
+    [ReadOnly]
+    public string Launch = "-";
+
     // 操作を受け付けるか。
     //
     // 既定を true にしてあるのは、Director が居なくても動かせるようにするため。
@@ -400,7 +404,16 @@ public class SwordClashFighter : MonoBehaviour
         // ふっとばしは Motor の撃力へ。接地していても上へ抜ける。
         // 蓄積が高いほど長く飛ぶ。この間は操作も減速も効かない。
         var hold = 0.25f + Mathf.Min(0.55f, Damage * 0.004f);
-        motor?.AddImpulse(new Vector3(away * power, power * (0.62f + upward), 0.0f), hold);
+        if (motor == null)
+        {
+            Launch = "nomotor";
+        }
+        else
+        {
+            var status = motor.AddImpulse(
+                new Vector3(away * power, power * (0.62f + upward), 0.0f), hold);
+            Launch = status + " p" + ((int)power);
+        }
         hitStun = hold;
 
         move = Move.None;

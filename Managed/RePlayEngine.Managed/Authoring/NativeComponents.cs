@@ -372,7 +372,7 @@ public sealed class CharacterMotor : NativeBehaviour
     public void Jump() { var binding = Binding; binding.RequestJump = true; }
 
     // 水平の向きへ歩かせる。y は使わない。倍率は走り・突進に使う。
-    public void Move(Vector3 direction, float speedMultiplier = 1.0f)
+    public RuntimeStatus Move(Vector3 direction, float speedMultiplier = 1.0f)
         => NativeBridge.InvokeComponentCommand(Handle, ComponentCommand.MotorMove,
             scalar: direction.X, secondaryScalar: direction.Z,
             integer: (int)(Mathf.Clamp(speedMultiplier, 0.0f, 20.0f) * 1000.0f));
@@ -381,12 +381,12 @@ public sealed class CharacterMotor : NativeBehaviour
     //
     // holdSeconds のあいだ、Motor は水平の加速・減速・上限を止める。
     // 0 のままだと次の更新で移動速度まで削られ、まったく飛ばない。
-    public void AddImpulse(Vector3 impulse, float holdSeconds = 0.0f)
+    public RuntimeStatus AddImpulse(Vector3 impulse, float holdSeconds = 0.0f)
         => NativeBridge.InvokeComponentCommand(Handle, ComponentCommand.MotorImpulse,
             Text(impulse), scalar: holdSeconds);
 
     // 速度を残したまま位置だけ移す。復帰に使う。
-    public void Teleport(Vector3 position)
+    public RuntimeStatus Teleport(Vector3 position)
         => NativeBridge.InvokeComponentCommand(Handle, ComponentCommand.MotorTeleport,
             Text(position));
 
