@@ -78,6 +78,9 @@ namespace ReplayEngine::Runtime
         MotorMove = 14,
         MotorImpulse = 15,
         MotorTeleport = 16,
+
+        // 末尾の番兵。範囲判定はこれを見るので追加時に直し忘れない。
+        Count,
     };
 
     struct PhysicsQueryRequest final

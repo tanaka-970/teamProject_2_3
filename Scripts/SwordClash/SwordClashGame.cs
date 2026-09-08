@@ -306,14 +306,9 @@ public class SwordClashGame : MonoBehaviour
         Apply(0, damage1, stock1, gauge1);
         Apply(1, damage2, stock2, gauge2);
 
-        // ふっとびが効いているかを画面で読むための一時表示。
-        // 当たった瞬間に PeakY が跳ね上がれば撃力は届いている。
-        if (hint == null || fighters.Count < 2) return;
-        var a = fighters[0];
-        var b = fighters[1];
-        if (a == null || b == null) return;
-        hint.text = "peak " + a.PeakY.ToString("F1") + " / " + b.PeakY.ToString("F1") +
-            "   launch " + a.Launch + " | " + b.Launch;
+        // 画面下の操作案内。試合中も出しっ放しにする。
+        if (hint != null)
+            hint.text = "A/D 移動  SPACE ジャンプ  J 斬り  K+方向 必殺";
     }
 
     void Apply(int index, UIText? damageText, UIText? stockText, UIImage? gauge)

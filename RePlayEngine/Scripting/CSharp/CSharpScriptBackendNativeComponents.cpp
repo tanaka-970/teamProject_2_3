@@ -82,7 +82,7 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     {
         if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
         if (command < static_cast<int>(Runtime::ComponentCommand::AnimatorPlayState) ||
-            command > static_cast<int>(Runtime::ComponentCommand::ParticleClear))
+            command >= static_cast<int>(Runtime::ComponentCommand::Count))
         {
             return StatusCode(RuntimeStatus::InvalidArgument);
         }
