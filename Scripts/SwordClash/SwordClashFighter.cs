@@ -220,13 +220,14 @@ public class SwordClashFighter : MonoBehaviour
         // CPU は Brain の指示で歩く。1P は PlayerController が native で動かすので
         // ここでは何もしない。入力の読み口を 2 つ持たない。
         if (!BrainControlled) return;
-        if (!ControlEnabled || move != Move.None) return;
 
-        if (Mathf.Abs(BrainMove) > 0.01f)
-        {
-            facing = Mathf.Sign(BrainMove);
-            motor.Move(new Vector3(BrainMove, 0.0f, 0.0f));
-        }
+        // 【なぜ止まっているときも Move を呼ぶか】
+        //   Motor は駆動された回だけ接地と壁を解き直す。呼ばない回は
+        //   重力だけが積もるので、入力ゼロで放っておくと床をすり抜けて
+        //   落ち続ける。PlayerController も毎フレーム呼んでいる。
+        var walk = ControlEnabled && move == Move.None ? BrainMove : 0.0f;
+        if (Mathf.Abs(walk) > 0.01f) facing = Mathf.Sign(walk);
+        motor.Move(new Vector3(walk, 0.0f, 0.0f));
     }
 
     // ---- 入力 ------------------------------------------------------------

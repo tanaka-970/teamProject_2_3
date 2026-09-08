@@ -354,7 +354,10 @@ def build():
         # 本体はスケール 1。見た目は子の Body が持つ。
         # コライダーは size × scale で効くので、根っこを 1 にしておかないと
         # 二重に掛かって床へ埋まる。
-        collider_key = index + 1
+        # collider_key は GameObject の中だけで引かれる。2 人とも 1 でよい。
+        # 番号を振り分けると、読み込み側で振り直されたときに
+        # primary_collider_key と食い違い、接地解決が丸ごと落ちる。
+        collider_key = 1
         extra = (prop('field.secondPlayer', 'bool', True),) if second else ()
         parts = [capsule_collider(collider_key), character_motor(collider_key), audio(),
                  script('SwordClashFighter', '9c1f6a3d84b25e70af38d1c62b45e9f7',

@@ -760,7 +760,7 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 1
     PROPERTY_COUNT 8
-    PROPERTY "collider_key" int 2
+    PROPERTY "collider_key" int 1
     PROPERTY "center_offset" vec3 0 0 0
     PROPERTY "collision_layer" layer 0
     PROPERTY "collision_mask" layermask -1
@@ -775,7 +775,7 @@ OBJECT
     TYPE_MODULE ""
     TYPE_VERSION 1
     PROPERTY_COUNT 11
-    PROPERTY "primary_collider_key" colliderref 2
+    PROPERTY "primary_collider_key" colliderref 1
     PROPERTY "move_speed" float 7.5
     PROPERTY "acceleration" float 55
     PROPERTY "deceleration" float 42
