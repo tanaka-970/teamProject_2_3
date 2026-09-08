@@ -171,6 +171,12 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             table.set_world_scale = &NativeSetWorldScale;
             table.get_world_axes = &NativeGetWorldAxes;
             table.look_at = &NativeLookAt;
+            table.landscape_info = &NativeLandscapeInfo;
+            table.landscape_get_height = &NativeLandscapeGetHeight;
+            table.landscape_set_height = &NativeLandscapeSetHeight;
+            table.landscape_sample_height = &NativeLandscapeSampleHeight;
+            table.landscape_sculpt = &NativeLandscapeSculpt;
+            table.landscape_raycast = &NativeLandscapeRaycast;
             table.rigidbody_add_force = &NativeRigidbodyAddForce;
             table.rigidbody_add_torque = &NativeRigidbodyAddTorque;
             table.rigidbody_clear_forces = &NativeRigidbodyClearForces;
@@ -214,6 +220,12 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             table.component_to_reference = &NativeComponentToReference;
             table.resolve_component_reference = &NativeResolveComponentReference;
             table.get_scene_transition_state = &NativeGetSceneTransitionState;
+
+            // v18 / v19 / v20。表の本当の末尾。
+            table.component_alive = &NativeComponentAlive;
+            table.find_collider_component = &NativeFindColliderComponent;
+            table.add_script_component = &NativeAddScriptComponent;
+            table.find_active_game_object_by_name = &NativeFindActiveGameObjectByName;
 
             // 自己記述ヘッダー。C# 側はこれを見て表の食い違いをその場で弾く。
             table.header.abi_version = kNativeApiAbiVersion;

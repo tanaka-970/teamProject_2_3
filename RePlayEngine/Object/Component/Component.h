@@ -270,6 +270,12 @@ namespace ReplayEngine::Core
         // GameObject / Scene だけが触るライフサイクル駆動部。
         void AttachTo(GameObject* owner);
         void SyncEnableState();     // OnRuntimeAwake / OnEnable / OnDisable / OnStart を呼ぶ
+
+        // Scene 全体で生成・復元を終えてからユーザーの Awake / Start を呼ぶ。
+        virtual void SyncInstantiateState() {}
+        virtual void SyncRestoreFieldsState() {}
+        void SyncAwakeAndEnableState();
+        void SyncStartState();
         void ForceDisable();        // 破棄前に有効状態を落とす
         void RaiseRuntimeDestroy(); // OnRuntimeDestroy を一度だけ呼ぶ
         void MarkPendingDestroy() noexcept { pending_destroy_ = true; }

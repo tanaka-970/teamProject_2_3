@@ -1411,7 +1411,7 @@ namespace ReplayEngine::Rendering::DX12
         std::uint64_t pso_cache_hits_ = 0;
         std::uint64_t pso_cache_misses_ = 0;
         std::uint32_t frame_index_ = 0;
-        std::uint32_t present_sync_interval_ = 1;
+        std::uint32_t present_sync_interval_ = 0;
         std::uint32_t width_ = 0;
         std::uint32_t height_ = 0;
         bool frame_open_ = false;

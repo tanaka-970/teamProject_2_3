@@ -467,11 +467,31 @@ namespace ReplayEngine::Scene
         // OnEnable / OnStart の中から GameObject が追加される可能性があるため、
         // 開始時点の個数を控えて添字で回す。この回で増えたぶんは次のフレームから開始する。
         const std::size_t count = objects_.size();
+
+        // 全対象の生成と復元を終え、Awake が他の Script の保存値と実体を読めるようにする。
         for (std::size_t index = 0; index < count && index < objects_.size(); ++index)
         {
             GameObject* object = objects_[index].get();
             if (object == nullptr) continue;
-            object->SyncComponentStates();
+            object->SyncComponentInstantiate();
+        }
+        for (std::size_t index = 0; index < count && index < objects_.size(); ++index)
+        {
+            GameObject* object = objects_[index].get();
+            if (object == nullptr) continue;
+            object->SyncComponentRestoreFields();
+        }
+        for (std::size_t index = 0; index < count && index < objects_.size(); ++index)
+        {
+            GameObject* object = objects_[index].get();
+            if (object == nullptr) continue;
+            object->SyncComponentAwakeAndEnable();
+        }
+        for (std::size_t index = 0; index < count && index < objects_.size(); ++index)
+        {
+            GameObject* object = objects_[index].get();
+            if (object == nullptr) continue;
+            object->SyncComponentStart();
         }
     }
 

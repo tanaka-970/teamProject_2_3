@@ -34,6 +34,16 @@ namespace ReplayEngine::Scripting
         return all_ready;
     }
 
+    void ScriptRuntime::PumpScriptEvents()
+    {
+        // Play していないときは配るものが無い。
+        if (!PlaySessionActive()) return;
+        for (const std::unique_ptr<IScriptBackend>& backend : backends_)
+        {
+            if (backend) backend->PumpScriptEvents();
+        }
+    }
+
     void ScriptRuntime::Shutdown()
     {
         // World -> Backend -> Catalog の順で壊す。

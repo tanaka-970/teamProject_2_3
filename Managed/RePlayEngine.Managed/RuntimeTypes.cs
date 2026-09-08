@@ -135,6 +135,15 @@ public struct RaycastHit
     private int valid;
 
     public bool Valid => valid != 0;
+
+    // Unity と同じ名前で読むための別名。値は上のフィールドそのもの。
+    // 既存の Point / Normal / Distance / Object は 1 つも変えていない。
+    public Vector3 point => Point;
+    public Vector3 normal => Normal;
+    public float distance => Distance;
+    public GameObject? gameObject => GameObject.Wrap(Object);
+    public Transform? transform => gameObject?.transform;
+    public Collider? collider => gameObject?.GetComponent<Collider>();
 }
 
 public readonly struct ComponentTypeMetadata
@@ -216,6 +225,14 @@ public struct PhysicsHit
     private int valid;
 
     public bool Valid => valid != 0;
+
+    // RaycastHit と同じ別名を揃える。呼ぶ側が型で書き分けずに済む。
+    public Vector3 point => Point;
+    public Vector3 normal => Normal;
+    public float distance => Distance;
+    public GameObject? gameObject => GameObject.Wrap(Object);
+    public Transform? transform => gameObject?.transform;
+    public Collider? collider => gameObject?.GetComponent<Collider>();
 }
 
 public enum UIFocusDirection : int

@@ -198,6 +198,7 @@ namespace ReplayEngine::Scripting::CSharp
         get_field_ = nullptr;
         set_time_ = nullptr;
         live_instance_count_ = nullptr;
+        pump_events_ = nullptr;
         last_error_function_ = nullptr;
 
         initialized_ = false;
@@ -337,6 +338,7 @@ namespace ReplayEngine::Scripting::CSharp
             resolve(L"GetField", &get_field_) &&
             resolve(L"SetTime", &set_time_) &&
             resolve(L"LiveInstanceCount", &live_instance_count_) &&
+            resolve(L"PumpEvents", &pump_events_) &&
             resolve(L"LastError", &last_error_function_);
 #endif
     }

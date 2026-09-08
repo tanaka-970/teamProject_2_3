@@ -118,6 +118,27 @@ namespace ReplayEngine::Scripting
         virtual bool GetField(ScriptInstanceHandle instance,
             const std::string& saved_name, ScriptValue& out) const = 0;
 
+        // 物理と Event の配送が終わった同期点で 1 回だけ呼ばれる。
+        //
+        // 【なぜ Update と分けるか】
+        //   接触イベントは物理ステップの後に EventBus へ積まれる。
+        //   Script の Update でそれを読むと、読めるのは前フレームぶんになり、
+        //   Native Behaviour より 1 フレーム遅れて届く。
+        //   配送だけをこのフェーズへ出すことで、同じフレームのうちに配れる。
+        //
+        //   Coroutine もここで進める。Update から進めると、
+        //   enabled = false の Behaviour だけ Coroutine まで止まってしまう。
+        //
+        // 【なぜ delta_time を引数で受け取らないか】
+        //   Coroutine が進む時間は Update と同じゲーム時間でなければならない。
+        //   呼び出し側が値を選べる形にしておくと、実時間を渡した瞬間に
+        //   Time.timeScale = 0.5 でも WaitForSeconds だけ等速で進み、
+        //   timeScale = 0 でも止まらなくなる。実際に一度そうなった。
+        //   時間の出どころは RuntimeContext の RuntimeTime 一本に固定する。
+        //
+        // 既定は何もしない。使わない Backend（Lua）は実装しなくてよい。
+        virtual void PumpScriptEvents() {}
+
         // ---- 診断 -------------------------------------------------------------
 
         // 生存インスタンス数。ScriptWorld を捨てるときの漏れ検証に使う。

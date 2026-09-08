@@ -46,6 +46,9 @@ namespace ReplayEngine::Scripting::CSharp
 
         std::size_t LiveInstanceCount() const noexcept override;
 
+        // 物理と Event の配送が終わった同期点で Managed 側の配送を回す。
+        void PumpScriptEvents() override;
+
         const std::string& LastErrorMessage() const noexcept override { return last_error_; }
         const std::string& LastErrorFile() const noexcept override { return last_error_file_; }
         int LastErrorLine() const noexcept override { return last_error_line_; }
@@ -110,6 +113,7 @@ namespace ReplayEngine::Scripting::CSharp
         void* get_field_ = nullptr;
         void* set_time_ = nullptr;
         void* live_instance_count_ = nullptr;
+        void* pump_events_ = nullptr;
         void* last_error_function_ = nullptr;
 
         std::unordered_map<ScriptTypeID, TypeState> type_states_;

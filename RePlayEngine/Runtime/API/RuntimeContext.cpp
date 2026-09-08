@@ -113,6 +113,85 @@ namespace ReplayEngine::Runtime
         return resolver_.FindByName(name);
     }
 
+    ObjectHandle RuntimeContext::FindActiveByName(const std::string& name) const noexcept
+    {
+        if (world_ == nullptr || name.empty()) return ObjectHandle::None();
+
+        // Unity の GameObject.Find と同じく、'/' が無い場合は Scene 全体から
+        // activeInHierarchy の先頭一致を探す。
+        if (name.find('/') == std::string::npos)
+        {
+            const std::size_t count = world_->GameObjectCount();
+            for (std::size_t index = 0; index < count; ++index)
+            {
+                const GameObject* object = world_->GameObjectAt(index);
+                if (object == nullptr || object->PendingDestroy() ||
+                    !object->ActiveInHierarchy() || object->Name() != name)
+                {
+                    continue;
+                }
+                return resolver_.MakeHandle(object);
+            }
+            return ObjectHandle::None();
+        }
+
+        // '/' を含む場合は Hierarchy path として扱う。
+        //   /Root/Child  : 先頭は root GameObject に限定
+        //   Root/Child   : 先頭は Scene 内のどの階層からでもよい
+        // Unity と同じく path 上の全 GameObject が active である必要がある。
+        const bool absolute = !name.empty() && name.front() == '/';
+        std::vector<std::string> parts;
+        std::size_t begin = absolute ? 1u : 0u;
+        while (begin <= name.size())
+        {
+            const std::size_t slash = name.find('/', begin);
+            const std::size_t finish = slash == std::string::npos ? name.size() : slash;
+            if (finish == begin) return ObjectHandle::None();
+            parts.emplace_back(name.substr(begin, finish - begin));
+            if (slash == std::string::npos) break;
+            begin = slash + 1u;
+        }
+        if (parts.empty()) return ObjectHandle::None();
+
+        const auto follows_path = [&](const GameObject* candidate) noexcept -> const GameObject*
+        {
+            const GameObject* current = candidate;
+            for (std::size_t part = 1; part < parts.size(); ++part)
+            {
+                const GameObject* next = nullptr;
+                for (GameObject* child : current->Children())
+                {
+                    if (child == nullptr || child->PendingDestroy() ||
+                        !child->ActiveInHierarchy() || child->Name() != parts[part])
+                    {
+                        continue;
+                    }
+                    next = child;
+                    break;
+                }
+                if (next == nullptr) return nullptr;
+                current = next;
+            }
+            return current;
+        };
+
+        const std::size_t count = world_->GameObjectCount();
+        for (std::size_t index = 0; index < count; ++index)
+        {
+            const GameObject* candidate = world_->GameObjectAt(index);
+            if (candidate == nullptr || candidate->PendingDestroy() ||
+                !candidate->ActiveInHierarchy() || candidate->Name() != parts.front())
+            {
+                continue;
+            }
+            if (absolute && candidate->Parent() != nullptr) continue;
+
+            const GameObject* result = follows_path(candidate);
+            if (result != nullptr) return resolver_.MakeHandle(result);
+        }
+        return ObjectHandle::None();
+    }
+
     ObjectHandle RuntimeContext::ControlledObject() const noexcept
     {
         return resolver_.GetControlledObjectHandle();

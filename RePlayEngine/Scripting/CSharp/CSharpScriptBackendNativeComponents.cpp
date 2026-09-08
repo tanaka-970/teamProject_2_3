@@ -445,6 +445,110 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
     // ---- Rigidbody ------------------------------------------------------------
 
+    int NativeAddScriptComponent(Runtime::ObjectHandle owner, std::uint64_t type_high,
+        std::uint64_t type_low, Runtime::ComponentHandle* out_handle) noexcept
+    {
+        if (out_handle != nullptr) *out_handle = {};
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        Runtime::ComponentHandle handle{};
+        const Runtime::RuntimeStatus status =
+            g_runtime_context->AddScriptComponent(owner, type_high, type_low, handle);
+        if (out_handle != nullptr) *out_handle = handle;
+        return StatusCode(status);
+    }
+
+    int NativeComponentAlive(Runtime::ComponentHandle handle, int* out_alive) noexcept
+    {
+        if (out_alive != nullptr) *out_alive = 0;
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        bool alive = false;
+        const Runtime::RuntimeStatus status =
+            g_runtime_context->IsComponentAlive(handle, alive);
+        if (out_alive != nullptr) *out_alive = alive ? 1 : 0;
+        return StatusCode(status);
+    }
+
+    int NativeFindColliderComponent(Runtime::ObjectHandle owner, std::uint32_t collider_id,
+        Runtime::ComponentHandle* out_handle) noexcept
+    {
+        if (out_handle != nullptr) *out_handle = {};
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        Runtime::ComponentHandle handle{};
+        const Runtime::RuntimeStatus status =
+            g_runtime_context->FindColliderComponent(owner, collider_id, handle);
+        if (out_handle != nullptr) *out_handle = handle;
+        return StatusCode(status);
+    }
+
+    int NativeLandscapeInfo(Runtime::ComponentHandle handle, int* width, int* height,
+        float* cell_size) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        int w = 0;
+        int h = 0;
+        float cell = 0.0f;
+        const Runtime::RuntimeStatus status =
+            g_runtime_context->LandscapeInfo(handle, w, h, cell);
+        if (width != nullptr) *width = w;
+        if (height != nullptr) *height = h;
+        if (cell_size != nullptr) *cell_size = cell;
+        return StatusCode(status);
+    }
+
+    int NativeLandscapeGetHeight(Runtime::ComponentHandle handle, int x, int z,
+        float* out_height) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        float value = 0.0f;
+        const Runtime::RuntimeStatus status =
+            g_runtime_context->LandscapeGetHeight(handle, x, z, value);
+        if (out_height != nullptr) *out_height = value;
+        return StatusCode(status);
+    }
+
+    int NativeLandscapeSetHeight(Runtime::ComponentHandle handle, int x, int z,
+        float value) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->LandscapeSetHeight(handle, x, z, value));
+    }
+
+    int NativeLandscapeSampleHeight(Runtime::ComponentHandle handle, float local_x,
+        float local_z, float* out_height) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        float value = 0.0f;
+        const Runtime::RuntimeStatus status =
+            g_runtime_context->LandscapeSampleHeight(handle, local_x, local_z, value);
+        if (out_height != nullptr) *out_height = value;
+        return StatusCode(status);
+    }
+
+    int NativeLandscapeSculpt(Runtime::ComponentHandle handle, DirectX::XMFLOAT3 center,
+        int mode, int direction, float radius, float strength, float falloff,
+        float flatten_height, float noise_scale, float delta_time) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        return StatusCode(g_runtime_context->LandscapeSculpt(handle, center, mode,
+            direction, radius, strength, falloff, flatten_height, noise_scale, delta_time));
+    }
+
+    int NativeLandscapeRaycast(Runtime::ComponentHandle handle, DirectX::XMFLOAT3 origin,
+        DirectX::XMFLOAT3 direction, float max_distance, DirectX::XMFLOAT3* out_position,
+        DirectX::XMFLOAT3* out_normal, float* out_distance) noexcept
+    {
+        if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+        DirectX::XMFLOAT3 position{};
+        DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
+        float distance = 0.0f;
+        const Runtime::RuntimeStatus status = g_runtime_context->LandscapeRaycast(handle,
+            origin, direction, max_distance, position, normal, distance);
+        if (out_position != nullptr) *out_position = position;
+        if (out_normal != nullptr) *out_normal = normal;
+        if (out_distance != nullptr) *out_distance = distance;
+        return StatusCode(status);
+    }
+
     int NativeRigidbodyAddForce(Runtime::ComponentHandle handle,
         DirectX::XMFLOAT3 force) noexcept
     {

@@ -45,6 +45,43 @@
     //
     // World の実体が入れ替わったら、それに紐づくものを全部張り直す。
     // 呼び出しは毎フレームの安全点 1 か所だけ。
+    // Script の Debug.Log / LogWarning / LogError の受け口。
+    //
+    // RuntimeContext::Log は sink が無いとメッセージを捨てる。
+    // ここを繋ぐまで、ゲーム側が Debug.Log を書いても
+    // Editor Console にも engine ログにも何も出ていなかった。
+    class runtime_log_sink final : public ReplayEngine::Runtime::IRuntimeLogSink
+    {
+    public:
+        explicit runtime_log_sink(framework& owner) noexcept : owner_(owner) {}
+        void Write(ReplayEngine::Runtime::LogLevel level, const std::string& message,
+            const ReplayEngine::Runtime::ObjectHandle& source) override;
+
+        // 溜めた繰り返しを出す。フレームの同期点から毎フレーム呼ばれる。
+        // force でないときは、間隔が空くまで何も出さない。
+        void Flush(bool force = false);
+
+    private:
+        // 同じ内容が続いたぶんは数えるだけにする。
+        //
+        // 【なぜ抑制が要るか】
+        //   Unity では Update の中で Debug.Log を書くのが普通の使い方。
+        //   push_editor_log は 1 行ごとに editor_log.txt を開き直すので、
+        //   毎フレーム呼ばれるとファイルを毎秒 60 回開くことになる。
+        //   ScriptRuntime のエラー抑制と同じ作法にする。
+        //   最初の数回はそのまま出し、以降は一定間隔でまとめる。
+        static constexpr int verbatim_limit = 5;
+        static constexpr std::chrono::milliseconds summary_interval{ 1000 };
+
+        framework& owner_;
+        std::string pending_severity_;
+        std::string pending_message_;
+        int repeat_count_ = 0;
+        int verbatim_count_ = 0;
+        std::chrono::steady_clock::time_point last_summary_{};
+    };
+    std::unique_ptr<runtime_log_sink> object_runtime_log_sink;
+
     void initialize_runtime_services();
     void log_csharp_startup_state();
     void tick_runtime_scene_flow();

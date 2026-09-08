@@ -14,6 +14,7 @@
 #include <cctype>
 #include <charconv>
 #include <chrono>
+#include <cstddef>
 #include <cstring>
 #include <deque>
 #include <cstdlib>
@@ -43,7 +44,7 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
         // 関数ポインタ表の互換番号。**末尾へ関数を足したら必ず 1 上げる。**
         // C# 側の NativeBridge.NativeApiAbiVersion と一致していないと表を拒否する。
-        inline constexpr std::uint32_t kNativeApiAbiVersion = 16;
+        inline constexpr std::uint32_t kNativeApiAbiVersion = 20;
 
         // 表の先頭に必ず置く自己記述ヘッダー。
         // 順番が 1 つずれても別関数を呼ばずに、その場で不一致として弾くために使う。
@@ -173,6 +174,15 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             noarg_scene_callback flush_deferred_operations = nullptr;
             pending_deferred_count_callback pending_deferred_operation_count = nullptr;
             has_component_callback has_component = nullptr;
+
+            // v17 additions. Landscape read/write. Mirrored at the C# tail.
+            landscape_info_callback landscape_info = nullptr;
+            landscape_get_height_callback landscape_get_height = nullptr;
+            landscape_set_height_callback landscape_set_height = nullptr;
+            landscape_sample_callback landscape_sample_height = nullptr;
+            landscape_sculpt_callback landscape_sculpt = nullptr;
+            landscape_raycast_callback landscape_raycast = nullptr;
+
             get_float_value_callback get_time_scale = nullptr;
             get_bool_value_callback get_scene_transition_in_progress = nullptr;
             available_callback physics_available = nullptr;
@@ -259,11 +269,42 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
             // v16 Scene 遷移状態。
             scene_transition_state_callback get_scene_transition_state = nullptr;
+
+            // v18 additions. 表の本当の末尾。既存 entry の offset は動かさない。
+            component_alive_callback component_alive = nullptr;
+            find_collider_callback find_collider_component = nullptr;
+
+            // v19 addition. 同じく本当の末尾。
+            add_script_component_callback add_script_component = nullptr;
+
+            // v20 addition. Public GameObject.Find 用の active 限定検索。
+            find_by_name_callback find_active_game_object_by_name = nullptr;
         };
 
         // ヘッダー以降がすべて関数ポインタであることを、表を作る側で必ず確かめる。
         static_assert((sizeof(NativeApiTable) - sizeof(NativeApiHeader)) %
             sizeof(void*) == 0, "NativeApiTable must hold only function pointers");
+
+        // 後から足した entry が本当に末尾に並んでいることを、ここで機械的に縛る。
+        //
+        // 【なぜ番号順に並べ替えないか】
+        //   表は offset で結びついている。version 番号の見た目を揃えるために
+        //   途中へ挿すと、それ以降の既存 entry が全部ずれて別関数を指す。
+        //   足すのは常に末尾だけ。v18 以降の追加列が末尾から動いたらここで落ちる。
+        static_assert(offsetof(NativeApiTable, find_active_game_object_by_name) + sizeof(void*) ==
+            sizeof(NativeApiTable), "find_active_game_object_by_name must stay the last entry");
+        static_assert(offsetof(NativeApiTable, add_script_component) + sizeof(void*) ==
+            offsetof(NativeApiTable, find_active_game_object_by_name),
+            "v20 entry must be appended after add_script_component");
+        static_assert(offsetof(NativeApiTable, find_collider_component) + sizeof(void*) ==
+            offsetof(NativeApiTable, add_script_component),
+            "find_collider_component must stay just before add_script_component");
+        static_assert(offsetof(NativeApiTable, component_alive) + sizeof(void*) ==
+            offsetof(NativeApiTable, find_collider_component),
+            "component_alive must stay just before find_collider_component");
+        static_assert(offsetof(NativeApiTable, get_scene_transition_state) + sizeof(void*) ==
+            offsetof(NativeApiTable, component_alive),
+            "v18/v19 entries must be appended after the v16 tail");
     inline int StatusCode(RuntimeStatus status) noexcept
     {
         return Runtime::ToErrorCode(status);
@@ -304,6 +345,8 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     int NativeFindGameObject(std::uint64_t object_id,
         Runtime::ObjectHandle* out) noexcept;
     int NativeFindGameObjectByName(const char* name,
+        Runtime::ObjectHandle* out) noexcept;
+    int NativeFindActiveGameObjectByName(const char* name,
         Runtime::ObjectHandle* out) noexcept;
     int NativeIsGameObjectValid(Runtime::ObjectHandle handle) noexcept;
     int NativeGetLocalPosition(Runtime::ObjectHandle handle,
@@ -520,6 +563,27 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         DirectX::XMFLOAT3* right, DirectX::XMFLOAT3* up) noexcept;
     int NativeLookAt(Runtime::ObjectHandle handle, DirectX::XMFLOAT3 target,
         DirectX::XMFLOAT3 world_up) noexcept;
+
+    int NativeComponentAlive(Runtime::ComponentHandle handle, int* out_alive) noexcept;
+    int NativeAddScriptComponent(Runtime::ObjectHandle owner, std::uint64_t type_high,
+        std::uint64_t type_low, Runtime::ComponentHandle* out_handle) noexcept;
+    int NativeFindColliderComponent(Runtime::ObjectHandle owner, std::uint32_t collider_id,
+        Runtime::ComponentHandle* out_handle) noexcept;
+
+    int NativeLandscapeInfo(Runtime::ComponentHandle handle, int* width, int* height,
+        float* cell_size) noexcept;
+    int NativeLandscapeGetHeight(Runtime::ComponentHandle handle, int x, int z,
+        float* out_height) noexcept;
+    int NativeLandscapeSetHeight(Runtime::ComponentHandle handle, int x, int z,
+        float value) noexcept;
+    int NativeLandscapeSampleHeight(Runtime::ComponentHandle handle, float local_x,
+        float local_z, float* out_height) noexcept;
+    int NativeLandscapeSculpt(Runtime::ComponentHandle handle, DirectX::XMFLOAT3 center,
+        int mode, int direction, float radius, float strength, float falloff,
+        float flatten_height, float noise_scale, float delta_time) noexcept;
+    int NativeLandscapeRaycast(Runtime::ComponentHandle handle, DirectX::XMFLOAT3 origin,
+        DirectX::XMFLOAT3 direction, float max_distance, DirectX::XMFLOAT3* out_position,
+        DirectX::XMFLOAT3* out_normal, float* out_distance) noexcept;
 
     int NativeRigidbodyAddForce(Runtime::ComponentHandle handle, DirectX::XMFLOAT3 force) noexcept;
     int NativeRigidbodyAddTorque(Runtime::ComponentHandle handle, DirectX::XMFLOAT3 torque) noexcept;

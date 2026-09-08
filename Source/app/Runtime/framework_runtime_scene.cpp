@@ -198,6 +198,71 @@ ReplayEngine::Scene::Scene* framework::exclusive_scene_for_render() noexcept
 //   その行からは、ビルドが失敗したのか hostfxr が無いのかが分からない。
 //   起動のたびに状態を 1 行残しておけば、次に同じことが起きたときに
 //   ログの先頭を見るだけで切り分けられる。
+// Script のログを Editor Console と Saved/Diagnostics/editor_log.txt へ流す。
+// 発生元の GameObject 名を添えて、どのオブジェクトのログか分かるようにする。
+// Script のログを Editor Console と Saved/Diagnostics/editor_log.txt へ流す。
+// 発生元の GameObject 名を添えて、どのオブジェクトのログか分かるようにする。
+void framework::runtime_log_sink::Write(ReplayEngine::Runtime::LogLevel level,
+    const std::string& message, const ReplayEngine::Runtime::ObjectHandle& source)
+{
+    const char* severity = "Info";
+    if (level == ReplayEngine::Runtime::LogLevel::Warning) severity = "Warning";
+    else if (level == ReplayEngine::Runtime::LogLevel::Error) severity = "Error";
+
+    std::string line = message;
+    if (!source.IsEmpty() && owner_.object_runtime_context)
+    {
+        std::string name;
+        if (owner_.object_runtime_context->GetName(source, name) ==
+            ReplayEngine::Runtime::RuntimeStatus::Ok && !name.empty())
+            line += "  (" + name + ")";
+    }
+
+    if (line == pending_message_ && severity == pending_severity_)
+    {
+        // 最初の数回はそのまま出す。1 回しか出ないログを
+        // 「あとでまとめて」にすると、その場で見えなくなるため。
+        if (verbatim_count_ < verbatim_limit)
+        {
+            ++verbatim_count_;
+            owner_.push_editor_log(pending_severity_, pending_message_);
+            return;
+        }
+        // それ以降は数えるだけ。ここでファイルを開かない。
+        ++repeat_count_;
+        return;
+    }
+
+    // 内容が変わった。溜まっていた繰り返しを締めてから、新しい行を出す。
+    Flush(true);
+    pending_severity_ = severity;
+    pending_message_ = std::move(line);
+    repeat_count_ = 0;
+    verbatim_count_ = 1;
+    last_summary_ = std::chrono::steady_clock::now();
+    owner_.push_editor_log(pending_severity_, pending_message_);
+}
+
+// 溜めた繰り返しを 1 行へまとめて出す。
+//
+// 毎フレーム呼ばれるので、force でないときは間隔を見る。
+// 毎回出していては抑制にならない。
+// 回数を残すのは、黙って捨てると「毎フレーム出ているのか
+// 1 回だけなのか」が分からなくなるため。
+void framework::runtime_log_sink::Flush(bool force)
+{
+    if (repeat_count_ <= 0) return;
+
+    const auto now = std::chrono::steady_clock::now();
+    if (!force && now - last_summary_ < summary_interval) return;
+
+    owner_.push_editor_log(pending_severity_,
+        pending_message_ + "  （同じ内容がさらに " +
+        std::to_string(repeat_count_) + " 回）");
+    repeat_count_ = 0;
+    last_summary_ = now;
+}
+
 void framework::log_csharp_startup_state()
 {
     namespace Scripting = ReplayEngine::Scripting;
@@ -257,6 +322,10 @@ void framework::initialize_runtime_services()
     // framework.h の宣言順がその寿命を保証している。
     object_runtime_context = std::make_unique<RRuntime::RuntimeContext>(
         object_runtime_scenes.ActiveWorld());
+
+    // Script のログの行き先を繋ぐ。ここが無いと Debug.Log は捨てられる。
+    object_runtime_log_sink = std::make_unique<runtime_log_sink>(*this);
+    object_runtime_context->SetLogSink(object_runtime_log_sink.get());
     object_scene_flow = std::make_unique<RRuntime::SceneFlowService>(object_runtime_scenes);
 
     // スクリプト機構。GameObject 側の実体は常に ScriptComponent。

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 
 namespace ReplayEngine;
@@ -255,6 +255,33 @@ public static class Mathf
         => MathF.Max(minimum, MathF.Min(maximum, value));
     public static float Clamp01(float value) => Clamp(value, 0.0f, 1.0f);
     public static float Lerp(float a, float b, float t) => a + (b - a) * Clamp01(t);
+    // Unity の Mathf と同じ名前の入口。中身は System.MathF をそのまま呼ぶ。
+    // ゲーム側が using System; を書かずに三角関数を使えるようにするため。
+    public const float PI = MathF.PI;
+    public const float Infinity = float.PositiveInfinity;
+    public static float Sin(float radians) => MathF.Sin(radians);
+    public static float Cos(float radians) => MathF.Cos(radians);
+    public static float Tan(float radians) => MathF.Tan(radians);
+    public static float Asin(float value) => MathF.Asin(value);
+    public static float Acos(float value) => MathF.Acos(value);
+    public static float Atan2(float y, float x) => MathF.Atan2(y, x);
+    public static float Sqrt(float value) => MathF.Sqrt(value);
+    public static float Abs(float value) => MathF.Abs(value);
+    public static float Min(float a, float b) => MathF.Min(a, b);
+    public static float Max(float a, float b) => MathF.Max(a, b);
+    // int 版。個数の計算で float へ落とさずに書けるようにする。
+    public static int Min(int a, int b) => a < b ? a : b;
+    public static int Max(int a, int b) => a > b ? a : b;
+    public static int Clamp(int value, int minimum, int maximum)
+        => value < minimum ? minimum : (value > maximum ? maximum : value);
+    public static float Pow(float value, float power) => MathF.Pow(value, power);
+    public static float Floor(float value) => MathF.Floor(value);
+    public static float Ceil(float value) => MathF.Ceiling(value);
+    public static float Round(float value) => MathF.Round(value);
+    public static float Sign(float value) => value < 0.0f ? -1.0f : 1.0f;
+    public static float Repeat(float value, float length)
+        => Clamp(value - MathF.Floor(value / length) * length, 0.0f, length);
+
     public static float MoveTowards(float current, float target, float maxDelta)
         => MathF.Abs(target - current) <= maxDelta ? target
             : current + MathF.CopySign(maxDelta, target - current);

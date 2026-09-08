@@ -103,6 +103,13 @@ namespace ReplayEngine::Scripting
         // DynamicProperties() が返した配列の足元が崩れる。
         void ApplyPendingSchemaSwaps(float delta_time);
 
+        // 物理と Event の配送が終わった同期点で 1 回だけ呼ぶ。
+        // Backend が接触イベントを Script へ配り、Coroutine を進める。
+        //
+        // 進む時間は Backend が RuntimeContext の RuntimeTime から取る。
+        // 呼び出し側は時間を選べない。Update と食い違わせないため。
+        void PumpScriptEvents();
+
         // ---- Play セッション ---------------------------------------------------
 
         ScriptWorld* World() noexcept { return world_.get(); }

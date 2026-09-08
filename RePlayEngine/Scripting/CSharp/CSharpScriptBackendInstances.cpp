@@ -80,6 +80,28 @@ namespace ReplayEngine::Scripting::CSharp
         return ScriptLoadResult::Success(std::move(state.schema));
     }
 
+    void CSharpScriptBackend::PumpScriptEvents()
+    {
+        if (!initialized_ || !assembly_loaded_ || pump_events_ == nullptr) return;
+
+        // Coroutine が進む時間も Time.deltaTime も、Update と同じ 1 つの値から取る。
+        // RuntimeTime.delta_time は Time.timeScale を掛けたあとのゲーム時間。
+        float delta_time = 0.0f;
+        if (runtime_context_ != nullptr)
+        {
+            const Runtime::RuntimeTime& time = runtime_context_->Time();
+            delta_time = time.delta_time;
+
+            // Coroutine の中や接触コールバックでも Time.deltaTime を正しく読ませる。
+            if (set_time_ != nullptr)
+            {
+                reinterpret_cast<set_time_fn>(set_time_)(time.delta_time,
+                    time.fixed_delta_time, time.frame_index);
+            }
+        }
+        reinterpret_cast<pump_events_fn>(pump_events_)(delta_time);
+    }
+
     bool CSharpScriptBackend::CanInstantiate(ScriptTypeID type_id) const
     {
         return initialized_ && assembly_loaded_ &&
@@ -128,7 +150,9 @@ namespace ReplayEngine::Scripting::CSharp
         if (runtime_context_ != nullptr && set_time_ != nullptr)
         {
             const Runtime::RuntimeTime& time = runtime_context_->Time();
-            reinterpret_cast<set_time_fn>(set_time_)(time.delta_time,
+            const float callback_delta = callback == ScriptCallback::FixedUpdate
+                ? arguments.delta_time : time.delta_time;
+            reinterpret_cast<set_time_fn>(set_time_)(callback_delta,
                 time.fixed_delta_time, time.frame_index);
         }
 

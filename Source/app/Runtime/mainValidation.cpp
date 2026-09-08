@@ -1044,6 +1044,21 @@ namespace ReplayEngine::Runtime::Detail
                 ReplayEngine::Core::RegisterBuiltInComponents();
                 return ScriptValidation::RunCSharpStartupRecoveryValidation();
             }
+
+            // 新しい MonoBehaviour が発見・生成・実行され、
+            // Inspector と Legacy を壊していないかを確かめる。
+            if (command == "--validate-monobehaviour")
+            {
+                ReplayEngine::Core::RegisterBuiltInComponents();
+                return ScriptValidation::RunMonoBehaviourValidation();
+            }
+
+            // C# から地形を制御できるか。形を変える実装は既存のまま。
+            if (command == "--validate-landscape-script")
+            {
+                ReplayEngine::Core::RegisterBuiltInComponents();
+                return ScriptValidation::RunLandscapeScriptValidation();
+            }
         }
 
         // シェーダ基盤。フェーズ 1（実行時コンパイル）。
