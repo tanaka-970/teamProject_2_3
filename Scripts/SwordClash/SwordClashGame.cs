@@ -61,6 +61,18 @@ public class SwordClashGame : MonoBehaviour
         var stage = GameObject.Find("Fighters");
         if (stage != null) fighters.AddRange(stage.GetComponentsInChildren<SwordClashFighter>());
 
+        // 親をたどれなかった場合の保険。名前で 1 人ずつ拾う。
+        // ここが空のままだとストックも HUD も動かず、原因が見えにくい。
+        if (fighters.Count == 0)
+        {
+            foreach (var name in new[] { "Fighter1", "Fighter2" })
+            {
+                var found = GameObject.Find(name);
+                var fighter = found != null ? found.GetComponent<SwordClashFighter>() : null;
+                if (fighter != null) fighters.Add(fighter);
+            }
+        }
+
         var rigObject = GameObject.Find("CameraRig");
         rig = rigObject != null ? rigObject.GetComponent<SwordClashCamera>() : null;
 

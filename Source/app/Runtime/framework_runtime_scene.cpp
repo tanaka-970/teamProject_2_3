@@ -373,10 +373,15 @@ void framework::initialize_runtime_services()
     object_scene.Services().SetSceneFlow(nullptr);
     object_scene.Services().SetAudio(&object_audio_system);
 
-    if (!standalone_game_mode)
-    {
-        refresh_csharp_scripts();
-    }
+    // Script の型カタログはここでしか作られない。
+    //
+    // 【なぜ standalone でも呼ぶか】
+    //   以前は Editor のときだけ呼んでいた。standalone では Catalog が空のまま
+    //   なので、Scene に置いた ScriptComponent が型を解決できず、
+    //   インスタンスが 1 つも生まれない。画面は出るのにスクリプトが
+    //   まったく動かない、という形で出る。
+    //   RefreshCatalog はソースを走査して型を集めるだけでビルドはしない。
+    refresh_csharp_scripts();
 
     // シェーダ資産の走査。
     //

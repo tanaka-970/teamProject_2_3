@@ -162,8 +162,8 @@ public class SwordClashFighter : MonoBehaviour
 
     void Start()
     {
-        // 相手は Director が全 Fighter を集めてから配る。Awake では取りに行かない。
-        rival = director != null ? director.RivalOf(this) : null;
+        // Director が居ればそこから、居なければ Rival が自分で名前を引く。
+        if (director != null) rival = director.RivalOf(this);
         ResetForRound();
     }
 
@@ -478,7 +478,21 @@ public class SwordClashFighter : MonoBehaviour
 
     // ---- Director から ---------------------------------------------------
 
-    public SwordClashFighter? Rival => rival;
+    // 相手。Director が居なくても自分で引けるようにしてある。
+    //
+    // Director 経由だけにすると、Director の初期化が 1 つでも失敗した瞬間に
+    // CPU が相手を見つけられず、その場から一歩も動かなくなる。
+    // 名前で引くのは最初の 1 回だけで、あとは覚えた値を返す。
+    public SwordClashFighter? Rival
+    {
+        get
+        {
+            if (rival != null) return rival;
+            var other = GameObject.Find(secondPlayer ? "Fighter1" : "Fighter2");
+            rival = other != null ? other.GetComponent<SwordClashFighter>() : null;
+            return rival;
+        }
+    }
     public float Facing => facing;
     public Move Current => move;
 
