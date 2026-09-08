@@ -396,7 +396,8 @@ public sealed class CharacterMotor : NativeBehaviour
             value.Z.ToString(System.Globalization.CultureInfo.InvariantCulture);
 }
 
-// 入力を受け取るかどうかの切り替え。中身の入力処理は native 側。
+// 今フレームの操作を保つ箱（Character Input）。
+// input_source が外部のときだけ、ここから AI がスティックを倒せる。
 public sealed class PlayerInput : NativeBehaviour
 {
     internal PlayerInput(GameObject owner, ComponentHandle handle) : base(owner, handle) { }
@@ -408,6 +409,27 @@ public sealed class PlayerInput : NativeBehaviour
         get => Binding.InputEnabled;
         set { var binding = Binding; binding.InputEnabled = value; }
     }
+
+    // 外部入力にしてあるか。false の間は下の書き込みが全部弾かれる。
+    public bool externalDriven
+    {
+        get => Binding.Accessor.GetInt("input_source") == 1;
+        set => Binding.Accessor.SetInt("input_source", value ? 1 : 0);
+    }
+
+    // スティックを倒す。横だけ使うなら vertical は 0 でよい。
+    public RuntimeStatus SetAxes(float horizontal, float vertical = 0.0f)
+        => NativeBridge.InvokeComponentCommand(Handle, ComponentCommand.InputSetAxes,
+            scalar: horizontal, secondaryScalar: vertical);
+
+    // ダッシュの押しっ放し状態。
+    public RuntimeStatus SetDash(bool held)
+        => NativeBridge.InvokeComponentCommand(Handle, ComponentCommand.InputSetDash,
+            integer: held ? 1 : 0);
+
+    // ジャンプを 1 回分。人間の押下と同じラッチに入る。
+    public RuntimeStatus Jump()
+        => NativeBridge.InvokeComponentCommand(Handle, ComponentCommand.InputJump);
 }
 
 // ---- 演出 -------------------------------------------------------------------

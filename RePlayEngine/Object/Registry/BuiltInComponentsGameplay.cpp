@@ -117,13 +117,17 @@ namespace ReplayEngine::Core::Detail
         void RegisterPlayerInput()
         {
             ComponentRegistry::Register<PlayerInputComponent>(
-                ComponentTypeInfo::Describe("Player Input", "Gameplay")
-                    .WithTooltip("入力の取得だけを担当する。Transform も速度も触らない。")
+                ComponentTypeInfo::Describe("Character Input", "Gameplay")
+                    .WithTooltip("今フレームの操作を保つ箱。デバイスでも AI でも書ける。")
                     .InModule("RePlayEngine.Template.ActionPlatformer"));
 
             PropertyRegistry::Register<PlayerInputComponent>(
                 MakeProperty("input_enabled", &PlayerInputComponent::input_enabled)
                     .Display("入力を受け付ける"));
+
+            PropertyRegistry::Register<PlayerInputComponent>(
+                MakeProperty("input_source", &PlayerInputComponent::input_source)
+                    .Display("入力元 (0:デバイス 1:外部)").Range(0.0, 1.0).Step(1.0));
 
             PropertyRegistry::Register<PlayerInputComponent>(
                 MakeProperty("local_player_slot", &PlayerInputComponent::local_player_slot)

@@ -79,6 +79,13 @@ namespace ReplayEngine::Runtime
         MotorImpulse = 15,
         MotorTeleport = 16,
 
+        // Character Input への書き込み。AI や replay が人間と同じ経路を通る。
+        //   SetAxes  a = 横 / b = 縦
+        //   SetDash  integer が 0 以外で押しっ放し
+        InputSetAxes = 17,
+        InputSetDash = 18,
+        InputJump = 19,
+
         // 末尾の番兵。範囲判定はこれを見るので追加時に直し忘れない。
         Count,
     };

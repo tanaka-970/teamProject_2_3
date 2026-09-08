@@ -216,6 +216,11 @@ internal enum ComponentCommand : int
     MotorMove = 14,
     MotorImpulse = 15,
     MotorTeleport = 16,
+
+    // Character Input への書き込み。C++ 側の ComponentCommand と同じ並び。
+    InputSetAxes = 17,
+    InputSetDash = 18,
+    InputJump = 19,
 }
 
 [StructLayout(LayoutKind.Sequential)]

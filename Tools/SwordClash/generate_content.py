@@ -179,9 +179,11 @@ def character_motor(key):
                 prop('plane_z', 'float', 0))
 
 
-def player_input(slot):
+def character_input(slot, external=False):
+    # external=True のときだけデバイスを読まず、AI が軸を書き込む。
     return comp('PlayerInputComponent',
                 prop('input_enabled', 'bool', True),
+                prop('input_source', 'int', 1 if external else 0),
                 prop('local_player_slot', 'int', slot))
 
 
@@ -366,14 +368,13 @@ def build():
                  script('SwordClashFighter', '9c1f6a3d84b25e70af38d1c62b45e9f7',
                         order=index, extra=extra)]
 
-        # 1P は native の入力部品で動かす。C# は移動に関与しない。
-        # CPU は Brain が CharacterMotor へ指示を出す。
+        # 2 人とも同じ経路を通す。Character Input -> Controller -> Motor。
+        # 違いは入力元だけで、1P はデバイス、CPU は Brain が書く。
+        parts.insert(2, character_input(0, external=brain))
+        parts.insert(3, player_controller())
         if brain:
             parts.append(script('SwordClashBrain', '3e7b25c9f0a648d1b93c7e5a2f81d604',
                                 order=10 + index))
-        else:
-            parts.insert(2, player_input(0))
-            parts.insert(3, player_controller())
 
         body = s.obj(key, parts, pos=(x, 1.0, 0), parent=stage, key=key)
 

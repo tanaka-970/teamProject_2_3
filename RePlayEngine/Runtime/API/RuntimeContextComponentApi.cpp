@@ -10,6 +10,7 @@
 
 #include "../../Components/Audio/AudioSourceComponent.h"
 #include "../../Components/Gameplay/CharacterMotorComponent.h"
+#include "../../Components/Gameplay/PlayerInputComponent.h"
 #include "../../Components/Landscape/LandscapeComponent.h"
 #include "../../Components/Physics/ColliderComponent.h"
 #include "../../Scripting/Core/ScriptComponent.h"
@@ -689,6 +690,29 @@ namespace ReplayEngine::Runtime
             }
             else source->Stop();
             return RuntimeStatus::Ok;
+        }
+
+        if (command == ComponentCommand::InputSetAxes ||
+            command == ComponentCommand::InputSetDash ||
+            command == ComponentCommand::InputJump)
+        {
+            auto* player_input =
+                dynamic_cast<Components::PlayerInputComponent*>(component);
+            if (player_input == nullptr) return RuntimeStatus::TypeMismatch;
+
+            // Device のまま書かれたら黙って落とさずに使えないと返す。
+            bool accepted = false;
+            if (command == ComponentCommand::InputSetAxes)
+            {
+                accepted = player_input->SetExternalAxes(scalar, secondary_scalar);
+            }
+            else if (command == ComponentCommand::InputSetDash)
+            {
+                accepted = player_input->SetExternalDash(integer != 0);
+            }
+            else accepted = player_input->RequestExternalJump();
+            return accepted ? RuntimeStatus::Ok
+                : RuntimeStatus::UnsupportedOperation;
         }
 
         if (command == ComponentCommand::MotorMove ||

@@ -223,24 +223,14 @@ public class SwordClashFighter : MonoBehaviour
             motor.Teleport(new Vector3(position.X, position.Y, 0.0f));
         }
 
-        // 突進斬りの持続中だけ、自分から前へ出る。技が移動を兼ねる。
-        if (move == Move.SideB && InActiveWindow())
-        {
-            motor.Move(new Vector3(facing, 0.0f, 0.0f), 1.6f);
-            return;
-        }
-
-        // CPU は Brain の指示で歩く。1P は PlayerController が native で動かすので
-        // ここでは何もしない。入力の読み口を 2 つ持たない。
+        // 2 人とも Character Input -> PlayerController -> CharacterMotor を通る。
+        // 1P はデバイスが軸を書くので、ここでは触らない。
         if (!BrainControlled) return;
 
-        // 【なぜ止まっているときも Move を呼ぶか】
-        //   Motor は駆動された回だけ接地と壁を解き直す。呼ばない回は
-        //   重力だけが積もるので、入力ゼロで放っておくと床をすり抜けて
-        //   落ち続ける。PlayerController も毎フレーム呼んでいる。
+        // 技を出している間は軸をゼロへ戻して足を止める。
         var walk = ControlEnabled && move == Move.None ? BrainMove : 0.0f;
         if (Mathf.Abs(walk) > 0.01f) facing = Mathf.Sign(walk);
-        motor.Move(new Vector3(walk, 0.0f, 0.0f));
+        input?.SetAxes(walk);
     }
 
     // ---- 入力 ------------------------------------------------------------
@@ -271,6 +261,15 @@ public class SwordClashFighter : MonoBehaviour
                 !Grounded);
         BrainJump = false;
         if (!pressed || motor == null) return;
+
+        // CPU の接地ジャンプは人間と同じ、Controller のラッチを通す。
+        if (BrainControlled && Grounded && input != null)
+        {
+            input.Jump();
+            PlayVoice(1.35f, 0.32f);
+            return;
+        }
+
         if (!Grounded && airJumps <= 0) return;
         if (!Grounded) --airJumps;
 
@@ -319,6 +318,13 @@ public class SwordClashFighter : MonoBehaviour
             upBUsed = true;
             airJumps = 0;
             motor?.AddImpulse(new Vector3(facing * 4.0f, jumpSpeed * 1.3f, 0.0f), 0.18f);
+        }
+
+        // 横B は発生時の撃力ひとつで前へ飛ぶ。
+        // 毎フレーム Move で押すと PlayerController の軸と同じフレームで争う。
+        if (value == Move.SideB && motor != null)
+        {
+            motor.AddImpulse(new Vector3(facing * 9.0f, 0.0f, 0.0f), 0.26f);
         }
         PlayVoice(value == Move.Slash ? 1.0f : 0.72f, 0.4f);
     }
