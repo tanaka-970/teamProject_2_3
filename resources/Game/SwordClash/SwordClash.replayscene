@@ -1,0 +1,1651 @@
+REPLAY_SCENE 11
+SCENE "Sword Clash"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 52
+OBJECT
+  ID 1
+  NAME "CameraRig"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 3 -17 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.SwordClash.SwordClashCamera"
+    PROPERTY "__script.execution_order" int 0
+    PROPERTY "__script.type_id" string "b52d8f14e6c73a09d81f4b62c095a7e3"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 2
+  NAME "Camera"
+  ENABLED 1
+  PARENT 1
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "CameraComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "projection_mode" enum 0
+    PROPERTY "field_of_view_degrees" float 60
+    PROPERTY "near_clip" float 0.1
+    PROPERTY "far_clip" float 400
+    PROPERTY "priority" int 100
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 3
+  NAME "ScreenFx"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "ScreenEffectStackComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 21
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_count" int 3
+    PROPERTY "apply_stage" enum 0
+    PROPERTY "target_mode" enum 0
+    PROPERTY "target_rendering_layer" int 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].type" enum 15
+    PROPERTY "effects[0].intensity" float 0.38
+    PROPERTY "effects[0].radius" float 0.85
+    PROPERTY "effects[0].softness" float 0.55
+    PROPERTY "effects[1].enabled" bool 1
+    PROPERTY "effects[1].type" enum 9
+    PROPERTY "effects[1].intensity" float 0.06
+    PROPERTY "effects[1].amount" float 1.0
+    PROPERTY "effects[2].enabled" bool 1
+    PROPERTY "effects[2].type" enum 37
+    PROPERTY "effects[2].intensity" float 0.0
+    PROPERTY "effects[2].amount" float 1.0
+    PROPERTY "effects[2].speed" float 8.0
+    PROPERTY "effects[2].seed" float 7.0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 4
+  NAME "Sun"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0.95 -0.5 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "color" color 1 0.96 0.89 1
+    PROPERTY "intensity" float 3.1
+    PROPERTY "cast_shadows" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 5
+  NAME "Rim"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 -0.35 2.5 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "color" color 0.38 0.55 1.0 1
+    PROPERTY "intensity" float 1.5
+    PROPERTY "cast_shadows" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 6
+  NAME "Sky"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SkyboxComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "sky_enabled" bool 1
+    PROPERTY "intensity" float 1.0
+    PROPERTY "clouds_enabled" bool 1
+    PROPERTY "cloud_layer1_speed" float 0.012
+    PROPERTY "cloud_layer1_scale" float 2.2
+    PROPERTY "cloud_layer1_density" float 0.35
+    PROPERTY "cloud_layer1_color" color 0.55 0.68 0.92 1
+    PROPERTY "stars_enabled" bool 1
+    PROPERTY "star_density" float 0.5
+    PROPERTY "star_intensity" float 0.7
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 7
+  NAME "Deck"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 -0.5 0 0 0 0 18 1 4
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.15 0.19 0.3 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "BoxColliderComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "size" vec3 18 1 4
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "collision_layer" int 0
+    PROPERTY "collision_mask" int -1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 8
+  NAME "LedgeL"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -5.6 3.4 0 0 0 0 4.2 0.45 3
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.22 0.3 0.48 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "BoxColliderComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "size" vec3 4.2 0.45 3
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "collision_layer" int 0
+    PROPERTY "collision_mask" int -1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 9
+  NAME "LedgeR"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 5.6 3.4 0 0 0 0 4.2 0.45 3
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.22 0.3 0.48 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "BoxColliderComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "size" vec3 4.2 0.45 3
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "collision_layer" int 0
+    PROPERTY "collision_mask" int -1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 10
+  NAME "LedgeTop"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 6.7 0 0 0 0 5.0 0.45 3
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.22 0.3 0.48 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "BoxColliderComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "size" vec3 5.0 0.45 3
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "collision_layer" int 0
+    PROPERTY "collision_mask" int -1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 11
+  NAME "Pillar0"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -16 5.5 9.0 0 0 0 1.1 15 1.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.1 0.13 0.22 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 12
+  NAME "Pillar1"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -12 5.5 9.0 0 0 0 1.1 15 1.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.1 0.13 0.22 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 13
+  NAME "Pillar2"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -8 5.5 9.0 0 0 0 1.1 15 1.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.1 0.13 0.22 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 14
+  NAME "Pillar3"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -4 5.5 9.0 0 0 0 1.1 15 1.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.1 0.13 0.22 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 15
+  NAME "Pillar4"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 5.5 9.0 0 0 0 1.1 15 1.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.1 0.13 0.22 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 16
+  NAME "Pillar5"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 4 5.5 9.0 0 0 0 1.1 15 1.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.1 0.13 0.22 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 17
+  NAME "Pillar6"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 8 5.5 9.0 0 0 0 1.1 15 1.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.1 0.13 0.22 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 18
+  NAME "Pillar7"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 12 5.5 9.0 0 0 0 1.1 15 1.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.1 0.13 0.22 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 19
+  NAME "Pillar8"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 16 5.5 9.0 0 0 0 1.1 15 1.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.1 0.13 0.22 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 20
+  NAME "Backdrop"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 6 13.0 0 0 0 46 30 0.5
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.07 0.09 0.16 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 21
+  NAME "Fighters"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 0
+END_OBJECT
+OBJECT
+  ID 22
+  NAME "Fighter1"
+  ENABLED 1
+  PARENT 21
+  TRANSFORM -4.2 1.2 0 0 0 0 0.9 1.7 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 5
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.3 0.62 0.98 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "RigidbodyComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "body_type" enum 2
+    PROPERTY "mass" float 1.0
+    PROPERTY "linear_damping" float 0.02
+    PROPERTY "angular_damping" float 1.0
+    PROPERTY "gravity_scale" float 2.35
+    PROPERTY "restitution" float 0.0
+    PROPERTY "friction" float 0.3
+    PROPERTY "freeze_position" vec3 0 0 1
+    PROPERTY "freeze_rotation" vec3 1 1 1
+    PROPERTY "use_ccd" bool 1
+  END_COMPONENT
+  COMPONENT "BoxColliderComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "size" vec3 0.9 1.7 0.9
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "collision_layer" int 0
+    PROPERTY "collision_mask" int -1
+  END_COMPONENT
+  COMPONENT "AudioSourceComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "clip_path" assetref ""
+    PROPERTY "loop" bool 0
+    PROPERTY "volume" float 0.5
+    PROPERTY "pitch" float 1.0
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "spatial" bool 0
+  END_COMPONENT
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.SwordClash.SwordClashFighter"
+    PROPERTY "__script.execution_order" int 0
+    PROPERTY "__script.type_id" string "9c1f6a3d84b25e70af38d1c62b45e9f7"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 23
+  NAME "Blade"
+  ENABLED 1
+  PARENT 22
+  TRANSFORM 0.62 0.18 0 0 0 0 1.35 0.1 0.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.78 0.84 0.94 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "TrailComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "emitting" bool 0
+    PROPERTY "lifetime" float 0.22
+    PROPERTY "min_distance" float 0.05
+    PROPERTY "max_points" int 48
+    PROPERTY "world_space" bool 1
+    PROPERTY "width_start" float 0.3
+    PROPERTY "width_end" float 0.02
+    PROPERTY "color" color 1.0 0.82 0.35 1
+    PROPERTY "fill_color" color 1.0 0.82 0.35 1
+    PROPERTY "intensity" float 3.4
+    PROPERTY "billboard" bool 1
+    PROPERTY "cast_shadows" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 24
+  NAME "Sparks"
+  ENABLED 1
+  PARENT 22
+  TRANSFORM 0 0.2 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "ParticleEmitterComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 14
+    PROPERTY "emitting" bool 0
+    PROPERTY "spawn_rate" float 0.0
+    PROPERTY "lifetime" float 0.45
+    PROPERTY "start_speed" float 7.5
+    PROPERTY "gravity" float 9.0
+    PROPERTY "drag" float 1.4
+    PROPERTY "start_size" float 0.16
+    PROPERTY "end_size" float 0.01
+    PROPERTY "start_color" color 1.0 0.82 0.35 1
+    PROPERTY "end_color" color 1.0 0.82 0.35 0
+    PROPERTY "direction" vec3 0 1 0
+    PROPERTY "cone_angle" float 180.0
+    PROPERTY "blend_mode" enum 1
+    PROPERTY "max_particles" int 220
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 25
+  NAME "Glow"
+  ENABLED 1
+  PARENT 22
+  TRANSFORM 0 0.4 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PointLightComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "color" color 0.3 0.62 0.98 1
+    PROPERTY "intensity" float 1.1
+    PROPERTY "range" float 5.0
+    PROPERTY "cast_shadows" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 26
+  NAME "Fighter2"
+  ENABLED 1
+  PARENT 21
+  TRANSFORM 4.2 1.2 0 0 0 0 0.9 1.7 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 6
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 4
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.97 0.34 0.38 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "RigidbodyComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "body_type" enum 2
+    PROPERTY "mass" float 1.0
+    PROPERTY "linear_damping" float 0.02
+    PROPERTY "angular_damping" float 1.0
+    PROPERTY "gravity_scale" float 2.35
+    PROPERTY "restitution" float 0.0
+    PROPERTY "friction" float 0.3
+    PROPERTY "freeze_position" vec3 0 0 1
+    PROPERTY "freeze_rotation" vec3 1 1 1
+    PROPERTY "use_ccd" bool 1
+  END_COMPONENT
+  COMPONENT "BoxColliderComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "size" vec3 0.9 1.7 0.9
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "collision_layer" int 0
+    PROPERTY "collision_mask" int -1
+  END_COMPONENT
+  COMPONENT "AudioSourceComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "clip_path" assetref ""
+    PROPERTY "loop" bool 0
+    PROPERTY "volume" float 0.5
+    PROPERTY "pitch" float 1.0
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "spatial" bool 0
+  END_COMPONENT
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.SwordClash.SwordClashFighter"
+    PROPERTY "__script.execution_order" int 1
+    PROPERTY "__script.type_id" string "9c1f6a3d84b25e70af38d1c62b45e9f7"
+    PROPERTY "field.secondPlayer" bool 1
+  END_COMPONENT
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.SwordClash.SwordClashBrain"
+    PROPERTY "__script.execution_order" int 11
+    PROPERTY "__script.type_id" string "3e7b25c9f0a648d1b93c7e5a2f81d604"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 27
+  NAME "Blade"
+  ENABLED 1
+  PARENT 26
+  TRANSFORM 0.62 0.18 0 0 0 0 1.35 0.1 0.1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.78 0.84 0.94 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "cast_shadow" bool 0
+    PROPERTY "receive_shadow" bool 0
+    PROPERTY "visible" bool 1
+  END_COMPONENT
+  COMPONENT "TrailComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "emitting" bool 0
+    PROPERTY "lifetime" float 0.22
+    PROPERTY "min_distance" float 0.05
+    PROPERTY "max_points" int 48
+    PROPERTY "world_space" bool 1
+    PROPERTY "width_start" float 0.3
+    PROPERTY "width_end" float 0.02
+    PROPERTY "color" color 1.0 0.82 0.35 1
+    PROPERTY "fill_color" color 1.0 0.82 0.35 1
+    PROPERTY "intensity" float 3.4
+    PROPERTY "billboard" bool 1
+    PROPERTY "cast_shadows" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 28
+  NAME "Sparks"
+  ENABLED 1
+  PARENT 26
+  TRANSFORM 0 0.2 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "ParticleEmitterComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 14
+    PROPERTY "emitting" bool 0
+    PROPERTY "spawn_rate" float 0.0
+    PROPERTY "lifetime" float 0.45
+    PROPERTY "start_speed" float 7.5
+    PROPERTY "gravity" float 9.0
+    PROPERTY "drag" float 1.4
+    PROPERTY "start_size" float 0.16
+    PROPERTY "end_size" float 0.01
+    PROPERTY "start_color" color 1.0 0.82 0.35 1
+    PROPERTY "end_color" color 1.0 0.82 0.35 0
+    PROPERTY "direction" vec3 0 1 0
+    PROPERTY "cone_angle" float 180.0
+    PROPERTY "blend_mode" enum 1
+    PROPERTY "max_particles" int 220
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 29
+  NAME "Glow"
+  ENABLED 1
+  PARENT 26
+  TRANSFORM 0 0.4 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PointLightComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "color" color 0.97 0.34 0.38 1
+    PROPERTY "intensity" float 1.1
+    PROPERTY "range" float 5.0
+    PROPERTY "cast_shadows" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 30
+  NAME "Director"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.SwordClash.SwordClashGame"
+    PROPERTY "__script.execution_order" int 100
+    PROPERTY "__script.type_id" string "1a48d93e7c0b562f8e41ad35b9726c08"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 31
+  NAME "Canvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "size_delta" vec2 0 0
+  END_COMPONENT
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "reference_resolution" vec2 1600 900
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 100
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 32
+  NAME "Hud"
+  ENABLED 0
+  PARENT 31
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1600 900
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 33
+  NAME "Panel1"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -470 350
+    PROPERTY "size_delta" vec2 420 150
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.06 0.09 0.17 0.95
+    PROPERTY "fill_amount" float 1.0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 34
+  NAME "Name1"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -620 395
+    PROPERTY "size_delta" vec2 140 44
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>1P</b>"
+    PROPERTY "font_size" float 31.2
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.3 0.62 0.98 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 35
+  NAME "Damage1Value"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -400 378
+    PROPERTY "size_delta" vec2 260 88
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>0%</b>"
+    PROPERTY "font_size" float 72.0
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.94 0.97 1.0 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 36
+  NAME "Stock1Value"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -620 348
+    PROPERTY "size_delta" vec2 160 40
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>◆◆◆</b>"
+    PROPERTY "font_size" float 28.799999999999997
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.3 0.62 0.98 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 37
+  NAME "Gauge1Back"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -470 300
+    PROPERTY "size_delta" vec2 380 14
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.1 0.13 0.22 1
+    PROPERTY "fill_amount" float 1.0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 38
+  NAME "Gauge1Fill"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -470 300
+    PROPERTY "size_delta" vec2 380 14
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.3 0.62 0.98 1
+    PROPERTY "fill_amount" float 0.0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 39
+  NAME "Panel2"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 470 350
+    PROPERTY "size_delta" vec2 420 150
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.06 0.09 0.17 0.95
+    PROPERTY "fill_amount" float 1.0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 40
+  NAME "Name2"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 320 395
+    PROPERTY "size_delta" vec2 140 44
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>CPU</b>"
+    PROPERTY "font_size" float 31.2
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.97 0.34 0.38 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 41
+  NAME "Damage2Value"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 540 378
+    PROPERTY "size_delta" vec2 260 88
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>0%</b>"
+    PROPERTY "font_size" float 72.0
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.94 0.97 1.0 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 42
+  NAME "Stock2Value"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 320 348
+    PROPERTY "size_delta" vec2 160 40
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>◆◆◆</b>"
+    PROPERTY "font_size" float 28.799999999999997
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.97 0.34 0.38 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 43
+  NAME "Gauge2Back"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 470 300
+    PROPERTY "size_delta" vec2 380 14
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.1 0.13 0.22 1
+    PROPERTY "fill_amount" float 1.0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 44
+  NAME "Gauge2Fill"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 470 300
+    PROPERTY "size_delta" vec2 380 14
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.97 0.34 0.38 1
+    PROPERTY "fill_amount" float 0.0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 45
+  NAME "Hint"
+  ENABLED 1
+  PARENT 32
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -372
+    PROPERTY "size_delta" vec2 1100 44
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>A / D 移動    SPACE ジャンプ    J 斬り    K + 方向 で必殺</b>"
+    PROPERTY "font_size" float 26.4
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.6 0.7 0.85 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 46
+  NAME "Banner"
+  ENABLED 1
+  PARENT 31
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1600 900
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 47
+  NAME "BannerVeil"
+  ENABLED 1
+  PARENT 46
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1600 900
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.01 0.02 0.05 0.72
+    PROPERTY "fill_amount" float 1.0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 48
+  NAME "BannerCard"
+  ENABLED 1
+  PARENT 46
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1120 560
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.06 0.09 0.17 0.95
+    PROPERTY "fill_amount" float 1.0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 49
+  NAME "BannerEdgeL"
+  ENABLED 1
+  PARENT 46
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -555 0
+    PROPERTY "size_delta" vec2 10 560
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.3 0.62 0.98 1
+    PROPERTY "fill_amount" float 1.0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 50
+  NAME "BannerEdgeR"
+  ENABLED 1
+  PARENT 46
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 555 0
+    PROPERTY "size_delta" vec2 10 560
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "color" color 0.97 0.34 0.38 1
+    PROPERTY "fill_amount" float 1.0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 51
+  NAME "BannerTitle"
+  ENABLED 1
+  PARENT 46
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 150
+    PROPERTY "size_delta" vec2 1040 130
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>SWORD CLASH</b>"
+    PROPERTY "font_size" float 91.2
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.94 0.97 1.0 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 52
+  NAME "BannerBody"
+  ENABLED 1
+  PARENT 46
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 -60
+    PROPERTY "size_delta" vec2 1000 300
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "rotation" float 0
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UITextComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 7
+    PROPERTY "text" string "<b>SPACE ではじめる</b>"
+    PROPERTY "font_size" float 31.2
+    PROPERTY "rich_text" bool 1
+    PROPERTY "color" color 0.6 0.7 0.85 1
+    PROPERTY "horizontal_align" enum 1
+    PROPERTY "vertical_align" enum 1
+    PROPERTY "word_wrap" bool 1
+  END_COMPONENT
+END_OBJECT
+END_SCENE
