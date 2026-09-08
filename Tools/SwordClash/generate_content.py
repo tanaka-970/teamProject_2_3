@@ -173,7 +173,10 @@ def character_motor(key):
                 prop('maximum_fall_speed', 'float', 40),
                 prop('fallback_ground_y', 'float', -400),
                 prop('max_step_height', 'float', .4),
-                prop('vertical_physics', 'bool', True))
+                prop('vertical_physics', 'bool', True),
+                # 横スクロールなので奥行きは固定。W / S で面から落ちない。
+                prop('lock_plane_z', 'bool', True),
+                prop('plane_z', 'float', 0))
 
 
 def player_input(slot):

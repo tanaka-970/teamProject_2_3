@@ -94,6 +94,15 @@ namespace ReplayEngine::Core::Detail
                     .Display("地形が無い時の床の高さ").Step(0.05));
 
             PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("lock_plane_z", &CharacterMotorComponent::lock_plane_z)
+                    .Display("奥行きを固定")
+                    .Tooltip("横スクロール用。Z の速度と位置を毎回 plane_z へ戻す。"));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("plane_z", &CharacterMotorComponent::plane_z)
+                    .Display("固定する奥行き").Step(0.05));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
                 MakeProperty("max_step_height", &CharacterMotorComponent::max_step_height)
                     .Display("登れる段差の高さ").Range(0.0, 2.0).Step(0.01)
                     .Tooltip("接地判定はこの高さだけ上から床を探す。"

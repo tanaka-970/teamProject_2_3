@@ -160,6 +160,15 @@ namespace ReplayEngine::Components
         // 地形が無い場合に床とみなす高さ。旧 Player の ground_y に相当。
         float fallback_ground_y = 0.0f;
 
+        // 奥行きを固定する。横スクロールの対戦・アクション用。
+        //
+        // 【なぜ Component 側で持つか】
+        //   Script から毎フレーム Teleport で引き戻すと、速度が残ったまま
+        //   位置だけ戻るので震える。速度ごとここで消すのが素直。
+        //   既定は false なので、既存の Scene の挙動は変わらない。
+        bool lock_plane_z = false;
+        float plane_z = 0.0f;
+
         // 登れる段差の高さ。接地判定はこの高さだけ上から真下へ球を落として探す。
         //
         // 【なぜ必要か】

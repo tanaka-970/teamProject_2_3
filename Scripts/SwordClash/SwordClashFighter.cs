@@ -129,10 +129,11 @@ public class SwordClashFighter : MonoBehaviour
 
     static Spec SpecOf(Move value) => value switch
     {
-        Move.Slash => new Spec(0.07f, 0.11f, 0.16f, 6.5f, 4.2f, 0.085f, 1.55f, 0.42f),
-        Move.SideB => new Spec(0.12f, 0.26f, 0.30f, 12.0f, 5.6f, 0.105f, 1.75f, 0.30f),
-        Move.UpB => new Spec(0.06f, 0.22f, 0.34f, 10.0f, 5.0f, 0.098f, 1.45f, 0.95f),
-        Move.DownB => new Spec(0.05f, 0.30f, 0.24f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
+        //                    発生   持続   硬直   威力  ふっとび 伸び  間合い 上方向
+        Move.Slash => new Spec(0.06f, 0.12f, 0.14f, 8.0f, 7.0f, 0.13f, 1.7f, 0.45f),
+        Move.SideB => new Spec(0.11f, 0.26f, 0.28f, 15.0f, 10.5f, 0.17f, 2.0f, 0.35f),
+        Move.UpB => new Spec(0.05f, 0.24f, 0.30f, 12.0f, 9.0f, 0.15f, 1.6f, 1.25f),
+        Move.DownB => new Spec(0.04f, 0.32f, 0.22f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
         _ => new Spec(0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f),
     };
 
@@ -331,22 +332,35 @@ public class SwordClashFighter : MonoBehaviour
     }
 
     // 剣先へ球を置いて、その中に居る Collider を engine へ聞く。
+    // 物理クエリが使えない環境でも当たるよう、間合い判定の保険を後ろに置く。
     void TryHit(Spec spec)
     {
         var center = transform.position +
-            new Vector3(facing * spec.Reach * 0.75f, spec.Upward * 0.55f, 0.0f);
-        var found = Physics.OverlapSphere(center, spec.Reach * 0.62f);
+            new Vector3(facing * spec.Reach * 0.7f, spec.Upward * 0.5f, 0.0f);
 
-        foreach (var collider in found)
+        foreach (var collider in Physics.OverlapSphere(center, spec.Reach * 0.75f))
         {
             if (collider == null) continue;
-            var target = collider.gameObject.GetComponent<SwordClashFighter>();
-            if (target == null || ReferenceEquals(target, this)) continue;
-
-            hitLanded = true;
-            target.Receive(this, spec.Damage, spec.KnockBase, spec.KnockGrow, spec.Upward);
+            var found = collider.gameObject.GetComponent<SwordClashFighter>();
+            if (found == null || ReferenceEquals(found, this)) continue;
+            Land(found, spec);
             return;
         }
+
+        // 保険。振っているのに一生当たらない、という状態を作らない。
+        var target = Rival;
+        if (target == null) return;
+        var offset = target.transform.position - transform.position;
+        if (Mathf.Abs(offset.Y) > spec.Reach) return;
+        if (offset.X * facing < -0.4f) return;
+        if (Mathf.Abs(offset.X) > spec.Reach + 0.8f) return;
+        Land(target, spec);
+    }
+
+    void Land(SwordClashFighter target, Spec spec)
+    {
+        hitLanded = true;
+        target.Receive(this, spec.Damage, spec.KnockBase, spec.KnockGrow, spec.Upward);
     }
 
     // 相手から食らう。下B 中なら受け流して倍で返す。
@@ -376,8 +390,7 @@ public class SwordClashFighter : MonoBehaviour
         if (Mathf.Abs(away) < 0.01f) away = from.facing;
 
         // ふっとばしは Motor の撃力へ。接地していても上へ抜ける。
-        motor?.AddImpulse(new Vector3(away * power, power * (0.55f + upward), 0.0f) *
-            (1.0f / Mathf.Max(0.4f, weight)));
+        motor?.AddImpulse(new Vector3(away * power, power * (0.62f + upward), 0.0f));
 
         move = Move.None;
         Action = "Hit";
@@ -402,30 +415,61 @@ public class SwordClashFighter : MonoBehaviour
     {
         if (blade == null) return;
 
-        // 技ごとに刃の角度を変えるだけ。モーション資産は要らない。
+        // 技ごとに軌道も長さも変える。全部同じ角度差だと見分けがつかない。
         var angle = -20.0f;
+        var reach = 0.62f;
+        var length = 1.0f;
+        var lift = 0.18f;
+
         if (move != Move.None)
         {
             var spec = SpecOf(move);
             var t = Mathf.Clamp01(moveTimer / Mathf.Max(0.01f, spec.Total));
-            angle = move switch
+            switch (move)
             {
-                Move.Slash => Mathf.Lerp(-95.0f, 75.0f, t),
-                Move.SideB => Mathf.Lerp(-10.0f, 20.0f, t),
-                Move.UpB => Mathf.Lerp(40.0f, -120.0f, t),
-                Move.DownB => -160.0f,
-                _ => -20.0f,
-            };
+                case Move.Slash:
+                    // 上段から下段への薙ぎ。振り切るまでで 1 往復させない。
+                    angle = Mathf.Lerp(-110.0f, 85.0f, t);
+                    reach = 0.62f + Mathf.Sin(t * Mathf.PI) * 0.35f;
+                    length = 1.0f + Mathf.Sin(t * Mathf.PI) * 0.35f;
+                    break;
+
+                case Move.SideB:
+                    // 突き。刃を前へ倒したまま、長く伸ばして押し出す。
+                    angle = Mathf.Lerp(-30.0f, 5.0f, t);
+                    reach = 0.70f + Mathf.Sin(t * Mathf.PI) * 0.95f;
+                    length = 1.0f + Mathf.Sin(t * Mathf.PI) * 1.30f;
+                    lift = 0.05f;
+                    break;
+
+                case Move.UpB:
+                    // 昇り斬り。1 回転させて上へ抜ける。
+                    angle = Mathf.Lerp(60.0f, -300.0f, t);
+                    reach = 0.55f;
+                    length = 1.0f + Mathf.Sin(t * Mathf.PI) * 0.55f;
+                    lift = 0.18f + t * 0.55f;
+                    break;
+
+                case Move.DownB:
+                    // 構え。動かさない代わりに手前へ立てて分かるようにする。
+                    angle = -95.0f;
+                    reach = 0.42f;
+                    length = 0.85f;
+                    lift = 0.30f;
+                    break;
+            }
         }
-        blade.localPosition = new Vector3(facing * 0.62f, 0.18f, 0.0f);
+
+        blade.localPosition = new Vector3(facing * reach, lift, 0.0f);
         blade.localEulerAngles = new Vector3(0.0f, 0.0f, angle * facing);
+        blade.localScale = new Vector3(1.35f * length, 0.10f, 0.10f);
 
         // 持続の間だけ刃を光らせ、帯を出す。振り終わりに切れて軌跡が残る。
         var live = move != Move.None && move != Move.DownB && InActiveWindow();
         if (bladeSkin != null)
         {
             bladeSkin.color = live
-                ? new Color(1.0f, 0.96f, 0.62f, 1.0f)
+                ? new Color(1.0f, 0.98f, 0.72f, 1.0f)
                 : new Color(0.78f, 0.84f, 0.94f, 1.0f);
         }
         if (bladeTrail != null) bladeTrail.emitting = live;
@@ -434,7 +478,7 @@ public class SwordClashFighter : MonoBehaviour
         if (glow != null)
         {
             var guarding = move == Move.DownB && InActiveWindow();
-            glow.intensity = guarding ? 6.5f : (live ? 3.2f : 1.1f);
+            glow.intensity = guarding ? 9.0f : (live ? 5.0f : 1.4f);
             glow.color = guarding
                 ? new Color(1.0f, 0.88f, 0.30f, 1.0f)
                 : new Color(baseColor.R, baseColor.G, baseColor.B, 1.0f);

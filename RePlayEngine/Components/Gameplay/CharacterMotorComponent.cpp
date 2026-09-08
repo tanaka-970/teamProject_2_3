@@ -328,10 +328,14 @@ namespace ReplayEngine::Components
 
         // ---- 位置へ反映 -----------------------------------------------------
 
+        // 奥行きを固定する場合は、速度ごとここで落とす。
+        if (lock_plane_z) velocity_.z = 0.0f;
+
         DirectX::XMFLOAT3 position = previous_position;
         position.x += velocity_.x * fixed_delta_time;
         position.z += velocity_.z * fixed_delta_time;
         if (vertical_physics) position.y += velocity_.y * fixed_delta_time;
+        if (lock_plane_z) position.z = plane_z;
         transform.SetWorldPosition(position);
 
         // ---- 地形との解決 ---------------------------------------------------
@@ -341,6 +345,18 @@ namespace ReplayEngine::Components
 
         // 壁と床のどちらにも数えられなかった面が残っていても、ここで必ず追い出す。
         ResolvePenetration(shape);
+
+        // 押し戻しで面から外れることがあるので、最後にもう一度だけ戻す。
+        if (lock_plane_z)
+        {
+            DirectX::XMFLOAT3 resolved = transform.WorldPosition();
+            if (std::fabs(resolved.z - plane_z) > 0.0001f)
+            {
+                resolved.z = plane_z;
+                transform.SetWorldPosition(resolved);
+            }
+            velocity_.z = 0.0f;
+        }
     }
 
     // どんな向きの面でも、球が食い込んでいれば外へ出す。

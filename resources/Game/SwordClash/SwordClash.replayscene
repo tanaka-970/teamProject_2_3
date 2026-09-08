@@ -572,7 +572,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 11
+    PROPERTY_COUNT 13
     PROPERTY "primary_collider_key" colliderref 1
     PROPERTY "move_speed" float 7.5
     PROPERTY "acceleration" float 55
@@ -584,6 +584,8 @@ OBJECT
     PROPERTY "fallback_ground_y" float -400
     PROPERTY "max_step_height" float 0.4
     PROPERTY "vertical_physics" bool 1
+    PROPERTY "lock_plane_z" bool 1
+    PROPERTY "plane_z" float 0
   END_COMPONENT
   COMPONENT "PlayerInputComponent" 1
     STABLE_ID 3
@@ -774,7 +776,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 11
+    PROPERTY_COUNT 13
     PROPERTY "primary_collider_key" colliderref 1
     PROPERTY "move_speed" float 7.5
     PROPERTY "acceleration" float 55
@@ -786,6 +788,8 @@ OBJECT
     PROPERTY "fallback_ground_y" float -400
     PROPERTY "max_step_height" float 0.4
     PROPERTY "vertical_physics" bool 1
+    PROPERTY "lock_plane_z" bool 1
+    PROPERTY "plane_z" float 0
   END_COMPONENT
   COMPONENT "AudioSourceComponent" 1
     STABLE_ID 3
