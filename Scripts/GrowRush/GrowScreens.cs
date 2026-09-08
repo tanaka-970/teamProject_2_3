@@ -1,4 +1,4 @@
-// アタッチ先: GrowRush_Title.replayscene の Director に GrowTitle、GrowRush_Result.replayscene の Director に GrowResult。
+﻿// アタッチ先: GrowRush_Title.replayscene の Director に GrowTitle、GrowRush_Result.replayscene の Director に GrowResult。
 // GrowScreen は上記と GrowArena の共通基底クラス、GrowDiagnostics は補助クラスのため直接アタッチしない。
 // 担当: エンジンのUI・音声・SceneFlowを呼び、タイトルと結果の進行をC#で制御する。
 
@@ -50,7 +50,7 @@ public abstract class GrowScreen : ScriptBehaviour
     protected static readonly Color Cream = new(.97f, .98f, .90f, 1);
     // 一度見つけたオブジェクトのハンドルを名前ごとに保存する。
     private readonly Dictionary<string, ObjectHandle> objects = new();
-    // 最後に設定した文字列を保存し、同じ文字の再設定を減らす。
+    // 最後に設定した文字列を保存し、同じ文字の再設定を減らす。hiegkkdnnnkcjdkdfjijjdo
     private readonly Dictionary<string, string> textCache = new();
     // エンジンのボタンクリック通知を受け取る購読情報。
     private EventSubscription clicks;
@@ -71,7 +71,7 @@ public abstract class GrowScreen : ScriptBehaviour
         // 開始した画面名を診断ログへ記録する。
         GrowDiagnostics.Record("SCENE " + name);
     }
-    // シーン内のオブジェクトを名前で探し、結果を再利用する。
+    // シーン内のオブジェクトを名前で探し、結果を再利用する。これめっちゃ重要ね
     protected ObjectHandle Find(string name)
     {
         // すでに見つけてある場合は保存済みのハンドルを返す。
@@ -251,14 +251,12 @@ public sealed class GrowTitle : GrowScreen
                 GrowDiagnostics.Record("PASS title -> 60s -> result -> replay 60s -> title -> 120s -> result -> title -> quit");
                 // エンジンのボタン通知で終了を選ぶ。
                 TestClick("Quit");
-            }
-            // 完了済みの試合数に応じて1分または2分の開始ボタンを選ぶ。
-            else TestClick(GrowDiagnostics.Completed == 2 ? "TwoMinutes" : "OneMinute");
-        }
+            }//k
             // 対戦または結果の撮影モードでも、タイトルから通常の開始経路へ進む。
             if ((GrowDiagnostics.Capture == "arena" || GrowDiagnostics.Capture == "result") && ScreenTime > 1)
                 // 撮影用の60秒対戦を開始する。
                 StartMatch(60);
+        }
     }
     // 押されたタイトルのボタン名に応じた操作を行う。
     private void Click(string name)

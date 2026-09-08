@@ -1,4 +1,4 @@
-// アタッチ先: GrowRush_Arena.replayscene の Director オブジェクト（スクリプト型: Game.GrowRush.GrowArena）。
+﻿// アタッチ先: GrowRush_Arena.replayscene の Director オブジェクト（スクリプト型: Game.GrowRush.GrowArena）。
 // 担当: エンジンの入力・カメラ・プリミティブ・UIと、C#のGrowMatchをつなぐ。
 // 遷移先は GrowRush_Flow.replaysceneflow で設定し、このクラスはイベント名だけを送る。
 
@@ -403,7 +403,7 @@ public sealed class GrowArena : GrowScreen
         // 倒れた場所に樹が生える効果音を鳴らす。
         Sound("tree", .5f);
         // 倒された側のチーム番号を診断ログへ出す。
-        GrowDiagnostics.Record("KNOCKOUT team=" + team);
+        GrowDiagnostics.Record("KNOCKOUT team =" + team);
     }
     // 残り時間・得点・面積・HP・中央表示を更新する。
     private void UpdateHud()

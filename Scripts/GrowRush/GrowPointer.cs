@@ -1,4 +1,4 @@
-// アタッチ先: なし（補助クラス）。各シーンの Director に付いた GrowScreen 系スクリプトから呼ぶ。
+﻿// アタッチ先: なし（補助クラス）。各シーンの Director に付いた GrowScreen 系スクリプトから呼ぶ。
 // 主な呼び出し元: GrowRush_Arena.replayscene の Director / GrowArena。
 // 担当: 現在のエンジンAPIにないカーソル固定を、C#からWindows APIを呼んで補う。
 

@@ -1,4 +1,4 @@
-// アタッチ先: なし（補助クラス）。GrowRush_Arena.replayscene の Director / GrowArena が対戦ルールを使用する。
+﻿// アタッチ先: なし（補助クラス）。GrowRush_Arena.replayscene の Director / GrowArena が対戦ルールを使用する。
 // GrowSession は Title・Arena・Result 各シーンの Director が試合時間と結果の受け渡しに使用する。
 // 担当: C#で成長・水弾・命中・復活・得点・既存AIを計算する。描画やシーン遷移は行わない。
 
