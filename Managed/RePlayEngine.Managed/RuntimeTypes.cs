@@ -211,6 +211,11 @@ internal enum ComponentCommand : int
     ParticleStop = 11,
     ParticleEmit = 12,
     ParticleClear = 13,
+
+    // CharacterMotor の操作。C++ の ComponentCommand と同じ並び。
+    MotorMove = 14,
+    MotorImpulse = 15,
+    MotorTeleport = 16,
 }
 
 [StructLayout(LayoutKind.Sequential)]

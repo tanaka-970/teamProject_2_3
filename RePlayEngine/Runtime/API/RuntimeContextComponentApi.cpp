@@ -9,6 +9,7 @@
 #include "RuntimeContext.h"
 
 #include "../../Components/Audio/AudioSourceComponent.h"
+#include "../../Components/Gameplay/CharacterMotorComponent.h"
 #include "../../Components/Landscape/LandscapeComponent.h"
 #include "../../Components/Physics/ColliderComponent.h"
 #include "../../Scripting/Core/ScriptComponent.h"
@@ -612,6 +613,34 @@ namespace ReplayEngine::Runtime
         return RuntimeStatus::Ok;
     }
 
+    namespace
+    {
+        // "x,y,z" を 1 つの XMFLOAT3 へ。Component 命令の text 引数専用。
+        bool ParseVector3Text(const std::string& text, XMFLOAT3& out)
+        {
+            float values[3]{ 0.0f, 0.0f, 0.0f };
+            std::size_t begin = 0;
+            for (int index = 0; index < 3; ++index)
+            {
+                if (begin > text.size()) return false;
+                const std::size_t comma = text.find(',', begin);
+                const std::string piece = text.substr(begin,
+                    comma == std::string::npos ? std::string::npos : comma - begin);
+                try { values[index] = std::stof(piece); }
+                catch (...) { return false; }
+                if (!std::isfinite(values[index])) return false;
+                if (comma == std::string::npos)
+                {
+                    if (index != 2) return false;
+                    break;
+                }
+                begin = comma + 1;
+            }
+            out = XMFLOAT3{ values[0], values[1], values[2] };
+            return true;
+        }
+    }
+
     RuntimeStatus RuntimeContext::InvokeComponentCommand(const ComponentHandle& handle,
         ComponentCommand command, const std::string& text, float scalar,
         float secondary_scalar, int integer)
@@ -659,6 +688,30 @@ namespace ReplayEngine::Runtime
                 if (!source->IsPlaying()) return RuntimeStatus::AssetMissing;
             }
             else source->Stop();
+            return RuntimeStatus::Ok;
+        }
+
+        if (command == ComponentCommand::MotorMove ||
+            command == ComponentCommand::MotorImpulse ||
+            command == ComponentCommand::MotorTeleport)
+        {
+            auto* motor = dynamic_cast<Components::CharacterMotorComponent*>(component);
+            if (motor == nullptr) return RuntimeStatus::TypeMismatch;
+
+            if (command == ComponentCommand::MotorMove)
+            {
+                if (!std::isfinite(scalar) || !std::isfinite(secondary_scalar))
+                    return RuntimeStatus::InvalidArgument;
+                const float multiplier = integer > 0 ? integer / 1000.0f : 1.0f;
+                motor->Move(XMFLOAT3{ scalar, 0.0f, secondary_scalar }, multiplier);
+                return RuntimeStatus::Ok;
+            }
+
+            // "x,y,z" を読む。まれにしか来ないので確保は許容する。
+            XMFLOAT3 vector{ 0.0f, 0.0f, 0.0f };
+            if (!ParseVector3Text(text, vector)) return RuntimeStatus::InvalidArgument;
+            if (command == ComponentCommand::MotorImpulse) motor->ApplyImpulse(vector);
+            else motor->Teleport(vector);
             return RuntimeStatus::Ok;
         }
 

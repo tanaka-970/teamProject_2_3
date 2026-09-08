@@ -2,7 +2,7 @@ REPLAY_SCENE 11
 SCENE "Sword Clash"
 SCENE_STATE 0
 COLLISION_STATE 2 0
-OBJECT_COUNT 53
+OBJECT_COUNT 55
 OBJECT
   ID 1
   NAME "CameraRig"
@@ -549,9 +549,96 @@ OBJECT
   NAME "Fighter1"
   ENABLED 1
   PARENT 22
-  TRANSFORM -4.2 0.9 0 0 0 0 0.9 1.7 0.9
+  TRANSFORM -4.2 1.0 0 0 0 0 1 1 1
   PREFAB "" 0 0
-  COMPONENT_COUNT 5
+  COMPONENT_COUNT 6
+  COMPONENT "CapsuleColliderComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "collider_key" int 1
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask -1
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "radius" float 0.45
+    PROPERTY "height" float 1.7
+    PROPERTY "axis" enum 1
+  END_COMPONENT
+  COMPONENT "CharacterMotorComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "primary_collider_key" colliderref 1
+    PROPERTY "move_speed" float 7.5
+    PROPERTY "acceleration" float 55
+    PROPERTY "deceleration" float 42
+    PROPERTY "air_control" float 0.7
+    PROPERTY "gravity" float 26
+    PROPERTY "jump_power" float 11.5
+    PROPERTY "maximum_fall_speed" float 40
+    PROPERTY "fallback_ground_y" float -400
+    PROPERTY "max_step_height" float 0.4
+    PROPERTY "vertical_physics" bool 1
+  END_COMPONENT
+  COMPONENT "PlayerInputComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "input_enabled" bool 1
+    PROPERTY "local_player_slot" int 0
+  END_COMPONENT
+  COMPONENT "PlayerControllerComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "turn_speed_degrees" float 0
+    PROPERTY "dash_multiplier" float 1
+    PROPERTY "camera_relative" bool 0
+    PROPERTY "rotate_towards_movement" bool 0
+  END_COMPONENT
+  COMPONENT "AudioSourceComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "clip_path" assetref ""
+    PROPERTY "loop" bool 0
+    PROPERTY "volume" float 0.5
+    PROPERTY "pitch" float 1.0
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "spatial" bool 0
+  END_COMPONENT
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.SwordClash.SwordClashFighter"
+    PROPERTY "__script.execution_order" int 0
+    PROPERTY "__script.type_id" string "9c1f6a3d84b25e70af38d1c62b45e9f7"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 24
+  NAME "Body"
+  ENABLED 1
+  PARENT 23
+  TRANSFORM 0 0 0 0 0 0 0.9 1.7 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
   COMPONENT "PrimitiveMeshRendererComponent" 1
     STABLE_ID 1
     TYPE_GUID "00000000000000000000000000000000"
@@ -566,63 +653,9 @@ OBJECT
     PROPERTY "receive_shadow" bool 1
     PROPERTY "visible" bool 1
   END_COMPONENT
-  COMPONENT "RigidbodyComponent" 1
-    STABLE_ID 2
-    TYPE_GUID "00000000000000000000000000000000"
-    TYPE_MODULE ""
-    TYPE_VERSION 1
-    PROPERTY_COUNT 10
-    PROPERTY "body_type" enum 2
-    PROPERTY "mass" float 1.0
-    PROPERTY "linear_damping" float 0.02
-    PROPERTY "angular_damping" float 1.0
-    PROPERTY "gravity_scale" float 2.35
-    PROPERTY "restitution" float 0.0
-    PROPERTY "friction" float 0.02
-    PROPERTY "freeze_position" vec3 0 0 1
-    PROPERTY "freeze_rotation" vec3 1 1 1
-    PROPERTY "use_ccd" bool 1
-  END_COMPONENT
-  COMPONENT "BoxColliderComponent" 1
-    STABLE_ID 3
-    TYPE_GUID "00000000000000000000000000000000"
-    TYPE_MODULE ""
-    TYPE_VERSION 1
-    PROPERTY_COUNT 5
-    PROPERTY "size" vec3 1 1 1
-    PROPERTY "center_offset" vec3 0 0 0
-    PROPERTY "is_trigger" bool 0
-    PROPERTY "collision_layer" int 0
-    PROPERTY "collision_mask" int -1
-  END_COMPONENT
-  COMPONENT "AudioSourceComponent" 1
-    STABLE_ID 4
-    TYPE_GUID "00000000000000000000000000000000"
-    TYPE_MODULE ""
-    TYPE_VERSION 1
-    PROPERTY_COUNT 6
-    PROPERTY "clip_path" assetref ""
-    PROPERTY "loop" bool 0
-    PROPERTY "volume" float 0.5
-    PROPERTY "pitch" float 1.0
-    PROPERTY "play_on_start" bool 0
-    PROPERTY "spatial" bool 0
-  END_COMPONENT
-  COMPONENT "ScriptComponent" 1
-    STABLE_ID 5
-    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
-    TYPE_MODULE "RePlayEngine.Scripting"
-    TYPE_VERSION 1
-    PROPERTY_COUNT 5
-    PROPERTY "__script.language" enum 1
-    PROPERTY "__script.asset" assetref ""
-    PROPERTY "__script.class" string "Game.SwordClash.SwordClashFighter"
-    PROPERTY "__script.execution_order" int 0
-    PROPERTY "__script.type_id" string "9c1f6a3d84b25e70af38d1c62b45e9f7"
-  END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 24
+  ID 25
   NAME "Blade"
   ENABLED 1
   PARENT 23
@@ -664,7 +697,7 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 25
+  ID 26
   NAME "Sparks"
   ENABLED 1
   PARENT 23
@@ -694,7 +727,7 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 26
+  ID 27
   NAME "Glow"
   ENABLED 1
   PARENT 23
@@ -714,13 +747,93 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 27
+  ID 28
   NAME "Fighter2"
   ENABLED 1
   PARENT 22
-  TRANSFORM 4.2 0.9 0 0 0 0 0.9 1.7 0.9
+  TRANSFORM 4.2 1.0 0 0 0 0 1 1 1
   PREFAB "" 0 0
-  COMPONENT_COUNT 6
+  COMPONENT_COUNT 5
+  COMPONENT "CapsuleColliderComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "collider_key" int 2
+    PROPERTY "center_offset" vec3 0 0 0
+    PROPERTY "collision_layer" layer 0
+    PROPERTY "collision_mask" layermask -1
+    PROPERTY "is_trigger" bool 0
+    PROPERTY "radius" float 0.45
+    PROPERTY "height" float 1.7
+    PROPERTY "axis" enum 1
+  END_COMPONENT
+  COMPONENT "CharacterMotorComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "primary_collider_key" colliderref 2
+    PROPERTY "move_speed" float 7.5
+    PROPERTY "acceleration" float 55
+    PROPERTY "deceleration" float 42
+    PROPERTY "air_control" float 0.7
+    PROPERTY "gravity" float 26
+    PROPERTY "jump_power" float 11.5
+    PROPERTY "maximum_fall_speed" float 40
+    PROPERTY "fallback_ground_y" float -400
+    PROPERTY "max_step_height" float 0.4
+    PROPERTY "vertical_physics" bool 1
+  END_COMPONENT
+  COMPONENT "AudioSourceComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "clip_path" assetref ""
+    PROPERTY "loop" bool 0
+    PROPERTY "volume" float 0.5
+    PROPERTY "pitch" float 1.0
+    PROPERTY "play_on_start" bool 0
+    PROPERTY "spatial" bool 0
+  END_COMPONENT
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.SwordClash.SwordClashFighter"
+    PROPERTY "__script.execution_order" int 1
+    PROPERTY "__script.type_id" string "9c1f6a3d84b25e70af38d1c62b45e9f7"
+    PROPERTY "field.secondPlayer" bool 1
+  END_COMPONENT
+  COMPONENT "ScriptComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
+    TYPE_MODULE "RePlayEngine.Scripting"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 5
+    PROPERTY "__script.language" enum 1
+    PROPERTY "__script.asset" assetref ""
+    PROPERTY "__script.class" string "Game.SwordClash.SwordClashBrain"
+    PROPERTY "__script.execution_order" int 11
+    PROPERTY "__script.type_id" string "3e7b25c9f0a648d1b93c7e5a2f81d604"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 29
+  NAME "Body"
+  ENABLED 1
+  PARENT 28
+  TRANSFORM 0 0 0 0 0 0 0.9 1.7 0.9
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
   COMPONENT "PrimitiveMeshRendererComponent" 1
     STABLE_ID 1
     TYPE_GUID "00000000000000000000000000000000"
@@ -735,79 +848,12 @@ OBJECT
     PROPERTY "receive_shadow" bool 1
     PROPERTY "visible" bool 1
   END_COMPONENT
-  COMPONENT "RigidbodyComponent" 1
-    STABLE_ID 2
-    TYPE_GUID "00000000000000000000000000000000"
-    TYPE_MODULE ""
-    TYPE_VERSION 1
-    PROPERTY_COUNT 10
-    PROPERTY "body_type" enum 2
-    PROPERTY "mass" float 1.0
-    PROPERTY "linear_damping" float 0.02
-    PROPERTY "angular_damping" float 1.0
-    PROPERTY "gravity_scale" float 2.35
-    PROPERTY "restitution" float 0.0
-    PROPERTY "friction" float 0.02
-    PROPERTY "freeze_position" vec3 0 0 1
-    PROPERTY "freeze_rotation" vec3 1 1 1
-    PROPERTY "use_ccd" bool 1
-  END_COMPONENT
-  COMPONENT "BoxColliderComponent" 1
-    STABLE_ID 3
-    TYPE_GUID "00000000000000000000000000000000"
-    TYPE_MODULE ""
-    TYPE_VERSION 1
-    PROPERTY_COUNT 5
-    PROPERTY "size" vec3 1 1 1
-    PROPERTY "center_offset" vec3 0 0 0
-    PROPERTY "is_trigger" bool 0
-    PROPERTY "collision_layer" int 0
-    PROPERTY "collision_mask" int -1
-  END_COMPONENT
-  COMPONENT "AudioSourceComponent" 1
-    STABLE_ID 4
-    TYPE_GUID "00000000000000000000000000000000"
-    TYPE_MODULE ""
-    TYPE_VERSION 1
-    PROPERTY_COUNT 6
-    PROPERTY "clip_path" assetref ""
-    PROPERTY "loop" bool 0
-    PROPERTY "volume" float 0.5
-    PROPERTY "pitch" float 1.0
-    PROPERTY "play_on_start" bool 0
-    PROPERTY "spatial" bool 0
-  END_COMPONENT
-  COMPONENT "ScriptComponent" 1
-    STABLE_ID 5
-    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
-    TYPE_MODULE "RePlayEngine.Scripting"
-    TYPE_VERSION 1
-    PROPERTY_COUNT 6
-    PROPERTY "__script.language" enum 1
-    PROPERTY "__script.asset" assetref ""
-    PROPERTY "__script.class" string "Game.SwordClash.SwordClashFighter"
-    PROPERTY "__script.execution_order" int 1
-    PROPERTY "__script.type_id" string "9c1f6a3d84b25e70af38d1c62b45e9f7"
-    PROPERTY "field.secondPlayer" bool 1
-  END_COMPONENT
-  COMPONENT "ScriptComponent" 1
-    STABLE_ID 6
-    TYPE_GUID "7a3e1c94b06d4f28ae5137c0d9b28e41"
-    TYPE_MODULE "RePlayEngine.Scripting"
-    TYPE_VERSION 1
-    PROPERTY_COUNT 5
-    PROPERTY "__script.language" enum 1
-    PROPERTY "__script.asset" assetref ""
-    PROPERTY "__script.class" string "Game.SwordClash.SwordClashBrain"
-    PROPERTY "__script.execution_order" int 11
-    PROPERTY "__script.type_id" string "3e7b25c9f0a648d1b93c7e5a2f81d604"
-  END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 28
+  ID 30
   NAME "Blade"
   ENABLED 1
-  PARENT 27
+  PARENT 28
   TRANSFORM 0.62 0.18 0 0 0 0 1.35 0.1 0.1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -846,10 +892,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 29
+  ID 31
   NAME "Sparks"
   ENABLED 1
-  PARENT 27
+  PARENT 28
   TRANSFORM 0 0.2 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 1
@@ -876,10 +922,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 30
+  ID 32
   NAME "Glow"
   ENABLED 1
-  PARENT 27
+  PARENT 28
   TRANSFORM 0 0.4 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 1
@@ -896,7 +942,7 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 31
+  ID 33
   NAME "Director"
   ENABLED 1
   PARENT 0
@@ -917,7 +963,7 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 32
+  ID 34
   NAME "Canvas"
   ENABLED 1
   PARENT 0
@@ -948,10 +994,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 33
+  ID 35
   NAME "Hud"
   ENABLED 0
-  PARENT 32
+  PARENT 34
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 1
@@ -972,10 +1018,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 34
+  ID 36
   NAME "Panel1"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1005,10 +1051,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 35
+  ID 37
   NAME "Name1"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1043,10 +1089,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 36
+  ID 38
   NAME "Damage1Value"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1081,10 +1127,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 37
+  ID 39
   NAME "Stock1Value"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1119,10 +1165,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 38
+  ID 40
   NAME "Gauge1Back"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1152,10 +1198,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 39
+  ID 41
   NAME "Gauge1Fill"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1185,10 +1231,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 40
+  ID 42
   NAME "Panel2"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1218,10 +1264,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 41
+  ID 43
   NAME "Name2"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1256,10 +1302,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 42
+  ID 44
   NAME "Damage2Value"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1294,10 +1340,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 43
+  ID 45
   NAME "Stock2Value"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1332,10 +1378,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 44
+  ID 46
   NAME "Gauge2Back"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1365,10 +1411,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 45
+  ID 47
   NAME "Gauge2Fill"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1398,10 +1444,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 46
+  ID 48
   NAME "Hint"
   ENABLED 1
-  PARENT 33
+  PARENT 35
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1436,10 +1482,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 47
+  ID 49
   NAME "Banner"
   ENABLED 1
-  PARENT 32
+  PARENT 34
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 1
@@ -1460,10 +1506,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 48
+  ID 50
   NAME "BannerVeil"
   ENABLED 1
-  PARENT 47
+  PARENT 49
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1493,10 +1539,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 49
+  ID 51
   NAME "BannerCard"
   ENABLED 1
-  PARENT 47
+  PARENT 49
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1526,10 +1572,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 50
+  ID 52
   NAME "BannerEdgeL"
   ENABLED 1
-  PARENT 47
+  PARENT 49
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1559,10 +1605,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 51
+  ID 53
   NAME "BannerEdgeR"
   ENABLED 1
-  PARENT 47
+  PARENT 49
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1592,10 +1638,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 52
+  ID 54
   NAME "BannerTitle"
   ENABLED 1
-  PARENT 47
+  PARENT 49
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2
@@ -1630,10 +1676,10 @@ OBJECT
   END_COMPONENT
 END_OBJECT
 OBJECT
-  ID 53
+  ID 55
   NAME "BannerBody"
   ENABLED 1
-  PARENT 47
+  PARENT 49
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
   COMPONENT_COUNT 2

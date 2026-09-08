@@ -146,21 +146,50 @@ class Scene:
 
 # ---- Component ヘルパ -------------------------------------------------------
 
-def rigidbody():
-    # 横スクロールなので Z への移動と全軸の回転を engine 側で止める。
-    # C# で毎フレーム押し戻すより、Solver に食わせた方が暴れない。
-    return comp('RigidbodyComponent',
-                prop('body_type', 'enum', 2),
-                prop('mass', 'float', 1.0),
-                prop('linear_damping', 'float', .02),
-                prop('angular_damping', 'float', 1.0),
-                prop('gravity_scale', 'float', 2.35),
-                prop('restitution', 'float', 0.0),
-                # 摩擦を残すと、力で押しても接地中に食われて進まない。
-                prop('friction', 'float', .02),
-                prop('freeze_position', 'vec3', (0, 0, 1)),
-                prop('freeze_rotation', 'vec3', (1, 1, 1)),
-                prop('use_ccd', 'bool', True))
+def capsule_collider(key, radius=.45, height=1.7):
+    # CharacterMotor は collider_key でこれを見つける。scale は 1 のまま使う。
+    return comp('CapsuleColliderComponent',
+                prop('collider_key', 'int', key),
+                prop('center_offset', 'vec3', (0, 0, 0)),
+                prop('collision_layer', 'layer', 0),
+                prop('collision_mask', 'layermask', -1),
+                prop('is_trigger', 'bool', False),
+                prop('radius', 'float', radius),
+                prop('height', 'float', height),
+                prop('axis', 'enum', 1))
+
+
+def character_motor(key):
+    # 歩く・跳ぶ・落ちる・段差を登るは全部この Component が持つ。
+    # C# で剛体を押すより、既に解いてあるこちらへ乗せた方が確実。
+    return comp('CharacterMotorComponent',
+                prop('primary_collider_key', 'colliderref', key),
+                prop('move_speed', 'float', 7.5),
+                prop('acceleration', 'float', 55),
+                prop('deceleration', 'float', 42),
+                prop('air_control', 'float', .70),
+                prop('gravity', 'float', 26),
+                prop('jump_power', 'float', 11.5),
+                prop('maximum_fall_speed', 'float', 40),
+                prop('fallback_ground_y', 'float', -400),
+                prop('max_step_height', 'float', .4),
+                prop('vertical_physics', 'bool', True))
+
+
+def player_input(slot):
+    return comp('PlayerInputComponent',
+                prop('input_enabled', 'bool', True),
+                prop('local_player_slot', 'int', slot))
+
+
+def player_controller():
+    # camera_relative を切って、A / D が必ずワールドの X 方向になるようにする。
+    # 横スクロールなので、向きに合わせて本体を回すのも切る。
+    return comp('PlayerControllerComponent',
+                prop('turn_speed_degrees', 'float', 0),
+                prop('dash_multiplier', 'float', 1),
+                prop('camera_relative', 'bool', False),
+                prop('rotate_towards_movement', 'bool', False))
 
 
 def box_collider(size=(1, 1, 1), trigger=False):
@@ -322,17 +351,28 @@ def build():
     for index, (key, color, x, second, brain) in enumerate([
             ('Fighter1', BLUE, -4.2, False, False),
             ('Fighter2', RED, 4.2, True, True)]):
-        # secondPlayer を立てた方は矢印キー側になる。Inspector の初期値として渡す。
+        # 本体はスケール 1。見た目は子の Body が持つ。
+        # コライダーは size × scale で効くので、根っこを 1 にしておかないと
+        # 二重に掛かって床へ埋まる。
+        collider_key = index + 1
         extra = (prop('field.secondPlayer', 'bool', True),) if second else ()
-        parts = [rigidbody(), box_collider(), audio(),
+        parts = [capsule_collider(collider_key), character_motor(collider_key), audio(),
                  script('SwordClashFighter', '9c1f6a3d84b25e70af38d1c62b45e9f7',
                         order=index, extra=extra)]
+
+        # 1P は native の入力部品で動かす。C# は移動に関与しない。
+        # CPU は Brain が CharacterMotor へ指示を出す。
         if brain:
             parts.append(script('SwordClashBrain', '3e7b25c9f0a648d1b93c7e5a2f81d604',
                                 order=10 + index))
+        else:
+            parts.insert(2, player_input(0))
+            parts.insert(3, player_controller())
 
-        body = s.mesh(key, 4, (x, .90, 0), (.9, 1.7, .9), color,
-                      parent=stage, extra=parts, key=key)
+        body = s.obj(key, parts, pos=(x, 1.0, 0), parent=stage, key=key)
+
+        # 見た目。当たり判定は根っこのカプセルが持つので、ここには付けない。
+        s.mesh('Body', 4, (0, 0, 0), (.9, 1.7, .9), color, parent=body, key=key + 'Body')
 
         # 剣。振りは C# が localEulerAngles で回す。帯は Trail が引く。
         s.mesh('Blade', 1, (.62, .18, 0), (1.35, .10, .10), STEEL,

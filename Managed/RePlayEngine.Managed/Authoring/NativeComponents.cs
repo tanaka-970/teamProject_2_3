@@ -341,6 +341,72 @@ public sealed class UIButton : NativeBehaviour
     }
 }
 
+// ---- ゲームプレイ -----------------------------------------------------------
+
+// 歩く・跳ぶ・落ちるを持つ Native の移動部品。
+//
+// 【なぜ Rigidbody で自作しないか】
+//   接地判定も段差登りも壁ずりも、C++ 側で既に解いてある。
+//   同じものを C# の力積で作り直すと、寝た剛体や摩擦の扱いで必ず詰まる。
+//   入力から動かすところは PlayerInput / PlayerController が native で担当する。
+//   ここは「技で自分から動く」「ふっとぶ」「復帰させる」だけを外へ出す。
+public sealed class CharacterMotor : NativeBehaviour
+{
+    internal CharacterMotor(GameObject owner, ComponentHandle handle) : base(owner, handle) { }
+
+    private CharacterMotorComponent Binding => CharacterMotorComponent.FromHandle(Handle);
+
+    public float moveSpeed
+    {
+        get => Binding.MoveSpeed;
+        set { var binding = Binding; binding.MoveSpeed = value; }
+    }
+
+    public float jumpPower
+    {
+        get => Binding.JumpPower;
+        set { var binding = Binding; binding.JumpPower = value; }
+    }
+
+    // 次の FixedUpdate で 1 回だけ跳ぶ。押しっぱなしで跳び続けない。
+    public void Jump() { var binding = Binding; binding.RequestJump = true; }
+
+    // 水平の向きへ歩かせる。y は使わない。倍率は走り・突進に使う。
+    public void Move(Vector3 direction, float speedMultiplier = 1.0f)
+        => NativeBridge.InvokeComponentCommand(Handle, ComponentCommand.MotorMove,
+            scalar: direction.X, secondaryScalar: direction.Z,
+            integer: (int)(Mathf.Clamp(speedMultiplier, 0.0f, 20.0f) * 1000.0f));
+
+    // ふっとばす。接地していても上へ抜ける。
+    public void AddImpulse(Vector3 impulse)
+        => NativeBridge.InvokeComponentCommand(Handle, ComponentCommand.MotorImpulse,
+            Text(impulse));
+
+    // 速度を残したまま位置だけ移す。復帰に使う。
+    public void Teleport(Vector3 position)
+        => NativeBridge.InvokeComponentCommand(Handle, ComponentCommand.MotorTeleport,
+            Text(position));
+
+    private static string Text(Vector3 value)
+        => value.X.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," +
+            value.Y.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," +
+            value.Z.ToString(System.Globalization.CultureInfo.InvariantCulture);
+}
+
+// 入力を受け取るかどうかの切り替え。中身の入力処理は native 側。
+public sealed class PlayerInput : NativeBehaviour
+{
+    internal PlayerInput(GameObject owner, ComponentHandle handle) : base(owner, handle) { }
+
+    private PlayerInputComponent Binding => PlayerInputComponent.FromHandle(Handle);
+
+    public bool inputEnabled
+    {
+        get => Binding.InputEnabled;
+        set { var binding = Binding; binding.InputEnabled = value; }
+    }
+}
+
 // ---- 演出 -------------------------------------------------------------------
 
 // 画面全体に掛かる後処理の並び。1 枚ずつ Scene で置いてあるものを実行時に動かす。
@@ -518,6 +584,12 @@ internal static class NativeComponentBootstrap
 
         NativeComponentRegistry.Register<Landscape>("LandscapeComponent",
             (owner, handle) => new Landscape(owner, handle));
+
+        // ゲームプレイ。移動は C# ではなくこの Component が持つ。
+        NativeComponentRegistry.Register<CharacterMotor>("CharacterMotorComponent",
+            (owner, handle) => new CharacterMotor(owner, handle));
+        NativeComponentRegistry.Register<PlayerInput>("PlayerInputComponent",
+            (owner, handle) => new PlayerInput(owner, handle));
 
         // 演出まわり。値はすべて PropertyRegistry の名前をそのまま使う。
         NativeComponentRegistry.Register<ScreenEffectStack>("ScreenEffectStackComponent",

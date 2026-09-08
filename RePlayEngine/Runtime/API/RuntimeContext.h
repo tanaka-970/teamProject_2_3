@@ -69,6 +69,15 @@ namespace ReplayEngine::Runtime
         ParticleStop = 11,
         ParticleEmit = 12,
         ParticleClear = 13,
+
+        // CharacterMotor の操作。末尾へ足すだけなので ABI は変わらない。
+        //
+        // Move は毎フレーム来るので、確保が起きない float 2 つで渡す。
+        //   a = 進む向きの X / b = 進む向きの Z / integer = 速度倍率 × 1000
+        // Impulse と Teleport はまれにしか来ないので text へ "x,y,z" で渡す。
+        MotorMove = 14,
+        MotorImpulse = 15,
+        MotorTeleport = 16,
     };
 
     struct PhysicsQueryRequest final

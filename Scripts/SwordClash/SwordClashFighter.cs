@@ -81,7 +81,8 @@ public class SwordClashFighter : MonoBehaviour
     [HideInInspector]
     public bool BrainControlled;
 
-    Rigidbody? body;
+    CharacterMotor? motor;
+    PlayerInput? input;
     MeshRenderer? skin;
     AudioSource? voice;
     Transform? blade;
@@ -137,8 +138,12 @@ public class SwordClashFighter : MonoBehaviour
 
     void Awake()
     {
-        body = GetComponent<Rigidbody>();
-        skin = GetComponent<MeshRenderer>();
+        // 移動と跳躍は CharacterMotor が持つ。C# はここへ指示を出すだけ。
+        motor = GetComponent<CharacterMotor>();
+        input = GetComponent<PlayerInput>();
+
+        var bodyObject = transform.Find("Body");
+        skin = bodyObject != null ? bodyObject.gameObject.GetComponent<MeshRenderer>() : null;
         voice = GetComponent<AudioSource>();
         if (skin != null) baseColor = skin.color;
 
@@ -195,56 +200,33 @@ public class SwordClashFighter : MonoBehaviour
 
     void FixedUpdate()
     {
-        if (body == null || hitStop > 0.0f) return;
+        if (motor == null || hitStop > 0.0f) return;
 
-        // Z へは動かさない。奥行きを使わない対戦にして間合いを読みやすくする。
+        // 奥行きへ流れたら引き戻す。横スクロールの面から出さない。
+        // Teleport は速度を保つので、戻しても動きが途切れない。
         var position = transform.position;
-        if (Mathf.Abs(position.Z) > 0.001f)
+        if (Mathf.Abs(position.Z) > 0.05f)
         {
-            transform.position = new Vector3(position.X, position.Y, 0.0f);
+            motor.Teleport(new Vector3(position.X, position.Y, 0.0f));
         }
 
-        var velocity = body.velocity;
-
-        // 【なぜ速度を直接入れないか】
-        //   接地中は Solver が接触と摩擦を解いたあとで水平速度を潰すので、
-        //   毎フレーム velocity へ代入しても押し戻されて進まなかった。
-        //   力で押すと Solver の積分に乗るので、狙った速度へ寄っていく。
-        //   目標速度との差に比例した力を掛けるだけの P 制御。
-        if (!ControlEnabled)
-        {
-            Drive(0.0f, velocity.X, brakePower);
-            return;
-        }
-
-        // 突進斬りの持続中は自分から前へ出る。技が移動を兼ねる。
+        // 突進斬りの持続中だけ、自分から前へ出る。技が移動を兼ねる。
         if (move == Move.SideB && InActiveWindow())
         {
-            Drive(facing * moveSpeed * 1.55f, velocity.X, drivePower * 1.6f);
+            motor.Move(new Vector3(facing, 0.0f, 0.0f), 1.6f);
             return;
         }
 
-        // 硬直中は足を止める。振ってから動けるまでの間を作る。
-        if (move != Move.None && move != Move.DownB)
+        // CPU は Brain の指示で歩く。1P は PlayerController が native で動かすので
+        // ここでは何もしない。入力の読み口を 2 つ持たない。
+        if (!BrainControlled) return;
+        if (!ControlEnabled || move != Move.None) return;
+
+        if (Mathf.Abs(BrainMove) > 0.01f)
         {
-            Drive(0.0f, velocity.X, brakePower);
-            return;
+            facing = Mathf.Sign(BrainMove);
+            motor.Move(new Vector3(BrainMove, 0.0f, 0.0f));
         }
-
-        var input = ReadMove();
-        if (Mathf.Abs(input) > 0.01f && move == Move.None) facing = Mathf.Sign(input);
-
-        // 空中は効きを落とす。地上と同じだと切り返しが軽くなりすぎる。
-        var control = Grounded ? 1.0f : airControl;
-        Drive(input * moveSpeed * control, velocity.X, drivePower * control);
-    }
-
-    // 目標の水平速度へ向けて力を掛ける。上限も下限もこの 1 本で決まる。
-    void Drive(float targetSpeed, float currentSpeed, float power)
-    {
-        if (body == null) return;
-        var push = (targetSpeed - currentSpeed) * power;
-        body.AddForce(new Vector3(push, 0.0f, 0.0f));
     }
 
     // ---- 入力 ------------------------------------------------------------
@@ -267,16 +249,18 @@ public class SwordClashFighter : MonoBehaviour
 
     void ReadJump()
     {
+        // 1P のジャンプは PlayerController が native で処理する。
+        // ここで二重に跳ばさない。空中ジャンプだけ C# が足す。
         var pressed = BrainControlled
             ? BrainJump
-            : Input.GetKeyDown(secondPlayer ? KeyCode.RightShift : KeyCode.Space);
+            : (Input.GetKeyDown(secondPlayer ? KeyCode.RightShift : KeyCode.Space) &&
+                !Grounded);
         BrainJump = false;
-        if (!pressed || body == null) return;
+        if (!pressed || motor == null) return;
         if (!Grounded && airJumps <= 0) return;
         if (!Grounded) --airJumps;
 
-        // 今の落下速度を打ち消してから跳ばす。差分ぶんの撃力を与える。
-        body.AddImpulse(new Vector3(0.0f, (jumpSpeed - body.velocity.Y) * weight, 0.0f));
+        motor.Jump();
         PlayVoice(1.35f, 0.32f);
     }
 
@@ -316,12 +300,11 @@ public class SwordClashFighter : MonoBehaviour
         hitLanded = false;
         Action = value.ToString();
 
-        if (value == Move.UpB && body != null)
+        if (value == Move.UpB && motor != null)
         {
             upBUsed = true;
             airJumps = 0;
-            var rise = jumpSpeed * 1.18f - body.velocity.Y;
-            body.AddImpulse(new Vector3(0.0f, rise * weight, 0.0f));
+            motor?.AddImpulse(new Vector3(facing * 3.0f, jumpSpeed * 1.25f, 0.0f));
         }
         PlayVoice(value == Move.Slash ? 1.0f : 0.72f, 0.4f);
     }
@@ -391,12 +374,9 @@ public class SwordClashFighter : MonoBehaviour
         var away = Mathf.Sign(transform.position.X - from.transform.position.X);
         if (Mathf.Abs(away) < 0.01f) away = from.facing;
 
-        if (body != null)
-        {
-            // 直前の速度を打ち消したうえで飛ばす。代入では接地中に効かない。
-            var launch = new Vector3(away * power, power * (0.55f + upward), 0.0f);
-            body.AddImpulse((launch - body.velocity) * weight);
-        }
+        // ふっとばしは Motor の撃力へ。接地していても上へ抜ける。
+        motor?.AddImpulse(new Vector3(away * power, power * (0.55f + upward), 0.0f) *
+            (1.0f / Mathf.Max(0.4f, weight)));
 
         move = Move.None;
         Action = "Hit";
@@ -517,12 +497,7 @@ public class SwordClashFighter : MonoBehaviour
         upBUsed = false;
         facing = secondPlayer ? -1.0f : 1.0f;
         if (skin != null) skin.color = baseColor;
-        if (body != null)
-        {
-            body.AddImpulse(-body.velocity * weight);
-            body.velocity = Vector3.Zero;
-            body.angularVelocity = Vector3.Zero;
-        }
+        motor?.Teleport(point);
     }
 
     public void Respawn() => RespawnAt(spawnPoint + Vector3.Up * 4.0f);
