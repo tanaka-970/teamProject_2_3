@@ -78,11 +78,15 @@ public sealed class Rigidbody : NativeComponent
     public float mass { get => Binding.Mass; set { var binding = Binding; binding.Mass = value; } }
     public float drag { get => Binding.LinearDamping; set { var binding = Binding; binding.LinearDamping = value; } }
     public float angularDrag { get => Binding.AngularDamping; set { var binding = Binding; binding.AngularDamping = value; } }
-    public Vector3 velocity { get => Binding.Velocity; set { var binding = Binding; binding.Velocity = value; } }
+    public Vector3 velocity
+    {
+        get => Binding.Velocity;
+        set { WakeUp(); var binding = Binding; binding.Velocity = value; }
+    }
     public Vector3 angularVelocity
     {
         get => Binding.AngularVelocity;
-        set { var binding = Binding; binding.AngularVelocity = value; }
+        set { WakeUp(); var binding = Binding; binding.AngularVelocity = value; }
     }
 
     // C++ の body_type は 0=Static / 1=Kinematic / 2=Dynamic。
@@ -103,14 +107,23 @@ public sealed class Rigidbody : NativeComponent
 
     public bool IsSleeping => Binding.IsSleeping;
 
-    public void AddForce(Vector3 force) => Binding.AddForce(force);
-    public void AddTorque(Vector3 torque) => Binding.AddTorque(torque);
+    // 眠っている剛体を起こす。
+    //
+    // 【なぜ力を入れる前に必ず呼ぶか】
+    //   Solver は is_sleeping の物体について、蓄積した力を積分せずに捨てる。
+    //   一度床で静止して寝てしまうと、以後 AddForce も velocity も一切効かず
+    //   「入力は読めているのに動かない」という形で詰まる。
+    //   Unity と同じく「力を加えたら起きる」に揃える。
+    public void WakeUp() => Binding.Accessor.SetBool("is_sleeping", false);
+
+    public void AddForce(Vector3 force) { WakeUp(); Binding.AddForce(force); }
+    public void AddTorque(Vector3 torque) { WakeUp(); Binding.AddTorque(torque); }
     public void ClearForces() => Binding.ClearForces();
 
     // Unity の ForceMode.Impulse に相当。質量ぶんの速度変化として与える。
-    public void AddImpulse(Vector3 impulse) => Binding.AddImpulse(impulse);
+    public void AddImpulse(Vector3 impulse) { WakeUp(); Binding.AddImpulse(impulse); }
 
-    public void MovePosition(Vector3 position) => Binding.Teleport(position);
+    public void MovePosition(Vector3 position) { WakeUp(); Binding.Teleport(position); }
 }
 
 // Box / Sphere / Capsule / Mesh に共通する Collider。

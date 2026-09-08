@@ -25,8 +25,11 @@ if (-not (Test-Path -LiteralPath $engine)) { throw 'Build the engine in Release 
 Copy-Item -LiteralPath $engine -Destination (Join-Path $output 'SwordClash.exe') -Force
 Get-ChildItem -LiteralPath (Split-Path $engine) -Filter '*.dll' | Copy-Item -Destination $output -Force
 
+# Script の型カタログは Scripts/*.cs を読んで作られる。DLL だけ配ると
+# 型が解決できず、画面は出るのにスクリプトが 1 本も動かない。
 foreach ($relative in @('resources/Game/SwordClash', 'Shader', 'ThirdParty/DXC/bin/x64',
                         'Managed/RePlayEngine.Managed/bin/Release/net8.0',
+                        'Scripts/SwordClash',
                         'Scripts/bin/Release/net8.0')) {
     $source = Join-Path $root $relative
     $destination = Join-Path $output $relative
