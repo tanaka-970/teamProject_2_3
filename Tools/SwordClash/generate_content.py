@@ -399,14 +399,14 @@ def build():
     # 「UI が描かれていない」のか「Director が動いていない」のか切り分けられる。
     hud = s.rect('Hud', 0, 0, 1600, 900)
 
-    for side, (label, color, x) in enumerate([('1P', BLUE, -470), ('CPU', RED, 470)]):
+    for side, (label, color, x) in enumerate([('1P', BLUE, -560), ('CPU', RED, 560)]):
         n = str(side + 1)
-        s.image('Panel' + n, x, -340, 460, 190, CARD, hud)
-        s.text('Name' + n, label, x, -410, 300, 44, 28, color, hud)
-        s.text('Damage' + n + 'Value', '0%', x, -335, 440, 130, 96, CREAM, hud)
-        s.text('Stock' + n + 'Value', '◆◆◆', x, -272, 300, 44, 30, color, hud)
-        s.image('Gauge' + n + 'Back', x, -300, 380, 14, GAUGE, hud)
-        s.image('Gauge' + n + 'Fill', x, -300, 380, 14, color, hud, fill=0.0)
+        s.image('Panel' + n, x, -388, 300, 112, CARD, hud)
+        s.text('Name' + n, label, x - 105, -420, 90, 32, 20, color, hud)
+        s.text('Damage' + n + 'Value', '0%', x + 25, -392, 230, 78, 54, CREAM, hud)
+        s.text('Stock' + n + 'Value', '◆◆◆', x - 105, -388, 90, 30, 18, color, hud)
+        s.image('Gauge' + n + 'Back', x, -348, 270, 8, GAUGE, hud)
+        s.image('Gauge' + n + 'Fill', x, -348, 270, 8, color, hud, fill=0.0)
 
     s.text('Hint', 'A / D 移動    SPACE ジャンプ    J 斬り    K + 方向 で必殺',
            0, 372, 1100, 44, 22, MUTED, hud)

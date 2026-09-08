@@ -60,6 +60,10 @@ public class SwordClashFighter : MonoBehaviour
     [ReadOnly]
     public string Action = "None";
 
+    // ふっとばされた高さの最大。撃力が効いているかを画面で読むため。
+    [ReadOnly]
+    public float PeakY;
+
     // 操作を受け付けるか。
     //
     // 既定を true にしてあるのは、Director が居なくても動かせるようにするため。
@@ -193,6 +197,7 @@ public class SwordClashFighter : MonoBehaviour
         }
 
         if (hitStun > 0.0f) hitStun -= Time.deltaTime;
+        PeakY = Mathf.Max(PeakY, transform.position.Y);
 
         AdvanceMove();
         UpdateBlade();

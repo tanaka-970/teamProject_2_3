@@ -18,16 +18,16 @@ public class SwordClashCamera : MonoBehaviour
     [SerializeField]
     [Tooltip("いちばん寄ったときの画角")]
     [Range(20.0, 90.0)]
-    float nearFov = 46.0f;
+    float nearFov = 32.0f;
 
     [SerializeField]
     [Tooltip("いちばん引いたときの画角")]
     [Range(30.0, 110.0)]
-    float farFov = 74.0f;
+    float farFov = 52.0f;
 
     [SerializeField]
     [Tooltip("カメラを置く奥行き")]
-    float depth = -17.0f;
+    float depth = -12.5f;
 
     Camera? lens;
     SwordClashFighter[] fighters = System.Array.Empty<SwordClashFighter>();
@@ -79,8 +79,9 @@ public class SwordClashCamera : MonoBehaviour
         }
 
         // 上下は中点より少し上を見る。落下側が見切れないようにするため。
-        var target = new Vector3(Mathf.Clamp(center.X, -7.0f, 7.0f),
-            Mathf.Clamp(center.Y + 1.6f, 0.4f, 9.0f), depth);
+        // 目線はキャラの胸の高さ。上へ寄せすぎると足元が画面下へ落ちる。
+        var target = new Vector3(Mathf.Clamp(center.X, -6.0f, 6.0f),
+            Mathf.Clamp(center.Y + 0.9f, 1.4f, 8.0f), depth);
 
         if (shake > 0.0f)
         {
@@ -112,7 +113,7 @@ public class SwordClashCamera : MonoBehaviour
     {
         shake = 0.0f;
         punch = 0.0f;
-        transform.position = new Vector3(0.0f, 3.0f, depth);
+        transform.position = new Vector3(0.0f, 2.0f, depth);
         if (lens != null) lens.fieldOfView = farFov;
     }
 

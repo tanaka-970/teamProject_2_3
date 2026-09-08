@@ -1037,8 +1037,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 -470 340
-    PROPERTY "size_delta" vec2 460 190
+    PROPERTY "anchored_position" vec2 -560 388
+    PROPERTY "size_delta" vec2 300 112
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "scale" vec2 1 1
     PROPERTY "rotation" float 0
@@ -1070,8 +1070,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 -470 410
-    PROPERTY "size_delta" vec2 300 44
+    PROPERTY "anchored_position" vec2 -665 420
+    PROPERTY "size_delta" vec2 90 32
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "scale" vec2 1 1
     PROPERTY "rotation" float 0
@@ -1084,7 +1084,7 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 7
     PROPERTY "text" string "<b>1P</b>"
-    PROPERTY "font_size" float 33.6
+    PROPERTY "font_size" float 24.0
     PROPERTY "rich_text" bool 1
     PROPERTY "color" color 0.38 0.74 1.0 1
     PROPERTY "horizontal_align" enum 1
@@ -1108,8 +1108,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 -470 335
-    PROPERTY "size_delta" vec2 440 130
+    PROPERTY "anchored_position" vec2 -535 392
+    PROPERTY "size_delta" vec2 230 78
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "scale" vec2 1 1
     PROPERTY "rotation" float 0
@@ -1122,7 +1122,7 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 7
     PROPERTY "text" string "<b>0%</b>"
-    PROPERTY "font_size" float 115.19999999999999
+    PROPERTY "font_size" float 64.8
     PROPERTY "rich_text" bool 1
     PROPERTY "color" color 0.94 0.97 1.0 1
     PROPERTY "horizontal_align" enum 1
@@ -1146,8 +1146,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 -470 272
-    PROPERTY "size_delta" vec2 300 44
+    PROPERTY "anchored_position" vec2 -665 388
+    PROPERTY "size_delta" vec2 90 30
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "scale" vec2 1 1
     PROPERTY "rotation" float 0
@@ -1160,7 +1160,7 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 7
     PROPERTY "text" string "<b>◆◆◆</b>"
-    PROPERTY "font_size" float 36.0
+    PROPERTY "font_size" float 21.599999999999998
     PROPERTY "rich_text" bool 1
     PROPERTY "color" color 0.38 0.74 1.0 1
     PROPERTY "horizontal_align" enum 1
@@ -1184,8 +1184,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 -470 300
-    PROPERTY "size_delta" vec2 380 14
+    PROPERTY "anchored_position" vec2 -560 348
+    PROPERTY "size_delta" vec2 270 8
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "scale" vec2 1 1
     PROPERTY "rotation" float 0
@@ -1217,8 +1217,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 -470 300
-    PROPERTY "size_delta" vec2 380 14
+    PROPERTY "anchored_position" vec2 -560 348
+    PROPERTY "size_delta" vec2 270 8
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "scale" vec2 1 1
     PROPERTY "rotation" float 0
@@ -1250,8 +1250,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 470 340
-    PROPERTY "size_delta" vec2 460 190
+    PROPERTY "anchored_position" vec2 560 388
+    PROPERTY "size_delta" vec2 300 112
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "scale" vec2 1 1
     PROPERTY "rotation" float 0
@@ -1283,8 +1283,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 470 410
-    PROPERTY "size_delta" vec2 300 44
+    PROPERTY "anchored_position" vec2 455 420
+    PROPERTY "size_delta" vec2 90 32
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "scale" vec2 1 1
     PROPERTY "rotation" float 0
@@ -1297,7 +1297,7 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 7
     PROPERTY "text" string "<b>CPU</b>"
-    PROPERTY "font_size" float 33.6
+    PROPERTY "font_size" float 24.0
     PROPERTY "rich_text" bool 1
     PROPERTY "color" color 1.0 0.42 0.44 1
     PROPERTY "horizontal_align" enum 1
@@ -1321,8 +1321,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 470 335
-    PROPERTY "size_delta" vec2 440 130
+    PROPERTY "anchored_position" vec2 585 392
+    PROPERTY "size_delta" vec2 230 78
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "scale" vec2 1 1
     PROPERTY "rotation" float 0
@@ -1335,7 +1335,7 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 7
     PROPERTY "text" string "<b>0%</b>"
-    PROPERTY "font_size" float 115.19999999999999
+    PROPERTY "font_size" float 64.8
     PROPERTY "rich_text" bool 1
     PROPERTY "color" color 0.94 0.97 1.0 1
     PROPERTY "horizontal_align" enum 1
@@ -1359,8 +1359,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 470 272
-    PROPERTY "size_delta" vec2 300 44
+    PROPERTY "anchored_position" vec2 455 388
+    PROPERTY "size_delta" vec2 90 30
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "scale" vec2 1 1
     PROPERTY "rotation" float 0
@@ -1373,7 +1373,7 @@ OBJECT
     TYPE_VERSION 1
     PROPERTY_COUNT 7
     PROPERTY "text" string "<b>◆◆◆</b>"
-    PROPERTY "font_size" float 36.0
+    PROPERTY "font_size" float 21.599999999999998
     PROPERTY "rich_text" bool 1
     PROPERTY "color" color 1.0 0.42 0.44 1
     PROPERTY "horizontal_align" enum 1
@@ -1397,8 +1397,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 470 300
-    PROPERTY "size_delta" vec2 380 14
+    PROPERTY "anchored_position" vec2 560 348
+    PROPERTY "size_delta" vec2 270 8
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "scale" vec2 1 1
     PROPERTY "rotation" float 0
@@ -1430,8 +1430,8 @@ OBJECT
     PROPERTY_COUNT 8
     PROPERTY "anchor_min" vec2 0.5 0.5
     PROPERTY "anchor_max" vec2 0.5 0.5
-    PROPERTY "anchored_position" vec2 470 300
-    PROPERTY "size_delta" vec2 380 14
+    PROPERTY "anchored_position" vec2 560 348
+    PROPERTY "size_delta" vec2 270 8
     PROPERTY "pivot" vec2 0.5 0.5
     PROPERTY "scale" vec2 1 1
     PROPERTY "rotation" float 0

@@ -55,6 +55,7 @@ public class SwordClashGame : MonoBehaviour
     UIText? stock2;
     UIImage? gauge1;
     UIImage? gauge2;
+    UIText? hint;
 
     void Awake()
     {
@@ -90,6 +91,7 @@ public class SwordClashGame : MonoBehaviour
         stock2 = FindText("Stock2Value");
         gauge1 = FindImage("Gauge1Fill");
         gauge2 = FindImage("Gauge2Fill");
+        hint = FindText("Hint");
 
         Debug.Log($"SwordClash: fighters={fighters.Count} fx={(screenFx != null)}", this);
     }
@@ -303,6 +305,17 @@ public class SwordClashGame : MonoBehaviour
     {
         Apply(0, damage1, stock1, gauge1);
         Apply(1, damage2, stock2, gauge2);
+
+        // ふっとびが効いているかを画面で読むための一時表示。
+        // 当たった瞬間に PeakY が跳ね上がれば撃力は届いている。
+        if (hint == null || fighters.Count < 2) return;
+        var a = fighters[0];
+        var b = fighters[1];
+        if (a == null || b == null) return;
+        hint.text = "A/D 移動  SPACE ジャンプ  J 斬り  K+方向 必殺   |   " +
+            "y " + a.transform.position.Y.ToString("F1") + " / " +
+            b.transform.position.Y.ToString("F1") + "   peak " +
+            a.PeakY.ToString("F1") + " / " + b.PeakY.ToString("F1");
     }
 
     void Apply(int index, UIText? damageText, UIText? stockText, UIImage? gauge)
