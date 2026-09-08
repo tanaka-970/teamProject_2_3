@@ -123,10 +123,11 @@ public class SwordClashGame : MonoBehaviour
         Phase = "Title";
         StopAllCoroutines();
 
+        // タイトルでも動かせるままにする。素振りで操作を確かめてから始められる。
         foreach (var fighter in fighters)
         {
             if (fighter == null) continue;
-            fighter.ControlEnabled = false;
+            fighter.ControlEnabled = true;
             fighter.Stocks = startStocks;
             fighter.ResetForRound();
         }

@@ -50,9 +50,13 @@ public class SwordClashFighter : MonoBehaviour
     [ReadOnly]
     public string Action = "None";
 
-    // Director が試合中だけ true にする。
+    // 操作を受け付けるか。
+    //
+    // 既定を true にしてあるのは、Director が居なくても動かせるようにするため。
+    // タイトル画面でも歩けて素振りできる方が、格闘ゲームとしては自然でもある。
+    // Director は撃墜中と結果画面でだけ false にする。
     [HideInInspector]
-    public bool ControlEnabled;
+    public bool ControlEnabled = true;
 
     // Brain が入れる仮想入力。人間が操作する側は使わない。
     [HideInInspector]
@@ -162,8 +166,9 @@ public class SwordClashFighter : MonoBehaviour
             return;
         }
 
-        Grounded = Physics.Raycast(transform.position + Vector3.Up * 0.15f,
-            new Vector3(0.0f, -1.0f, 0.0f), out _, 0.85f);
+        // 足元の少し上から下へ。体の半分（0.85）より長くしないと床へ届かない。
+        Grounded = Physics.Raycast(transform.position + Vector3.Up * 0.2f,
+            new Vector3(0.0f, -1.0f, 0.0f), out _, 1.15f);
         if (Grounded)
         {
             airJumps = 1;

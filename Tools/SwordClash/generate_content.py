@@ -11,16 +11,16 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 SCRIPT_TYPE_GUID = '7a3e1c94b06d4f28ae5137c0d9b28e41'   # ScriptComponent の型 GUID
 
-BLUE   = (.30, .62, .98, 1)
-RED    = (.97, .34, .38, 1)
+BLUE   = (.38, .74, 1.0, 1)
+RED    = (1.0, .42, .44, 1)
 STEEL  = (.78, .84, .94, 1)
 GOLD   = (1.0, .82, .35, 1)
 INK    = (.04, .05, .10, 1)
-CARD   = (.06, .09, .17, .95)
+CARD   = (.10, .14, .24, .95)
 CREAM  = (.94, .97, 1.0, 1)
 MUTED  = (.60, .70, .85, 1)
-DECK   = (.15, .19, .30, 1)
-LEDGE  = (.22, .30, .48, 1)
+DECK   = (.46, .52, .66, 1)
+LEDGE  = (.56, .66, .86, 1)
 GAUGE  = (.10, .13, .22, 1)
 
 
@@ -249,7 +249,7 @@ def screen_effects():
              prop('apply_stage', 'enum', 0),
              prop('target_mode', 'enum', 0),
              prop('target_rendering_layer', 'int', 0)]
-    props += effect(0, 15, .38, radius=.85, softness=.55)      # Vignette
+    props += effect(0, 15, .18, radius=.95, softness=.70)      # Vignette
     props += effect(1, 9, .06, amount=1.0)                      # ChromaticAberration
     props += effect(2, 37, .0, amount=1.0, speed=8.0, seed=7.0)  # Glitch
     return comp('ScreenEffectStackComponent', *props)
@@ -275,12 +275,17 @@ def build():
     # ---- 光と空 -----------------------------------------------------------
     s.obj('Sun', [comp('DirectionalLightComponent',
                        prop('color', 'color', (1, .96, .89, 1)),
-                       prop('intensity', 'float', 3.1),
+                       prop('intensity', 'float', 5.6),
                        prop('cast_shadows', 'bool', True))], rot=(.95, -.5, 0))
     s.obj('Rim', [comp('DirectionalLightComponent',
-                       prop('color', 'color', (.38, .55, 1.0, 1)),
-                       prop('intensity', 'float', 1.5),
+                       prop('color', 'color', (.52, .66, 1.0, 1)),
+                       prop('intensity', 'float', 2.8),
                        prop('cast_shadows', 'bool', False))], rot=(-.35, 2.5, 0))
+
+    s.obj('Front', [comp('DirectionalLightComponent',
+                         prop('color', 'color', (1.0, .96, .92, 1)),
+                         prop('intensity', 'float', 2.0),
+                         prop('cast_shadows', 'bool', False))], rot=(.25, .1, 0))
 
     s.obj('Sky', [comp('SkyboxComponent',
                        prop('sky_enabled', 'bool', True),
@@ -305,8 +310,8 @@ def build():
     for i in range(9):
         x = -16 + i * 4
         s.mesh('Pillar' + str(i), 1, (x, 5.5, 9.0), (1.1, 15, 1.1),
-               (.10, .13, .22, 1), shadow=False)
-    s.mesh('Backdrop', 1, (0, 6, 13.0), (46, 30, .5), (.07, .09, .16, 1), shadow=False)
+               (.30, .36, .50, 1), shadow=False)
+    s.mesh('Backdrop', 1, (0, 6, 13.0), (46, 30, .5), (.22, .28, .44, 1), shadow=False)
 
     # ---- ファイター -------------------------------------------------------
     stage = s.obj('Fighters')
@@ -322,7 +327,7 @@ def build():
             parts.append(script('SwordClashBrain', '3e7b25c9f0a648d1b93c7e5a2f81d604',
                                 order=10 + index))
 
-        body = s.mesh(key, 4, (x, 1.2, 0), (.9, 1.7, .9), color,
+        body = s.mesh(key, 4, (x, .90, 0), (.9, 1.7, .9), color,
                       parent=stage, extra=parts, key=key)
 
         # 剣。振りは C# が localEulerAngles で回す。帯は Trail が引く。
