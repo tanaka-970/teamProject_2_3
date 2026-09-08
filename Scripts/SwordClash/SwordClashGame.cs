@@ -114,6 +114,9 @@ public class SwordClashGame : MonoBehaviour
                 if (Input.GetKeyDown(KeyCode.Escape)) Application.Quit("SwordClash result");
                 break;
         }
+
+        // 状態に関係なく数字を出し続ける。タイトルで素振りしても % が動く。
+        RefreshHud();
     }
 
     void UpdateMatch()
@@ -147,7 +150,6 @@ public class SwordClashGame : MonoBehaviour
         rig?.SnapToFighters();
         SetScreenIntensity(0.55f, 0.10f, 0.0f);
 
-        hud?.SetActive(false);
         ShowBanner("SWORD CLASH",
             "SPACE ではじめる\n\n" +
             "1P  A / D 移動   SPACE ジャンプ   J 斬り   K + 方向 で必殺\n" +
@@ -172,7 +174,6 @@ public class SwordClashGame : MonoBehaviour
 
         rig?.SnapToFighters();
         HideBanner();
-        hud?.SetActive(true);
         RefreshHud();
         SetScreenIntensity(0.38f, 0.06f, 0.0f);
     }
@@ -188,7 +189,6 @@ public class SwordClashGame : MonoBehaviour
             if (fighter != null) fighter.ControlEnabled = false;
         }
 
-        hud?.SetActive(false);
         ShowBanner(title, body + "\n\nSPACE でタイトルへ");
         SetScreenIntensity(0.70f, 0.16f, 0.0f);
         Debug.Log($"SwordClash result: {title} hits={TotalHits} ko={TotalKOs} counter={Counters}",

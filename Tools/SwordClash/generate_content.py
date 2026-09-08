@@ -395,21 +395,23 @@ def build():
 
     # ---- UI ---------------------------------------------------------------
     s.canvas()
-    hud = s.rect('Hud', 0, 0, 1600, 900, enabled=False)
+    # HUD は最初から出す。Director が動かなくても枠と数字が見えるので、
+    # 「UI が描かれていない」のか「Director が動いていない」のか切り分けられる。
+    hud = s.rect('Hud', 0, 0, 1600, 900)
 
     for side, (label, color, x) in enumerate([('1P', BLUE, -470), ('CPU', RED, 470)]):
         n = str(side + 1)
-        s.image('Panel' + n, x, -350, 420, 150, CARD, hud)
-        s.text('Name' + n, label, x - 150, -395, 140, 44, 26, color, hud)
-        s.text('Damage' + n + 'Value', '0%', x + 70, -378, 260, 88, 60, CREAM, hud)
-        s.text('Stock' + n + 'Value', '◆◆◆', x - 150, -348, 160, 40, 24, color, hud)
+        s.image('Panel' + n, x, -340, 460, 190, CARD, hud)
+        s.text('Name' + n, label, x, -410, 300, 44, 28, color, hud)
+        s.text('Damage' + n + 'Value', '0%', x, -335, 440, 130, 96, CREAM, hud)
+        s.text('Stock' + n + 'Value', '◆◆◆', x, -272, 300, 44, 30, color, hud)
         s.image('Gauge' + n + 'Back', x, -300, 380, 14, GAUGE, hud)
         s.image('Gauge' + n + 'Fill', x, -300, 380, 14, color, hud, fill=0.0)
 
     s.text('Hint', 'A / D 移動    SPACE ジャンプ    J 斬り    K + 方向 で必殺',
            0, 372, 1100, 44, 22, MUTED, hud)
 
-    banner = s.rect('Banner', 0, 0, 1600, 900)
+    banner = s.rect('Banner', 0, 0, 1600, 900, enabled=False)
     s.image('BannerVeil', 0, 0, 1600, 900, (.01, .02, .05, .72), banner)
     s.image('BannerCard', 0, 0, 1120, 560, CARD, banner)
     s.image('BannerEdgeL', -555, 0, 10, 560, BLUE, banner)

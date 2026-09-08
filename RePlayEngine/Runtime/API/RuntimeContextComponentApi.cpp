@@ -708,9 +708,14 @@ namespace ReplayEngine::Runtime
             }
 
             // "x,y,z" を読む。まれにしか来ないので確保は許容する。
+            // Impulse は 4 つ目に「勢いを保つ秒数」を足せる。
             XMFLOAT3 vector{ 0.0f, 0.0f, 0.0f };
             if (!ParseVector3Text(text, vector)) return RuntimeStatus::InvalidArgument;
-            if (command == ComponentCommand::MotorImpulse) motor->ApplyImpulse(vector);
+            if (command == ComponentCommand::MotorImpulse)
+            {
+                motor->ApplyImpulse(vector, std::isfinite(scalar) && scalar > 0.0f
+                    ? scalar : 0.0f);
+            }
             else motor->Teleport(vector);
             return RuntimeStatus::Ok;
         }

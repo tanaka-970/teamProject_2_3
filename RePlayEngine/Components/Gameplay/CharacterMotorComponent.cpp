@@ -262,7 +262,15 @@ namespace ReplayEngine::Components
         const float control = grounded_ ? 1.0f : air_control;
         const float requested_speed = SanitizeNonNegative(move_speed) * speed_multiplier;
 
-        if (direction_length > 0.0001f && requested_speed > 0.0001f)
+        // 勢いを保っている間は水平へ一切触らない。
+        // ここで丸めると、ふっとばしが次の更新で move_speed まで削られる。
+        if (impulse_hold_ > 0.0f)
+        {
+            impulse_hold_ -= fixed_delta_time;
+            if (impulse_hold_ < 0.0f) impulse_hold_ = 0.0f;
+            last_move_direction_ = { 0.0f, 0.0f, 0.0f };
+        }
+        else if (direction_length > 0.0001f && requested_speed > 0.0001f)
         {
             direction.x /= direction_length;
             direction.z /= direction_length;

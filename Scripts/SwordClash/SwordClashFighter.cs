@@ -100,6 +100,7 @@ public class SwordClashFighter : MonoBehaviour
     float moveTimer;
     float facing = 1.0f;
     float hitStop;
+    float hitStun;
     int airJumps;
     bool upBUsed;
     bool hitLanded;
@@ -191,10 +192,12 @@ public class SwordClashFighter : MonoBehaviour
             upBUsed = false;
         }
 
+        if (hitStun > 0.0f) hitStun -= Time.deltaTime;
+
         AdvanceMove();
         UpdateBlade();
 
-        if (!ControlEnabled) return;
+        if (!ControlEnabled || hitStun > 0.0f) return;
         ReadJump();
         ReadAttack();
     }
@@ -306,7 +309,7 @@ public class SwordClashFighter : MonoBehaviour
         {
             upBUsed = true;
             airJumps = 0;
-            motor?.AddImpulse(new Vector3(facing * 3.0f, jumpSpeed * 1.25f, 0.0f));
+            motor?.AddImpulse(new Vector3(facing * 4.0f, jumpSpeed * 1.3f, 0.0f), 0.18f);
         }
         PlayVoice(value == Move.Slash ? 1.0f : 0.72f, 0.4f);
     }
@@ -390,7 +393,10 @@ public class SwordClashFighter : MonoBehaviour
         if (Mathf.Abs(away) < 0.01f) away = from.facing;
 
         // ふっとばしは Motor の撃力へ。接地していても上へ抜ける。
-        motor?.AddImpulse(new Vector3(away * power, power * (0.62f + upward), 0.0f));
+        // 蓄積が高いほど長く飛ぶ。この間は操作も減速も効かない。
+        var hold = 0.25f + Mathf.Min(0.55f, Damage * 0.004f);
+        motor?.AddImpulse(new Vector3(away * power, power * (0.62f + upward), 0.0f), hold);
+        hitStun = hold;
 
         move = Move.None;
         Action = "Hit";

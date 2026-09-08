@@ -378,9 +378,12 @@ public sealed class CharacterMotor : NativeBehaviour
             integer: (int)(Mathf.Clamp(speedMultiplier, 0.0f, 20.0f) * 1000.0f));
 
     // ふっとばす。接地していても上へ抜ける。
-    public void AddImpulse(Vector3 impulse)
+    //
+    // holdSeconds のあいだ、Motor は水平の加速・減速・上限を止める。
+    // 0 のままだと次の更新で移動速度まで削られ、まったく飛ばない。
+    public void AddImpulse(Vector3 impulse, float holdSeconds = 0.0f)
         => NativeBridge.InvokeComponentCommand(Handle, ComponentCommand.MotorImpulse,
-            Text(impulse));
+            Text(impulse), scalar: holdSeconds);
 
     // 速度を残したまま位置だけ移す。復帰に使う。
     public void Teleport(Vector3 position)
