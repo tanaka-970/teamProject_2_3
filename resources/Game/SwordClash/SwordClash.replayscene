@@ -578,7 +578,7 @@ OBJECT
     PROPERTY "angular_damping" float 1.0
     PROPERTY "gravity_scale" float 2.35
     PROPERTY "restitution" float 0.0
-    PROPERTY "friction" float 0.3
+    PROPERTY "friction" float 0.02
     PROPERTY "freeze_position" vec3 0 0 1
     PROPERTY "freeze_rotation" vec3 1 1 1
     PROPERTY "use_ccd" bool 1
@@ -747,7 +747,7 @@ OBJECT
     PROPERTY "angular_damping" float 1.0
     PROPERTY "gravity_scale" float 2.35
     PROPERTY "restitution" float 0.0
-    PROPERTY "friction" float 0.3
+    PROPERTY "friction" float 0.02
     PROPERTY "freeze_position" vec3 0 0 1
     PROPERTY "freeze_rotation" vec3 1 1 1
     PROPERTY "use_ccd" bool 1

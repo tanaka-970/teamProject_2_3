@@ -34,6 +34,16 @@ public class SwordClashFighter : MonoBehaviour
     float weight = 1.0f;
 
     [SerializeField]
+    [Tooltip("目標速度へ寄せる力の強さ。大きいほど機敏")]
+    [Range(10.0, 400.0)]
+    float drivePower = 120.0f;
+
+    [SerializeField]
+    [Tooltip("止まるときの力の強さ")]
+    [Range(10.0, 400.0)]
+    float brakePower = 90.0f;
+
+    [SerializeField]
     [Tooltip("2 人目なら true。操作キーが矢印側になる")]
     public bool secondPlayer;
 
@@ -195,33 +205,46 @@ public class SwordClashFighter : MonoBehaviour
         }
 
         var velocity = body.velocity;
+
+        // 【なぜ速度を直接入れないか】
+        //   接地中は Solver が接触と摩擦を解いたあとで水平速度を潰すので、
+        //   毎フレーム velocity へ代入しても押し戻されて進まなかった。
+        //   力で押すと Solver の積分に乗るので、狙った速度へ寄っていく。
+        //   目標速度との差に比例した力を掛けるだけの P 制御。
         if (!ControlEnabled)
         {
-            body.velocity = new Vector3(velocity.X * 0.86f, velocity.Y, 0.0f);
+            Drive(0.0f, velocity.X, brakePower);
             return;
         }
 
         // 突進斬りの持続中は自分から前へ出る。技が移動を兼ねる。
         if (move == Move.SideB && InActiveWindow())
         {
-            body.velocity = new Vector3(facing * moveSpeed * 1.55f, velocity.Y * 0.55f, 0.0f);
+            Drive(facing * moveSpeed * 1.55f, velocity.X, drivePower * 1.6f);
             return;
         }
 
         // 硬直中は足を止める。振ってから動けるまでの間を作る。
         if (move != Move.None && move != Move.DownB)
         {
-            body.velocity = new Vector3(velocity.X * 0.78f, velocity.Y, 0.0f);
+            Drive(0.0f, velocity.X, brakePower);
             return;
         }
 
         var input = ReadMove();
         if (Mathf.Abs(input) > 0.01f && move == Move.None) facing = Mathf.Sign(input);
 
+        // 空中は効きを落とす。地上と同じだと切り返しが軽くなりすぎる。
         var control = Grounded ? 1.0f : airControl;
-        var target = input * moveSpeed * control;
-        var next = Mathf.Lerp(velocity.X, target, Grounded ? 0.55f : 0.22f);
-        body.velocity = new Vector3(next, velocity.Y, 0.0f);
+        Drive(input * moveSpeed * control, velocity.X, drivePower * control);
+    }
+
+    // 目標の水平速度へ向けて力を掛ける。上限も下限もこの 1 本で決まる。
+    void Drive(float targetSpeed, float currentSpeed, float power)
+    {
+        if (body == null) return;
+        var push = (targetSpeed - currentSpeed) * power;
+        body.AddForce(new Vector3(push, 0.0f, 0.0f));
     }
 
     // ---- 入力 ------------------------------------------------------------
@@ -252,7 +275,8 @@ public class SwordClashFighter : MonoBehaviour
         if (!Grounded && airJumps <= 0) return;
         if (!Grounded) --airJumps;
 
-        body.velocity = new Vector3(body.velocity.X, jumpSpeed, 0.0f);
+        // 今の落下速度を打ち消してから跳ばす。差分ぶんの撃力を与える。
+        body.AddImpulse(new Vector3(0.0f, (jumpSpeed - body.velocity.Y) * weight, 0.0f));
         PlayVoice(1.35f, 0.32f);
     }
 
@@ -296,7 +320,8 @@ public class SwordClashFighter : MonoBehaviour
         {
             upBUsed = true;
             airJumps = 0;
-            body.velocity = new Vector3(body.velocity.X * 0.6f, jumpSpeed * 1.18f, 0.0f);
+            var rise = jumpSpeed * 1.18f - body.velocity.Y;
+            body.AddImpulse(new Vector3(0.0f, rise * weight, 0.0f));
         }
         PlayVoice(value == Move.Slash ? 1.0f : 0.72f, 0.4f);
     }
@@ -368,8 +393,9 @@ public class SwordClashFighter : MonoBehaviour
 
         if (body != null)
         {
-            body.velocity = Vector3.Zero;
-            body.AddImpulse(new Vector3(away * power, power * (0.55f + upward), 0.0f));
+            // 直前の速度を打ち消したうえで飛ばす。代入では接地中に効かない。
+            var launch = new Vector3(away * power, power * (0.55f + upward), 0.0f);
+            body.AddImpulse((launch - body.velocity) * weight);
         }
 
         move = Move.None;
@@ -479,6 +505,7 @@ public class SwordClashFighter : MonoBehaviour
         if (skin != null) skin.color = baseColor;
         if (body != null)
         {
+            body.AddImpulse(-body.velocity * weight);
             body.velocity = Vector3.Zero;
             body.angularVelocity = Vector3.Zero;
         }

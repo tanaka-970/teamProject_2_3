@@ -156,7 +156,8 @@ def rigidbody():
                 prop('angular_damping', 'float', 1.0),
                 prop('gravity_scale', 'float', 2.35),
                 prop('restitution', 'float', 0.0),
-                prop('friction', 'float', .30),
+                # 摩擦を残すと、力で押しても接地中に食われて進まない。
+                prop('friction', 'float', .02),
                 prop('freeze_position', 'vec3', (0, 0, 1)),
                 prop('freeze_rotation', 'vec3', (1, 1, 1)),
                 prop('use_ccd', 'bool', True))
