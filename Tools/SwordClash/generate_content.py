@@ -164,6 +164,9 @@ def rigidbody():
 
 
 def box_collider(size=(1, 1, 1), trigger=False):
+    # size は「ローカルの大きさ」。Component 側で transform.scale が掛かるので、
+    # 見た目の寸法を scale に入れているオブジェクトでは (1,1,1) が正しい。
+    # ここへ実寸を書くと二重に掛かり、床へ埋まって物理が固まる。
     return comp('BoxColliderComponent',
                 prop('size', 'vec3', size),
                 prop('center_offset', 'vec3', (0, 0, 0)),
@@ -302,10 +305,10 @@ def build():
 
     # ---- ステージ ---------------------------------------------------------
     # 落ちたら撃墜。足場は 4 枚だけにして間合いを覚えやすくする。
-    s.mesh('Deck', 1, (0, -.5, 0), (18, 1, 4), DECK, extra=[box_collider((18, 1, 4))])
+    s.mesh('Deck', 1, (0, -.5, 0), (18, 1, 4), DECK, extra=[box_collider()])
     for name, x, y, w in [('LedgeL', -5.6, 3.4, 4.2), ('LedgeR', 5.6, 3.4, 4.2),
                           ('LedgeTop', 0, 6.7, 5.0)]:
-        s.mesh(name, 1, (x, y, 0), (w, .45, 3), LEDGE, extra=[box_collider((w, .45, 3))])
+        s.mesh(name, 1, (x, y, 0), (w, .45, 3), LEDGE, extra=[box_collider()])
 
     # 奥の飾り。当たり判定は付けない。奥行きの手掛かりだけ担う。
     for i in range(9):
@@ -321,7 +324,7 @@ def build():
             ('Fighter2', RED, 4.2, True, True)]):
         # secondPlayer を立てた方は矢印キー側になる。Inspector の初期値として渡す。
         extra = (prop('field.secondPlayer', 'bool', True),) if second else ()
-        parts = [rigidbody(), box_collider((.9, 1.7, .9)), audio(),
+        parts = [rigidbody(), box_collider(), audio(),
                  script('SwordClashFighter', '9c1f6a3d84b25e70af38d1c62b45e9f7',
                         order=index, extra=extra)]
         if brain:
