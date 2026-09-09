@@ -586,6 +586,7 @@
     <ClInclude Include="Source\render\csm_renderer.h" />
 <ClInclude Include="Source\render\motion_vector_context.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DeviceContext.h" />
+    <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12TransparentSort.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12Diagnostics.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12DescriptorHeapAllocator.h" />
     <ClInclude Include="RePlayEngine\Rendering\DX12\D3D12FrameConstants.h" />

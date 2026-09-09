@@ -67,6 +67,37 @@
 #include <unordered_set>
 #include <vector>
 
+namespace
+{
+    template <typename VertexIterator>
+    ReplayEngine::Rendering::DX12::D3D12MeshLocalBounds calculate_mesh_bounds(
+        VertexIterator vertex_begin, VertexIterator vertex_end) noexcept
+    {
+        ReplayEngine::Rendering::DX12::D3D12MeshLocalBounds bounds;
+        bool initialized = false;
+        for (auto it = vertex_begin; it != vertex_end; ++it)
+        {
+            const DirectX::XMFLOAT3& position = it->position;
+            if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+                !std::isfinite(position.z)) continue;
+            if (!initialized)
+            {
+                bounds.minimum = position;
+                bounds.maximum = position;
+                initialized = true;
+                continue;
+            }
+            bounds.minimum.x = (std::min)(bounds.minimum.x, position.x);
+            bounds.minimum.y = (std::min)(bounds.minimum.y, position.y);
+            bounds.minimum.z = (std::min)(bounds.minimum.z, position.z);
+            bounds.maximum.x = (std::max)(bounds.maximum.x, position.x);
+            bounds.maximum.y = (std::max)(bounds.maximum.y, position.y);
+            bounds.maximum.z = (std::max)(bounds.maximum.z, position.z);
+        }
+        bounds.valid = initialized;
+        return bounds;
+    }
+}
 
 ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     const ReplayEngine::Rendering::RenderItem& source,
@@ -937,29 +968,8 @@ bool framework::build_dx12_static_scene(
         // 視錐台カリング用の境界。メッシュごとに一度だけ求めて残す。
         if (static_mesh_bounds_cache.find(key) == static_mesh_bounds_cache.end())
         {
-            ReplayEngine::Rendering::DX12::D3D12MeshLocalBounds bounds;
-            bool initialized = false;
-            for (auto it = vertex_begin; it != vertex_end; ++it)
-            {
-                const DirectX::XMFLOAT3& position = it->position;
-                if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
-                    !std::isfinite(position.z)) continue;
-                if (!initialized)
-                {
-                    bounds.minimum = position;
-                    bounds.maximum = position;
-                    initialized = true;
-                    continue;
-                }
-                bounds.minimum.x = (std::min)(bounds.minimum.x, position.x);
-                bounds.minimum.y = (std::min)(bounds.minimum.y, position.y);
-                bounds.minimum.z = (std::min)(bounds.minimum.z, position.z);
-                bounds.maximum.x = (std::max)(bounds.maximum.x, position.x);
-                bounds.maximum.y = (std::max)(bounds.maximum.y, position.y);
-                bounds.maximum.z = (std::max)(bounds.maximum.z, position.z);
-            }
-            bounds.valid = initialized;
-            static_mesh_bounds_cache.emplace(key, bounds);
+            static_mesh_bounds_cache.emplace(key,
+                calculate_mesh_bounds(vertex_begin, vertex_end));
         }
         if (!mesh_source_keys.insert(key).second) return;
         D3D12StaticMeshSource source;
@@ -1045,7 +1055,8 @@ bool framework::build_dx12_static_scene(
         camera_up, camera_forward](const std::string& key,
         const std::vector<DirectX::XMFLOAT3>& points,
         const std::vector<float>& point_alpha,
-        const ReplayEngine::Rendering::LineStrokeStyle& style) -> bool
+        const ReplayEngine::Rendering::LineStrokeStyle& style,
+        D3D12MeshLocalBounds& bounds) -> bool
     {
         if (key.empty() || points.size() < 2) return false;
         D3D12StaticMeshSource source;
@@ -1105,25 +1116,25 @@ bool framework::build_dx12_static_scene(
             return false;
         }
         if (source.vertices.empty() || source.indices.empty()) return false;
+        bounds = calculate_mesh_bounds(source.vertices.begin(), source.vertices.end());
         submission.mesh_sources.push_back(std::move(source));
         return true;
     };
 
-    const auto add_ribbon_draw = [&submission, this](const std::string& key,
-        const std::string& motion_key, const ReplayEngine::Rendering::LineStrokeStyle& style)
+    const auto add_ribbon_draw = [&submission](const std::string& key,
+        const std::string& motion_key, std::uint64_t owner_id,
+        const D3D12MeshLocalBounds& bounds, const ReplayEngine::Rendering::LineStrokeStyle& style)
     {
         D3D12StaticDrawItem draw;
         draw.mesh_key = key;
+        draw.owner_id = owner_id;
+        draw.material_bounds = bounds;
         draw.motion_key = motion_key;
         draw.alpha_mode = D3D12StaticAlphaMode::Blend;
         draw.base_color = style.fill_color;
         draw.cast_shadow = false;
         draw.receive_shadow = false;
         draw.double_sided = true;
-        // 境界はメッシュ単位で共有する。視錐台の判定に要る。
-        if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
-            found_bounds != static_mesh_bounds_cache.end())
-            draw.material_bounds = found_bounds->second;
         submission.draws.push_back(std::move(draw));
     };
 
@@ -1157,8 +1168,10 @@ bool framework::build_dx12_static_scene(
                                 DirectX::XMLoadFloat3(&point), DirectX::XMLoadFloat4x4(&world)));
                     }
                     const auto style = line->StrokeStyle();
-                    if (add_ribbon(key_prefix, path, {}, style))
-                        add_ribbon_draw(key_prefix, key_prefix, style);
+                    D3D12MeshLocalBounds bounds;
+                    if (add_ribbon(key_prefix, path, {}, style, bounds))
+                        add_ribbon_draw(key_prefix, key_prefix, object->ID().Value(),
+                            bounds, style);
                     continue;
                 }
                 const auto* trail = dynamic_cast<const ReplayEngine::Components::TrailComponent*>(component);
@@ -1177,8 +1190,10 @@ bool framework::build_dx12_static_scene(
                                 DirectX::XMLoadFloat3(&point), DirectX::XMLoadFloat4x4(&parent_world)));
                 }
                 const auto style = trail->StrokeStyle();
-                if (add_ribbon(key_prefix, path, alpha, style))
-                    add_ribbon_draw(key_prefix, key_prefix, style);
+                D3D12MeshLocalBounds bounds;
+                if (add_ribbon(key_prefix, path, alpha, style, bounds))
+                    add_ribbon_draw(key_prefix, key_prefix, object->ID().Value(),
+                        bounds, style);
             }
         }
     }
@@ -1392,6 +1407,9 @@ bool framework::build_dx12_static_scene(
                 const float inverse_count = 1.0f / static_cast<float>(bucket.count);
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = bucket.source.key;
+                draw.owner_id = object_id.Value();
+                draw.material_bounds = calculate_mesh_bounds(
+                    bucket.source.vertices.begin(), bucket.source.vertices.end());
                 draw.motion_key = bucket.source.key;
                 draw.base_color = {
                     bucket.color_sum.x * inverse_count,
@@ -1407,10 +1425,6 @@ bool framework::build_dx12_static_scene(
                 draw.receive_shadow = false;
                 draw.double_sided = true;
                 submission.mesh_sources.push_back(std::move(bucket.source));
-                // 境界はメッシュ単位で共有する。視錐台の判定に要る。
-                if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
-                    found_bounds != static_mesh_bounds_cache.end())
-                    draw.material_bounds = found_bounds->second;
                 submission.draws.push_back(std::move(draw));
             }
         }

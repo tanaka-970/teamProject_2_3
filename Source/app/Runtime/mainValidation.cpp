@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -45,6 +46,7 @@
 #include "../../../RePlayEngine/Motion/MotionBindingResolver.h"
 #include "../../../RePlayEngine/Scripting/Validation/CSharpScriptValidation.h"
 #include "../../../RePlayEngine/Scripting/Validation/ScriptCoreValidation.h"
+#include "../../../RePlayEngine/Rendering/DX12/D3D12TransparentSort.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderAssetValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderBuiltInValidation.h"
 #include "../../../RePlayEngine/Rendering/Shaders/ShaderMaterialValidation.h"
@@ -98,6 +100,206 @@ namespace ReplayEngine::Runtime::Detail
         std::fprintf(stderr, "EditorHelp validation: RESULT %s (%s)\n",
             ok ? "OK" : "NG", report.c_str());
         return ok ? 0 : 1800;
+    }
+
+    int RunHeadlessTransparentSortValidation(const char* command_line)
+    {
+        std::istringstream arguments(command_line != nullptr ? command_line : "");
+        std::string command;
+        if (!(arguments >> command) || command != "--validate-transparent-sort") return -1;
+
+        using ReplayEngine::Rendering::DX12::BuildD3D12TransparentDrawOrder;
+        using ReplayEngine::Rendering::DX12::CalculateD3D12TransparentCenter;
+        using ReplayEngine::Rendering::DX12::CalculateD3D12TransparentDepth;
+        using ReplayEngine::Rendering::DX12::D3D12TransparentSortEntry;
+        using ReplayEngine::Rendering::DX12::D3D12TransparentSortInput;
+
+        int checks = 0;
+        int first_failure = 0;
+        std::vector<std::string> lines;
+        const auto Check = [&checks, &first_failure, &lines](bool condition, const char* label)
+        {
+            ++checks;
+            lines.push_back(std::string(condition ? "OK " : "NG ") + label);
+            if (condition) return;
+            if (first_failure == 0) first_failure = checks;
+            std::fprintf(stderr, "  [FAIL %d] %s\n", checks, label);
+        };
+        const auto MakeInput = [](std::uint64_t owner_id, std::uint32_t index,
+            float z, bool skinned = false)
+        {
+            D3D12TransparentSortInput input;
+            input.owner_id = owner_id;
+            input.index = index;
+            input.world._43 = z;
+            input.skinned = skinned;
+            return input;
+        };
+        const DirectX::XMFLOAT3 camera{ 0.0f, 0.0f, 0.0f };
+        std::vector<D3D12TransparentSortInput> inputs;
+        std::vector<D3D12TransparentSortEntry> order{
+            D3D12TransparentSortEntry{ false, 9, 99, 1.0f } };
+        const auto initial_capacity = order.capacity();
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.empty() && order.capacity() == initial_capacity,
+            "空入力で以前の並びを消し、容量は保持する");
+
+        inputs = { MakeInput(10, 4, 2.0f), MakeInput(20, 7, 9.0f) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.size() == 2 && order[0].index == 7 && order[1].index == 4 &&
+            !order[0].skinned && !order[1].skinned,
+            "静的メッシュは遠い要素から並ぶ");
+
+        inputs = { MakeInput(10, 4, 2.0f), MakeInput(20, 7, 9.0f, true) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.size() == 2 && order[0].skinned && order[0].index == 7 &&
+            !order[1].skinned && order[1].index == 4,
+            "遠いスキンメッシュが近い静的メッシュより先に来る");
+
+        inputs = { MakeInput(40, 0, 1.0f), MakeInput(9, 1, 6.0f),
+            MakeInput(40, 2, 10.0f, true), MakeInput(40, 3, 4.0f) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.size() == 4 && order[0].owner_id == 40 && order[1].owner_id == 40 &&
+            order[2].owner_id == 40 && order[3].owner_id == 9,
+            "同じ owner のサブセットは静的とスキンをまたいで連続する");
+        Check(order.size() == 4 && order[0].index == 2 && order[2].index == 0 &&
+            order[3].index == 1,
+            "近いサブセットを含むグループも最遠サブセットで位置が決まる");
+        Check(order.size() == 4 && order[0].depth == 10.0f &&
+            order[1].depth == 4.0f && order[2].depth == 1.0f,
+            "グループ内も各サブセットの深さの降順になる");
+
+        inputs = { MakeInput(90, 7, 5.0f, true), MakeInput(10, 2, 5.0f) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.size() == 2 && order[0].owner_id == 90 && order[0].skinned &&
+            order[0].index == 7 && order[1].owner_id == 10 && order[1].index == 2,
+            "同距離では種類や owner の大小によらず入力順を保つ");
+
+        inputs = { MakeInput(40, 0, 1.0f), MakeInput(9, 1, 10.0f),
+            MakeInput(40, 2, 10.0f, true), MakeInput(40, 3, 4.0f) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        const std::vector<D3D12TransparentSortEntry> first_order = order;
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        bool repeated = order.size() == first_order.size();
+        for (std::size_t i = 0; repeated && i < order.size(); ++i)
+        {
+            repeated = order[i].skinned == first_order[i].skinned &&
+                order[i].index == first_order[i].index &&
+                order[i].owner_id == first_order[i].owner_id &&
+                order[i].depth == first_order[i].depth;
+        }
+        Check(repeated, "同じ入力で並びバッファを再利用しても全項目が一致する");
+
+        D3D12TransparentSortInput local_near = MakeInput(10, 0, 0.0f);
+        local_near.world._41 = 3.0f;
+        local_near.bounds.valid = true;
+        local_near.bounds.minimum = DirectX::XMFLOAT3{ -1.0f, -1.0f, 1.0f };
+        local_near.bounds.maximum = DirectX::XMFLOAT3{ 1.0f, 1.0f, 3.0f };
+        D3D12TransparentSortInput local_far = local_near;
+        local_far.owner_id = 20;
+        local_far.index = 1;
+        local_far.bounds.minimum.z = 7.0f;
+        local_far.bounds.maximum.z = 9.0f;
+        inputs = { local_near, local_far };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.size() == 2 && order[0].index == 1 && order[1].index == 0,
+            "平行移動が同じでも有効なローカル bounds の中心で順序を決める");
+
+        D3D12TransparentSortInput invalid_bounds = MakeInput(10, 0, 2.0f);
+        invalid_bounds.bounds.minimum = DirectX::XMFLOAT3{ 100.0f, 100.0f, 100.0f };
+        invalid_bounds.bounds.maximum = DirectX::XMFLOAT3{ 200.0f, 200.0f, 200.0f };
+        inputs = { invalid_bounds, MakeInput(20, 1, 9.0f) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.size() == 2 && order[0].index == 1 && order[1].index == 0 &&
+            order[0].depth == 9.0f && order[1].depth == 2.0f,
+            "無効な bounds の数値を使わず world の平行移動で判定する");
+
+        inputs = { MakeInput(10, 0, 1.0f), MakeInput(20, 1, 9.0f) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        const bool forward_camera_order = order.size() == 2 &&
+            order[0].index == 1 && order[1].index == 0;
+        BuildD3D12TransparentDrawOrder(inputs, DirectX::XMFLOAT3{ 0.0f, 0.0f, 20.0f }, order);
+        Check(forward_camera_order && order.size() == 2 &&
+            order[0].index == 0 && order[1].index == 1,
+            "カメラを反対側へ移すと遠近の並びが反転する");
+
+        D3D12TransparentSortInput translated = MakeInput(10, 0, 0.0f);
+        translated.world._41 = 3.0f;
+        translated.world._42 = 4.0f;
+        const DirectX::XMFLOAT3 fallback_center = CalculateD3D12TransparentCenter(
+            translated.bounds, translated.world);
+        Check(fallback_center.x == 3.0f && fallback_center.y == 4.0f &&
+            fallback_center.z == 0.0f && CalculateD3D12TransparentDepth(translated, camera) == 5.0f,
+            "平行移動の全軸を使い、深さは二乗距離ではなく実距離を返す");
+
+        D3D12TransparentSortInput transformed = local_near;
+        transformed.bounds.minimum = DirectX::XMFLOAT3{ 0.0f, 1.0f, 2.0f };
+        transformed.bounds.maximum = DirectX::XMFLOAT3{ 2.0f, 3.0f, 4.0f };
+        transformed.world = DirectX::XMFLOAT4X4{
+            0, 2, 0, 0, -3, 0, 0, 0, 0, 0, 4, 0, 10, 20, 30, 1 };
+        const DirectX::XMFLOAT3 transformed_center = CalculateD3D12TransparentCenter(
+            transformed.bounds, transformed.world);
+        Check(transformed_center.x == 4.0f && transformed_center.y == 22.0f &&
+            transformed_center.z == 42.0f,
+            "有効な bounds の中点へ world の回転・拡縮・平行移動を適用する");
+
+        inputs = { MakeInput(90, 0, 1.0f), MakeInput(10, 1, 10.0f),
+            MakeInput(90, 2, 10.0f, true) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.size() == 3 && order[0].index == 2 && order[1].index == 0 &&
+            order[2].index == 1,
+            "代表深さが等しいグループは最遠要素の出現順ではなく owner の初出順を保つ");
+
+        inputs = { MakeInput(40, 8, 5.0f, true), MakeInput(40, 2, 5.0f) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.size() == 2 && order[0].index == 8 && order[0].skinned &&
+            order[1].index == 2 && !order[1].skinned,
+            "同じ owner の同距離サブセットも入力順を保つ");
+
+        const float nan_depth = std::numeric_limits<float>::quiet_NaN();
+        const float infinite_depth = std::numeric_limits<float>::infinity();
+        inputs = { MakeInput(90, 0, nan_depth, true), MakeInput(10, 1, 3.0f),
+            MakeInput(80, 2, infinite_depth), MakeInput(20, 3, 7.0f),
+            MakeInput(70, 4, -infinite_depth) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.size() == 5 && order[0].index == 3 && order[1].index == 1 &&
+            order[2].index == 0 && order[3].index == 2 && order[4].index == 4 &&
+            std::isfinite(order[0].depth) && std::isfinite(order[1].depth) &&
+            !std::isfinite(order[2].depth) && !std::isfinite(order[3].depth) &&
+            !std::isfinite(order[4].depth),
+            "NaN と正負の無限大を有限グループの後ろへ送り初出順を保つ");
+
+        inputs = { MakeInput(90, 0, nan_depth), MakeInput(10, 1, 3.0f),
+            MakeInput(90, 2, 10.0f, true), MakeInput(90, 3, infinite_depth) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.size() == 4 && order[0].index == 1 && order[1].index == 2 &&
+            order[2].index == 0 && order[3].index == 3 &&
+            order[1].owner_id == 90 && order[2].owner_id == 90 && order[3].owner_id == 90,
+            "非有限値が混在する owner は連続したまま末尾へ送り内部は有限値を先にする");
+
+        inputs = { MakeInput(90, 0, nan_depth, true), MakeInput(10, 1, infinite_depth),
+            MakeInput(90, 2, -infinite_depth) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.size() == 3 && order[0].index == 0 && order[1].index == 2 &&
+            order[2].index == 1,
+            "全要素が非有限でも owner の連続性と初出順を保つ");
+
+        inputs = { MakeInput(10, 6, 2.0f) };
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.size() == 1 && order[0].index == 6 && order[0].depth == 2.0f,
+            "入力件数を減らしても前の並びの要素が残らない");
+        const auto reused_capacity = order.capacity();
+        inputs.clear();
+        BuildD3D12TransparentDrawOrder(inputs, camera, order);
+        Check(order.empty() && order.capacity() == reused_capacity,
+            "非空から空へ切り替えても並びを消して容量を保持する");
+
+        const bool ok = first_failure == 0;
+        WriteValidationResultFile("TransparentSort.txt", "REPLAY_TRANSPARENT_SORT_VALIDATION",
+            ok, lines);
+        std::fprintf(stderr, "透明ソート検証: RESULT %s (%d 項目)\n",
+            ok ? "OK" : "NG", checks);
+        return ok ? 0 : 1930;
     }
 
     int RunHeadlessLoadingBridgeValidation(const char* command_line)
@@ -855,6 +1057,9 @@ namespace ReplayEngine::Runtime::Detail
 
         if (command == "--validate-loading-bridge")
             return RunHeadlessLoadingBridgeValidation(command_line);
+
+        if (command == "--validate-transparent-sort")
+            return RunHeadlessTransparentSortValidation(command_line);
 
         namespace Validation = ReplayEngine::Runtime::Validation;
         if (command == "--validate-serialization")

@@ -13,6 +13,7 @@
 #include "D3D12RenderItemBatch.h"
 #include "D3D12ResourceStateTracker.h"
 #include "D3D12ScreenBounds.h"
+#include "D3D12TransparentSort.h"
 #include "../Frustum.h"
 #include "D3D12ShaderCompiler.h"
 #include "D3D12UploadContext.h"
@@ -1327,6 +1328,9 @@ namespace ReplayEngine::Rendering::DX12
         D3D12OffscreenTarget scene_sky_effect_target_{};
         D3D12SceneEffectSubmission scene_effect_submission_{};
         std::string scene3d_lighting_trace_signature_;
+        std::vector<D3D12TransparentSortInput> scene3d_transparent_inputs_;
+        std::vector<D3D12TransparentSortEntry> scene3d_transparent_order_;
+        std::string scene3d_transparent_trace_signature_;
         std::uint32_t last_model_effect_stack_count_ = 0;
         std::uint32_t last_screen_effect_stack_count_ = 0;
         std::uint32_t last_shadow_coverage_draw_count_ = 0;

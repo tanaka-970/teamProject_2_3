@@ -3272,40 +3272,103 @@ namespace ReplayEngine::Rendering::DX12
         D3D12_CPU_DESCRIPTOR_HANDLE scene_target_rtv = scene_view_target_.rtv.cpu;
         command_list_->OMSetRenderTargets(1, &scene_target_rtv, FALSE, &scene3d_depth_.dsv.cpu);
         command_list_->SetGraphicsRootSignature(scene3d_geometry_root_signature_.Get());
-        for (const D3D12StaticDrawItem& draw : submission.draws)
+        scene3d_transparent_inputs_.clear();
+        for (std::uint32_t index = 0; index < submission.draws.size(); ++index)
         {
+            const D3D12StaticDrawItem& draw = submission.draws[index];
             if (model_effect_isolated_from_scene(draw)) continue;
             if (draw.alpha_mode != D3D12StaticAlphaMode::Blend) continue;
-            const auto it = static_mesh_cache_.find(draw.mesh_key);
-            if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
-            DirectX::XMFLOAT4X4 previous_world = draw.world;
-            if (options.read_motion_history && !draw.motion_key.empty())
-            {
-                const auto history = scene3d_motion_history_.find(draw.motion_key);
-                if (history != scene3d_motion_history_.end() && history->second.valid)
-                    previous_world = history->second.world;
-            }
-            const UINT sided = draw.double_sided ? 1u : 0u;
-            command_list_->SetPipelineState(scene3d_static_forward_blend_pipelines_[sided].Get());
-            if (!bind_surface(draw, previous_world, identity_bone_gpu, identity_bone_gpu, 0.0f,
-                false))
-                return false;
-            draw_mesh(*it->second, draw);
+            scene3d_transparent_inputs_.push_back(D3D12TransparentSortInput{
+                draw.owner_id, draw.material_bounds, draw.world, false, index });
         }
-        for (std::size_t i = 0; i < submission.skinned_draws.size(); ++i)
+        for (std::uint32_t index = 0; index < submission.skinned_draws.size(); ++index)
         {
-            const D3D12SkinnedDrawItem& draw = submission.skinned_draws[i];
+            const D3D12SkinnedDrawItem& draw = submission.skinned_draws[index];
             if (model_effect_isolated_from_scene(draw.surface)) continue;
             if (draw.surface.alpha_mode != D3D12StaticAlphaMode::Blend) continue;
-            const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
-            if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
-            const UINT sided = draw.surface.double_sided ? 1u : 0u;
-            command_list_->SetPipelineState(scene3d_skinned_forward_blend_pipelines_[sided].Get());
-            if (!bind_surface(draw.surface, prepared_skinned[i].previous_world,
-                prepared_skinned[i].current_bones, prepared_skinned[i].previous_bones,
-                draw.morph_weight, false))
-                return false;
-            draw_mesh(*it->second, draw.surface);
+            scene3d_transparent_inputs_.push_back(D3D12TransparentSortInput{
+                draw.surface.owner_id, draw.surface.material_bounds, draw.surface.world, true, index });
+        }
+        const DirectX::XMFLOAT3 transparent_camera_position{
+            current_frame_constants_.camera_position.x,
+            current_frame_constants_.camera_position.y,
+            current_frame_constants_.camera_position.z };
+        BuildD3D12TransparentDrawOrder(scene3d_transparent_inputs_,
+            transparent_camera_position, scene3d_transparent_order_);
+        if (LightingTraceEnabled())
+        {
+            try
+            {
+                std::ostringstream signature_stream;
+                signature_stream << '[';
+                for (const D3D12TransparentSortEntry& entry : scene3d_transparent_order_)
+                {
+                    signature_stream << (entry.skinned ? "skinned" : "static") << ':'
+                        << entry.index << ':' << entry.owner_id << ';';
+                }
+                signature_stream << ']';
+                const std::string signature = signature_stream.str();
+                if (signature != scene3d_transparent_trace_signature_)
+                {
+                    std::ostringstream trace;
+                    trace << std::fixed << std::setprecision(3);
+                    trace << "[TransparentSort] count=" << scene3d_transparent_order_.size()
+                        << " camera=(" << transparent_camera_position.x << ','
+                        << transparent_camera_position.y << ',' << transparent_camera_position.z
+                        << ")\n";
+                    for (std::size_t n = 0; n < scene3d_transparent_order_.size(); ++n)
+                    {
+                        const D3D12TransparentSortEntry& entry = scene3d_transparent_order_[n];
+                        trace << "[TransparentSort] order=" << n
+                            << " kind=" << (entry.skinned ? "skinned" : "static")
+                            << " index=" << entry.index << " owner=" << entry.owner_id
+                            << " depth=" << entry.depth << '\n';
+                    }
+                    const std::string message = trace.str();
+                    scene3d_transparent_trace_signature_ = signature;
+                    SceneDebugMessage(message.c_str());
+                }
+            }
+            catch (...)
+            {
+                SceneDebugMessage("[TransparentSort] トレースを作成できませんでした\n");
+            }
+        }
+        for (const D3D12TransparentSortEntry& entry : scene3d_transparent_order_)
+        {
+            if (!entry.skinned)
+            {
+                const D3D12StaticDrawItem& draw = submission.draws[entry.index];
+                const auto it = static_mesh_cache_.find(draw.mesh_key);
+                if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
+                DirectX::XMFLOAT4X4 previous_world = draw.world;
+                if (options.read_motion_history && !draw.motion_key.empty())
+                {
+                    const auto history = scene3d_motion_history_.find(draw.motion_key);
+                    if (history != scene3d_motion_history_.end() && history->second.valid)
+                        previous_world = history->second.world;
+                }
+                const UINT sided = draw.double_sided ? 1u : 0u;
+                command_list_->SetPipelineState(scene3d_static_forward_blend_pipelines_[sided].Get());
+                if (!bind_surface(draw, previous_world, identity_bone_gpu, identity_bone_gpu, 0.0f,
+                    false))
+                    return false;
+                draw_mesh(*it->second, draw);
+            }
+            else
+            {
+                const std::size_t i = entry.index;
+                const D3D12SkinnedDrawItem& draw = submission.skinned_draws[i];
+                const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
+                if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
+                const UINT sided = draw.surface.double_sided ? 1u : 0u;
+                command_list_->SetPipelineState(scene3d_skinned_forward_blend_pipelines_[sided].Get());
+                if (!bind_surface(draw.surface, prepared_skinned[i].previous_world,
+                    prepared_skinned[i].current_bones, prepared_skinned[i].previous_bones,
+                    draw.morph_weight, false))
+                    return false;
+                draw_mesh(*it->second, draw.surface);
+            }
         }
         for (const D3D12StaticDrawItem& draw : submission.draws)
         {
