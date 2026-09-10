@@ -189,6 +189,125 @@ ReplayEngine::Scene::Scene* framework::exclusive_scene_for_render() noexcept
     return scene_manager.IsExclusive() ? object_loading_scene.get() : nullptr;
 }
 
+// 起動時に C# を用意できたかを engine_log.txt へ 1 行残す。
+//
+// 【なぜ要るか】
+//   Initialize() は Editor を止めないために失敗しても true を返す。
+//   その結果、失敗の理由はどこにも出ず、Scene を開いたあとに
+//   型ごとの「C# Assembly is not loaded.」だけが並ぶ。
+//   その行からは、ビルドが失敗したのか hostfxr が無いのかが分からない。
+//   起動のたびに状態を 1 行残しておけば、次に同じことが起きたときに
+//   ログの先頭を見るだけで切り分けられる。
+// Script のログを Editor Console と Saved/Diagnostics/editor_log.txt へ流す。
+// 発生元の GameObject 名を添えて、どのオブジェクトのログか分かるようにする。
+// Script のログを Editor Console と Saved/Diagnostics/editor_log.txt へ流す。
+// 発生元の GameObject 名を添えて、どのオブジェクトのログか分かるようにする。
+void framework::runtime_log_sink::Write(ReplayEngine::Runtime::LogLevel level,
+    const std::string& message, const ReplayEngine::Runtime::ObjectHandle& source)
+{
+    const char* severity = "Info";
+    if (level == ReplayEngine::Runtime::LogLevel::Warning) severity = "Warning";
+    else if (level == ReplayEngine::Runtime::LogLevel::Error) severity = "Error";
+
+    std::string line = message;
+    if (!source.IsEmpty() && owner_.object_runtime_context)
+    {
+        std::string name;
+        if (owner_.object_runtime_context->GetName(source, name) ==
+            ReplayEngine::Runtime::RuntimeStatus::Ok && !name.empty())
+            line += "  (" + name + ")";
+    }
+
+    if (line == pending_message_ && severity == pending_severity_)
+    {
+        // 最初の数回はそのまま出す。1 回しか出ないログを
+        // 「あとでまとめて」にすると、その場で見えなくなるため。
+        if (verbatim_count_ < verbatim_limit)
+        {
+            ++verbatim_count_;
+            owner_.push_editor_log(pending_severity_, pending_message_);
+            return;
+        }
+        // それ以降は数えるだけ。ここでファイルを開かない。
+        ++repeat_count_;
+        return;
+    }
+
+    // 内容が変わった。溜まっていた繰り返しを締めてから、新しい行を出す。
+    Flush(true);
+    pending_severity_ = severity;
+    pending_message_ = std::move(line);
+    repeat_count_ = 0;
+    verbatim_count_ = 1;
+    last_summary_ = std::chrono::steady_clock::now();
+    owner_.push_editor_log(pending_severity_, pending_message_);
+}
+
+// 溜めた繰り返しを 1 行へまとめて出す。
+//
+// 毎フレーム呼ばれるので、force でないときは間隔を見る。
+// 毎回出していては抑制にならない。
+// 回数を残すのは、黙って捨てると「毎フレーム出ているのか
+// 1 回だけなのか」が分からなくなるため。
+void framework::runtime_log_sink::Flush(bool force)
+{
+    if (repeat_count_ <= 0) return;
+
+    const auto now = std::chrono::steady_clock::now();
+    if (!force && now - last_summary_ < summary_interval) return;
+
+    owner_.push_editor_log(pending_severity_,
+        pending_message_ + "  （同じ内容がさらに " +
+        std::to_string(repeat_count_) + " 回）");
+    repeat_count_ = 0;
+    last_summary_ = now;
+}
+
+void framework::log_csharp_startup_state()
+{
+    namespace Scripting = ReplayEngine::Scripting;
+    if (!object_script_runtime) return;
+
+    auto* backend = dynamic_cast<Scripting::CSharp::CSharpScriptBackend*>(
+        object_script_runtime->Backend(Scripting::ScriptLanguage::CSharp));
+    if (backend == nullptr)
+    {
+        log_shutdown_reason("[Script] C# Backend が接続されていません");
+        return;
+    }
+
+    const std::string& diagnostic = backend->StartupDiagnostic();
+    if (backend->AssemblyLoaded() && diagnostic.empty())
+    {
+        log_shutdown_reason("[Script] C# Assembly ロード済み");
+        return;
+    }
+
+    // ビルド出力は複数行になる。1 行に畳んでからログへ出す。
+    std::string reason = diagnostic;
+    for (char& character : reason)
+    {
+        if (character == '\r' || character == '\n') character = ' ';
+    }
+    if (reason.size() > 1024) reason.resize(1024);
+
+    if (backend->AssemblyLoaded())
+    {
+        const std::string message = backend->StartupUsedExistingAssembly()
+            ? "[Script] C# ビルド失敗。ディスクに残っていた前回の Assembly で"
+              "起動しました。ソースより古い可能性があります: " + reason
+            : "[Script] C# Assembly はロード済みですが警告があります: " + reason;
+        log_shutdown_reason(message.c_str());
+        push_editor_log("Warning", message);
+        return;
+    }
+
+    const std::string message = "[Script] C# を用意できませんでした。"
+        "C# の Component はすべて動きません: " + reason;
+    log_shutdown_reason(message.c_str());
+    push_editor_log("Error", message);
+}
+
 void framework::initialize_runtime_services()
 {
     if (object_runtime_context) return;
@@ -203,6 +322,10 @@ void framework::initialize_runtime_services()
     // framework.h の宣言順がその寿命を保証している。
     object_runtime_context = std::make_unique<RRuntime::RuntimeContext>(
         object_runtime_scenes.ActiveWorld());
+
+    // Script のログの行き先を繋ぐ。ここが無いと Debug.Log は捨てられる。
+    object_runtime_log_sink = std::make_unique<runtime_log_sink>(*this);
+    object_runtime_context->SetLogSink(object_runtime_log_sink.get());
     object_scene_flow = std::make_unique<RRuntime::SceneFlowService>(object_runtime_scenes);
 
     // スクリプト機構。GameObject 側の実体は常に ScriptComponent。
@@ -212,6 +335,7 @@ void framework::initialize_runtime_services()
         std::make_unique<ReplayEngine::Scripting::CSharp::CSharpScriptBackend>(
             content_root_path(), standalone_game_mode));
     object_script_runtime->Initialize();
+    log_csharp_startup_state();
 
     object_runtime_scenes.SetRuntimeContext(object_runtime_context.get());
     object_runtime_scenes.SetSceneFlowService(object_scene_flow.get());
@@ -249,17 +373,41 @@ void framework::initialize_runtime_services()
     object_scene.Services().SetSceneFlow(nullptr);
     object_scene.Services().SetAudio(&object_audio_system);
 
-    if (!standalone_game_mode)
+    if (standalone_game_mode)
+    {
+        using namespace ReplayEngine::Scripting;
+        auto* backend = dynamic_cast<CSharp::CSharpScriptBackend*>(
+            object_script_runtime->Backend(ScriptLanguage::CSharp));
+        if (backend == nullptr || !backend->Initialized() || !backend->AssemblyLoaded())
+        {
+            const std::string reason = backend != nullptr
+                ? backend->StartupDiagnostic() : "C# backend is missing";
+            push_editor_log("Error", reason);
+            set_runtime_blocked(reason);
+            return;
+        }
+        for (const auto& descriptor : backend->PackagedCatalog().All())
+        {
+            if (!object_script_runtime->RegisterScriptType(descriptor))
+            {
+                const std::string reason = "C# packed type could not be registered: " +
+                    descriptor.type_id.ToString() + " / " + descriptor.class_name;
+                push_editor_log("Error", reason);
+                set_runtime_blocked(reason);
+            }
+        }
+        std::string error;
+        if (!shader_library.LoadPack(error))
+        {
+            push_editor_log("Error", error);
+            set_runtime_blocked(error);
+        }
+    }
+    else
     {
         refresh_csharp_scripts();
+        scan_shader_library();
     }
-
-    // シェーダ資産の走査。
-    //
-    // ここへ置くのは、Console のログ経路が既に使える状態だから。
-    // まだ描画には使わないので、失敗しても他へ影響しない。
-    // standalone を除外しない。Material Asset のシェーダ解決に Catalog が要る。
-    scan_shader_library();
 
     object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
 }
@@ -287,6 +435,7 @@ void framework::clear_runtime_blocked() noexcept
 void framework::begin_startup_scene()
 {
     initialize_runtime_services();
+    if (standalone_game_mode && object_runtime_blocked) return;
     if (!object_scene_flow) return;
 
     clear_runtime_blocked();
@@ -401,10 +550,14 @@ void framework::tick_runtime_scene_flow()
 
     // 終了要求はアプリケーション層が受け取る。
     // SceneFlowService はプロセスを落とさないので、ここで初めて実際の終了になる。
+    //
+    // 起動モードで宛先が変わるため、判断は handle_game_quit_request() へ集約する。
+    // 単体ゲームはプロセス終了、エディター内 Play は Play の停止。
     if (object_scene_flow->QuitRequested())
     {
+        const std::string quit_reason = object_scene_flow->QuitReason();
         object_scene_flow->ClearQuitRequest();
-        request_object_scene_action(object_scene_action::exit_application);
+        handle_game_quit_request(quit_reason);
     }
 
     rebind_runtime_world_if_changed();

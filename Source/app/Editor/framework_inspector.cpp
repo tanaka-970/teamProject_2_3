@@ -1,4 +1,4 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "skinned_mesh.h"
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
@@ -24,32 +24,6 @@
 
 namespace
 {
-    std::vector<std::string> material_subset_names(const skinned_mesh& mesh_asset)
-    {
-        // Slot は Object 全体の通し番号。描画側の material_slot_cursor と同じ順序・
-        // 同じ個数で並べる。mesh 間の最大値にすると、glTF のように 1 primitive が
-        // 1 mesh + subset 1 個で入る形式で行が 1 つしか出ない。
-        const std::size_t limit =
-            static_cast<std::size_t>(ReplayEngine::Components::max_mesh_material_slots);
-        std::vector<std::string> names;
-        for (const skinned_mesh::mesh& mesh : mesh_asset.meshes)
-        {
-            if (mesh.subsets.empty())
-            {
-                if (names.size() >= limit) break;
-                names.emplace_back();
-                continue;
-            }
-            for (const skinned_mesh::mesh::subset& subset : mesh.subsets)
-            {
-                if (names.size() >= limit) break;
-                names.push_back(subset.material_name);
-            }
-            if (names.size() >= limit) break;
-        }
-        return names;
-    }
-
     template<class T>
     void initialize_material_slots(T& renderer, const std::vector<std::string>& default_names)
     {
@@ -160,8 +134,9 @@ namespace
             ImGui::TextDisabled(u8"名前");
             const std::string hint = std::to_string(index) + u8" 番";
 
-            std::vector<char> name_buffer((std::max)(static_cast<std::size_t>(4096),
-                current_name.size() + static_cast<std::size_t>(4096)), '\0');
+            static thread_local std::vector<char> name_buffer;
+            name_buffer.resize((std::max)(static_cast<std::size_t>(4096), current_name.size()+4096));
+            name_buffer[current_name.size()] = '\0';
             if (!current_name.empty())
                 std::memcpy(name_buffer.data(), current_name.data(), current_name.size());
             ImGui::SetNextItemWidth(-1.0f);
@@ -343,7 +318,7 @@ void framework::draw_material_slot_inspector()
         {
             if (skinned_mesh* mesh_asset = resolve_object_mesh(renderer->mesh_asset))
             {
-                const std::vector<std::string> names = material_subset_names(*mesh_asset);
+                const auto& names = mesh_asset->MaterialSubsetNames();
                 draw_material_slot_rows(object_editor_context, *renderer, names,
                     u8"Mesh Renderer マテリアルスロット", true,
                     [this](const std::filesystem::path& texture_path)
@@ -358,7 +333,7 @@ void framework::draw_material_slot_inspector()
         {
             if (skinned_mesh* mesh_asset = resolve_object_mesh(renderer->mesh_asset))
             {
-                const std::vector<std::string> names = material_subset_names(*mesh_asset);
+                const auto& names = mesh_asset->MaterialSubsetNames();
                 draw_material_slot_rows(object_editor_context, *renderer, names,
                     u8"Skinned Mesh Renderer マテリアルスロット", true,
                     [this](const std::filesystem::path& texture_path)
@@ -369,7 +344,7 @@ void framework::draw_material_slot_inspector()
     }
     if (auto* renderer = object->GetComponent<PrimitiveMeshRendererComponent>())
     {
-        const std::vector<std::string> names(1);
+        static const std::vector<std::string> names(1);
         draw_material_slot_rows(object_editor_context, *renderer, names,
             u8"Primitive Mesh Renderer マテリアルスロット", false,
             [this](const std::filesystem::path& texture_path)

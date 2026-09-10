@@ -295,6 +295,12 @@ void framework::register_object_scene_asset()
 {
     object_scene_asset_guid.clear();
     if (object_scene_path.empty()) return;
+    if (standalone_game_mode)
+    {
+        const auto* record = asset_database.FindByPath(object_scene_path);
+        if (record != nullptr) object_scene_asset_guid = record->guid;
+        return;
+    }
 
     const ReplayEngine::Assets::AssetRecord& record = asset_database.Register(
         object_scene_path, ReplayEngine::Assets::AssetKind::Scene);
@@ -340,6 +346,23 @@ void framework::discard_object_scene_autosave()
 void framework::request_object_scene_action(object_scene_action action,
     std::filesystem::path path)
 {
+    // 書き出したゲームには編集セッションが無い。
+    //
+    // 【なぜここで分けるか】
+    //   単体ゲームでも起動時に既定の編集 Scene を作るため、
+    //   object_editor_context は常に Dirty で始まる。
+    //   そのまま下の確認へ入ると、ゲームの上に編集用の未保存確認が開き、
+    //   editor_mode まで立って「透明なエディターが出て閉じられない」になる。
+    //   単体ゲームには保護すべき編集内容が無いので、確認は通さない。
+    if (standalone_game_mode)
+    {
+        pending_object_scene_action = action;
+        pending_object_scene_path = std::move(path);
+        object_exit_confirmed = true;
+        execute_pending_object_scene_action();
+        return;
+    }
+
     // 新規 / 開く / 終了 はどれも編集シーンに対する操作。
     // Play 中のまま進むと save_object_scene が
     // 「実行中はシーンを保存できません」で false を返し、
@@ -387,6 +410,10 @@ void framework::execute_pending_object_scene_action()
 
 bool framework::confirm_object_scene_close()
 {
+    // 単体ゲームには編集セッションが無い。ウィンドウの × も Alt+F4 も
+    // そのまま閉じる。ここを通すと未保存確認が開いて閉じられなくなる。
+    if (standalone_game_mode) return true;
+
     // ユーザーが既に「保存して終了 / 破棄して終了」を選んでいる。
     // ここで Dirty を見直すと、確認のあとに何かが Dirty を立て直しただけで
     // 終了できなくなる。選んだ結果を尊重してそのまま閉じる。
@@ -395,6 +422,50 @@ bool framework::confirm_object_scene_close()
     if (!object_editor_context.Dirty()) return true;
     request_object_scene_action(object_scene_action::exit_application);
     return false;
+}
+
+// ゲーム側 (SceneFlow の Quit / C# の QuitApplication) からの終了要求。
+//
+// 同じ「終了」でも、単体ゲームとエディター内 Play では意味が違う。
+// 単体ゲームはアプリの終了、エディター内 Play は Play の終了。
+// エディターまで閉じてしまうと、Play 前の編集内容ごと消えることになる。
+void framework::handle_game_quit_request(const std::string& reason)
+{
+    // 誰がいつ終了を要求したかを必ず残す。
+    // これが無いと、勝手に閉じたときに「押していないのに終了した」のか
+    // 「押した通りに終了した」のかがログから区別できない。
+    log_shutdown_reason(("終了要求 (" +
+        (reason.empty() ? std::string("理由なし") : reason) + ")").c_str());
+
+    if (standalone_game_mode)
+    {
+        request_application_quit();
+        return;
+    }
+
+    // Play 中 / Play 開始の読み込み中なら、止める対象は Play。
+    // exit_object_play_mode() は読み込み中の取り消しも受け持つ。
+    if (object_scene_play_mode || object_editor_play_loading)
+    {
+        exit_object_play_mode();
+        const std::string status = reason.empty()
+            ? std::string(u8"ゲームが終了を要求したため Play を停止しました")
+            : u8"ゲームが終了を要求したため Play を停止しました: " + reason;
+        object_editor_context.SetStatus(status);
+        push_editor_log("Info", status);
+        return;
+    }
+
+    // Play していないエディターへ来た終了要求は、アプリの終了として扱う。
+    // 未保存確認は request_application_quit() の側で通る。
+    request_application_quit();
+}
+
+// アプリそのものを閉じる操作。File > Exit とゲームの終了要求が通る。
+// 未保存の編集を持つエディターだけが確認を挟む。
+void framework::request_application_quit()
+{
+    request_object_scene_action(object_scene_action::exit_application);
 }
 // ---------------------------------------------------------------------------
 // 新規 Scene 作成
@@ -407,4 +478,3 @@ bool framework::confirm_object_scene_close()
 //   （ユーザーが Prefab ファイルを選んで配置する操作）の 2 か所だけ。
 //   どちらもユーザーの明示操作からしか呼ばれない。
 //   起動処理・Scene 読み込み・Component 不足の検出からは呼ばれない。
-

@@ -1,4 +1,4 @@
-﻿#include "framework.h"
+#include "framework.h"
 
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
 #include "../../RePlayEngine/Components/UI/UIImageComponent.h"
@@ -584,6 +584,7 @@ static std::filesystem::path browse_rig_pose_file(bool save)
 void framework::draw_motion_rig()
 {
     REPLAY_PROFILE_SCOPE("Editor/MotionRig");
+    motion_rig_panel_visible = false;
     if (!show_motion_rig_panel) return;
     ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
     if (!ImGui::Begin(u8"Motion リグ", &show_motion_rig_panel))
@@ -592,6 +593,7 @@ void framework::draw_motion_rig()
         return;
     }
 
+    motion_rig_panel_visible = true;
     motion_rig_panel_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
     ImGui::Checkbox(u8"シーンビューへ描く", &show_rig_debug_draw);
     ReplayEngine::Editor::EditorHelp::Item("rig.draw",

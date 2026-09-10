@@ -94,6 +94,15 @@ namespace ReplayEngine::Core::Detail
                     .Display("地形が無い時の床の高さ").Step(0.05));
 
             PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("lock_plane_z", &CharacterMotorComponent::lock_plane_z)
+                    .Display("奥行きを固定")
+                    .Tooltip("横スクロール用。Z の速度と位置を毎回 plane_z へ戻す。"));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("plane_z", &CharacterMotorComponent::plane_z)
+                    .Display("固定する奥行き").Step(0.05));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
                 MakeProperty("max_step_height", &CharacterMotorComponent::max_step_height)
                     .Display("登れる段差の高さ").Range(0.0, 2.0).Step(0.01)
                     .Tooltip("接地判定はこの高さだけ上から床を探す。"
@@ -108,13 +117,17 @@ namespace ReplayEngine::Core::Detail
         void RegisterPlayerInput()
         {
             ComponentRegistry::Register<PlayerInputComponent>(
-                ComponentTypeInfo::Describe("Player Input", "Gameplay")
-                    .WithTooltip("入力の取得だけを担当する。Transform も速度も触らない。")
+                ComponentTypeInfo::Describe("Character Input", "Gameplay")
+                    .WithTooltip("今フレームの操作を保つ箱。デバイスでも AI でも書ける。")
                     .InModule("RePlayEngine.Template.ActionPlatformer"));
 
             PropertyRegistry::Register<PlayerInputComponent>(
                 MakeProperty("input_enabled", &PlayerInputComponent::input_enabled)
                     .Display("入力を受け付ける"));
+
+            PropertyRegistry::Register<PlayerInputComponent>(
+                MakeProperty("input_source", &PlayerInputComponent::input_source)
+                    .Display("入力元 (0:デバイス 1:外部)").Range(0.0, 1.0).Step(1.0));
 
             PropertyRegistry::Register<PlayerInputComponent>(
                 MakeProperty("local_player_slot", &PlayerInputComponent::local_player_slot)

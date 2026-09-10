@@ -13,6 +13,7 @@
 #include "D3D12RenderItemBatch.h"
 #include "D3D12ResourceStateTracker.h"
 #include "D3D12ScreenBounds.h"
+#include "D3D12TransparentSort.h"
 #include "../Frustum.h"
 #include "D3D12ShaderCompiler.h"
 #include "D3D12UploadContext.h"
@@ -63,6 +64,7 @@ namespace ReplayEngine::Rendering::DX12
         // 同じFrame slotの動的Line/Trailを再アップロードするときだけ置換する。
         // BeginFrameが該当slotのFenceを待った後なので、GPU使用中のResourceを解放しない。
         bool replace_existing = false;
+        bool vertices_only = false;
     };
 
     struct D3D12StaticTextureSource final
@@ -963,6 +965,7 @@ namespace ReplayEngine::Rendering::DX12
         {
             return static_mesh_cache_.find(key) != static_mesh_cache_.end();
         }
+        void ReleaseStaticMesh(const std::string& key) noexcept;
         bool HasSkinnedMesh(const std::string& key) const noexcept
         {
             return skinned_mesh_cache_.find(key) != skinned_mesh_cache_.end();
@@ -1046,6 +1049,7 @@ namespace ReplayEngine::Rendering::DX12
         void ReleaseScene3DShadowTargets() noexcept;
         bool CacheSkinnedMeshLocalBounds(const D3D12SkinnedMeshSource& source) noexcept;
         bool EnsureStaticMesh(const D3D12StaticMeshSource& source) noexcept;
+        bool UpdateStaticMeshVertices(const D3D12StaticMeshSource& source) noexcept;
         bool EnsureSkinnedMesh(const D3D12SkinnedMeshSource& source) noexcept;
         bool EnsureStaticTexture(const D3D12StaticTextureSource& source) noexcept;
         bool EnsureSkyEnvironment(const D3D12SkySubmission& sky) noexcept;
@@ -1324,6 +1328,9 @@ namespace ReplayEngine::Rendering::DX12
         D3D12OffscreenTarget scene_sky_effect_target_{};
         D3D12SceneEffectSubmission scene_effect_submission_{};
         std::string scene3d_lighting_trace_signature_;
+        std::vector<D3D12TransparentSortInput> scene3d_transparent_inputs_;
+        std::vector<D3D12TransparentSortEntry> scene3d_transparent_order_;
+        std::string scene3d_transparent_trace_signature_;
         std::uint32_t last_model_effect_stack_count_ = 0;
         std::uint32_t last_screen_effect_stack_count_ = 0;
         std::uint32_t last_shadow_coverage_draw_count_ = 0;
@@ -1408,7 +1415,7 @@ namespace ReplayEngine::Rendering::DX12
         std::uint64_t pso_cache_hits_ = 0;
         std::uint64_t pso_cache_misses_ = 0;
         std::uint32_t frame_index_ = 0;
-        std::uint32_t present_sync_interval_ = 1;
+        std::uint32_t present_sync_interval_ = 0;
         std::uint32_t width_ = 0;
         std::uint32_t height_ = 0;
         bool frame_open_ = false;

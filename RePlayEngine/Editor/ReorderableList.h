@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
@@ -108,7 +108,8 @@ namespace ReplayEngine::Editor
         const char* title, bool selected, bool default_open, bool editable,
         std::uint64_t item_payload, const void* payload_scope,
         HeaderFn&& draw_header,
-        ContextMenuFn&& draw_context_menu, DropFn&& draw_drop)
+        ContextMenuFn&& draw_context_menu, DropFn&& draw_drop,
+        bool compact = false)
     {
         ReorderableItemResult result{};
         if (list_identity == nullptr || item_id == nullptr || title == nullptr)
@@ -117,38 +118,41 @@ namespace ReplayEngine::Editor
         ImGui::PushID(item_id);
         // 行ごと掴めるように、見出しと順序ボタンをひとまとまりにする。
         ImGui::BeginGroup();
-        const bool handle_enabled = editable && count > 1;
-        if (!handle_enabled)
+        if (!compact)
         {
-            ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
-            ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
-                ImGui::GetStyle().Alpha * 0.45f);
+            const bool handle_enabled = editable && count > 1;
+            if (!handle_enabled)
+            {
+                ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+                ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
+                    ImGui::GetStyle().Alpha * 0.45f);
+            }
+            ImGui::SmallButton("◆");
+            if (!handle_enabled)
+            {
+                ImGui::PopStyleVar();
+                ImGui::PopItemFlag();
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("この行を掴んでドラッグ、またはボタンで順序を変更");
+            if (handle_enabled && ImGui::BeginDragDropSource(
+                ImGuiDragDropFlags_SourceAllowNullID))
+            {
+                const ReorderPayload payload{
+                    reinterpret_cast<std::uintptr_t>(list_identity), index, item_payload,
+                    reinterpret_cast<std::uintptr_t>(payload_scope) };
+                ImGui::SetDragDropPayload("REPLAY_REORDERABLE_ITEM", &payload,
+                    sizeof(payload));
+                ImGui::Text("移動: %s", title);
+                ImGui::EndDragDropSource();
+                g_active_reorder_label = title;
+                g_active_reorder_list = list_identity;
+                g_active_reorder_index = index;
+            }
+            ImGui::SameLine(0.0f, 4.0f);
+            ImGui::TextDisabled("%zu", index + 1);
+            ImGui::SameLine(0.0f, 6.0f);
         }
-        ImGui::SmallButton("◆");
-        if (!handle_enabled)
-        {
-            ImGui::PopStyleVar();
-            ImGui::PopItemFlag();
-        }
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("この行を掴んでドラッグ、またはボタンで順序を変更");
-        if (handle_enabled && ImGui::BeginDragDropSource(
-            ImGuiDragDropFlags_SourceAllowNullID))
-        {
-            const ReorderPayload payload{
-                reinterpret_cast<std::uintptr_t>(list_identity), index, item_payload,
-                reinterpret_cast<std::uintptr_t>(payload_scope) };
-            ImGui::SetDragDropPayload("REPLAY_REORDERABLE_ITEM", &payload,
-                sizeof(payload));
-            ImGui::Text("移動: %s", title);
-            ImGui::EndDragDropSource();
-            g_active_reorder_label = title;
-            g_active_reorder_list = list_identity;
-            g_active_reorder_index = index;
-        }
-        ImGui::SameLine(0.0f, 4.0f);
-        ImGui::TextDisabled("%zu", index + 1);
-        ImGui::SameLine(0.0f, 6.0f);
 
         // 掴んでいないフレームでは控えを捨てる。「移動中」表示が残らないように。
         if (ImGui::GetDragDropPayload() == nullptr)
@@ -206,7 +210,7 @@ namespace ReplayEngine::Editor
             ImGui::EndPopup();
         }
 
-        if (count > 1)
+        if (!compact && count > 1)
         {
             ImGui::Indent();
             ImGui::TextDisabled("順序");
@@ -242,7 +246,7 @@ namespace ReplayEngine::Editor
 
         ImGui::EndGroup();
         // 掴めることをカーソルで示す。触れば動かせると分かるように。
-        if (editable && count > 1 && ImGui::IsItemHovered())
+        if (!compact && editable && count > 1 && ImGui::IsItemHovered())
             ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
         // 判定は行全体。見出しだけでなく順序ボタンの帯まで落とせる。
         const ImVec2 item_min = ImGui::GetItemRectMin();

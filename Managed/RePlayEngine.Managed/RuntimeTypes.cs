@@ -135,6 +135,15 @@ public struct RaycastHit
     private int valid;
 
     public bool Valid => valid != 0;
+
+    // Unity と同じ名前で読むための別名。値は上のフィールドそのもの。
+    // 既存の Point / Normal / Distance / Object は 1 つも変えていない。
+    public Vector3 point => Point;
+    public Vector3 normal => Normal;
+    public float distance => Distance;
+    public GameObject? gameObject => GameObject.Wrap(Object);
+    public Transform? transform => gameObject?.transform;
+    public Collider? collider => gameObject?.GetComponent<Collider>();
 }
 
 public readonly struct ComponentTypeMetadata
@@ -202,6 +211,16 @@ internal enum ComponentCommand : int
     ParticleStop = 11,
     ParticleEmit = 12,
     ParticleClear = 13,
+
+    // CharacterMotor の操作。C++ の ComponentCommand と同じ並び。
+    MotorMove = 14,
+    MotorImpulse = 15,
+    MotorTeleport = 16,
+
+    // Character Input への書き込み。C++ 側の ComponentCommand と同じ並び。
+    InputSetAxes = 17,
+    InputSetDash = 18,
+    InputJump = 19,
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -216,6 +235,14 @@ public struct PhysicsHit
     private int valid;
 
     public bool Valid => valid != 0;
+
+    // RaycastHit と同じ別名を揃える。呼ぶ側が型で書き分けずに済む。
+    public Vector3 point => Point;
+    public Vector3 normal => Normal;
+    public float distance => Distance;
+    public GameObject? gameObject => GameObject.Wrap(Object);
+    public Transform? transform => gameObject?.transform;
+    public Collider? collider => gameObject?.GetComponent<Collider>();
 }
 
 public enum UIFocusDirection : int

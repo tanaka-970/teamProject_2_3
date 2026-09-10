@@ -25,6 +25,8 @@
 #include "CSharpScriptBackendHostInternal.h"
 #include "CSharpScriptBackendInternal.h"
 #include "CSharpScriptBackendNativeInternal.h"
+#include "../Core/ScriptPack.h"
+#include "../../Runtime/Packaging/PackIO.h"
 namespace ReplayEngine::Scripting::CSharp
 {
     using namespace Detail;
@@ -47,16 +49,25 @@ namespace ReplayEngine::Scripting::CSharp
     {
         if (initialized_) return true;
 
+        startup_diagnostic_.clear();
+        startup_used_existing_assembly_ = false;
+
         if (packaged_mode_)
         {
-            if (!LoadHost()) return false;
-            if (!LoadManagedApi()) return false;
-            if (!ResolveManagedEntryPoints()) return false;
-            if (!SetNativeApi()) return false;
+            std::string pack_error;
+            if (!ScriptPack::Load(project_root_, packaged_catalog_, packaged_configuration_, pack_error))
+            {
+                SetLastError(pack_error);
+                return RecordStartupFailure();
+            }
+            if (!LoadHost()) return RecordStartupFailure();
+            if (!LoadManagedApi()) return RecordStartupFailure();
+            if (!ResolveManagedEntryPoints()) return RecordStartupFailure();
+            if (!SetNativeApi()) return RecordStartupFailure();
 
             initialized_ = true;
             const std::filesystem::path game_assembly =
-                GameScriptsAssemblyPathForMode(project_root_, true);
+                CSharpProject::GameScriptsAssemblyPath(project_root_, packaged_configuration_);
             std::error_code filesystem_error;
             if (std::filesystem::exists(game_assembly, filesystem_error) &&
                 !filesystem_error)
@@ -64,7 +75,12 @@ namespace ReplayEngine::Scripting::CSharp
                 last_build_.succeeded = true;
                 last_build_.exit_code = 0;
                 last_build_.output_assembly = game_assembly;
-                ReloadLastBuiltAssembly();
+                if (!ReloadLastBuiltAssembly()) RecordStartupFailure();
+            }
+            else
+            {
+                startup_diagnostic_ = "C# Assembly is missing: " +
+                    game_assembly.generic_u8string();
             }
             return true;
         }
@@ -73,7 +89,7 @@ namespace ReplayEngine::Scripting::CSharp
         if (!CSharpProject::EnsureProjectFiles(project_root_, error))
         {
             SetLastError(error);
-            return false;
+            return RecordStartupFailure();
         }
         if (CSharpProject::ManagedApiBuildRequired(project_root_))
         {
@@ -84,13 +100,13 @@ namespace ReplayEngine::Scripting::CSharp
                 last_build_ = managed_build;
                 SetLastError(managed_build.output_text.empty()
                     ? "Managed API build failed." : managed_build.output_text);
-                return false;
+                return RecordStartupFailure();
             }
         }
-        if (!LoadHost()) return false;
-        if (!LoadManagedApi()) return false;
-        if (!ResolveManagedEntryPoints()) return false;
-        if (!SetNativeApi()) return false;
+        if (!LoadHost()) return RecordStartupFailure();
+        if (!LoadManagedApi()) return RecordStartupFailure();
+        if (!ResolveManagedEntryPoints()) return RecordStartupFailure();
+        if (!SetNativeApi()) return RecordStartupFailure();
 
         initialized_ = true;
 
@@ -107,9 +123,44 @@ namespace ReplayEngine::Scripting::CSharp
         }
 
         // User script のコンパイル失敗で Editor 起動を止めない。
-        // 成功していた旧 Assembly がある場合は Managed 側が保持する。
-        CompileAndReload(nullptr);
+        if (CompileAndReload(nullptr)) return true;
+
+        // 「直前に成功した Assembly は Managed 側が保持する」が成り立つのは、
+        // 一度ロードしたあとのホットリロードだけ。起動直後はまだ何も
+        // ロードしていないため、ここでビルドが失敗すると Assembly が
+        // 1 つも無い状態で Play へ入り、C# の型が全部
+        // 「C# Assembly is not loaded.」になる。移動も UI ボタンも死ぬ。
+        //
+        // ディスクには前回のビルド結果が残っている。ソースより古くても、
+        // 何も動かないよりは動く状態から始める方がよい。
+        // 古いことは StartupUsedExistingAssembly() で呼び出し側へ伝える。
+        const std::string build_error = startup_diagnostic_.empty()
+            ? last_error_ : startup_diagnostic_;
+        // last_build_ は失敗したビルドの記録のまま残す。
+        // ここで成功へ書き換えると、Editor の Console と
+        // LastBuildResult() を見る側に「ビルドは通った」と伝わってしまう。
+        if (!assembly_loaded_ && FileExists(game_assembly))
+        {
+            std::string load_output;
+            if (LoadGameAssembly(game_assembly, load_output))
+                startup_used_existing_assembly_ = true;
+        }
+        startup_diagnostic_ = build_error.empty()
+            ? std::string("C# build failed.") : build_error;
         return true;
+    }
+
+    // Initialize() の失敗をそのまま false で返しつつ、理由を残す。
+    // Initialize() の戻り値は起動を止めるためだけに使われ、
+    // どこにも記録されないまま捨てられていた。
+    bool CSharpScriptBackend::RecordStartupFailure()
+    {
+        if (startup_diagnostic_.empty())
+        {
+            startup_diagnostic_ = last_error_.empty()
+                ? "C# Backend initialization failed." : last_error_;
+        }
+        return false;
     }
 
     void CSharpScriptBackend::Shutdown()
@@ -155,6 +206,7 @@ namespace ReplayEngine::Scripting::CSharp
         get_field_ = nullptr;
         set_time_ = nullptr;
         live_instance_count_ = nullptr;
+        pump_events_ = nullptr;
         last_error_function_ = nullptr;
 
         initialized_ = false;
@@ -217,7 +269,8 @@ namespace ReplayEngine::Scripting::CSharp
         }
 
         const std::filesystem::path runtime_config =
-            ManagedApiRuntimeConfigPathForMode(project_root_, packaged_mode_);
+            packaged_mode_ ? CSharpProject::ManagedApiRuntimeConfigPath(project_root_, packaged_configuration_)
+                : ManagedApiRuntimeConfigPathForMode(project_root_, false);
         if (!std::filesystem::exists(runtime_config))
         {
             SetLastError("Managed API runtimeconfig is missing: " +
@@ -263,7 +316,10 @@ namespace ReplayEngine::Scripting::CSharp
             reinterpret_cast<load_assembly_and_get_function_pointer_fn>(
                 load_assembly_and_get_function_pointer_);
         const std::filesystem::path assembly =
-            ManagedApiAssemblyPathForMode(project_root_, packaged_mode_);
+            packaged_mode_ ? CSharpProject::ManagedApiAssemblyPath(project_root_, packaged_configuration_)
+                : ManagedApiAssemblyPathForMode(project_root_, false);
+        try { loaded_api_fingerprint_ = Runtime::Packaging::FileFingerprint(assembly); }
+        catch (const std::exception& exception) { SetLastError(exception.what()); return false; }
         const std::wstring assembly_path = assembly.wstring();
         const wchar_t* type_name = L"ReplayEngine.NativeBridge, RePlayEngine.Managed";
         const wchar_t* unmanaged_callers_only =
@@ -294,6 +350,7 @@ namespace ReplayEngine::Scripting::CSharp
             resolve(L"GetField", &get_field_) &&
             resolve(L"SetTime", &set_time_) &&
             resolve(L"LiveInstanceCount", &live_instance_count_) &&
+            resolve(L"PumpEvents", &pump_events_) &&
             resolve(L"LastError", &last_error_function_);
 #endif
     }

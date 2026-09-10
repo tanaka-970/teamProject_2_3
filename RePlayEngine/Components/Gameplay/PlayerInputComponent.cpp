@@ -4,6 +4,9 @@
 #include "../../Scene/Runtime/Scene.h"
 #include "../../Scene/Services/IInputService.h"
 
+#include <algorithm>
+#include <cmath>
+
 namespace ReplayEngine::Components
 {
     void PlayerInputComponent::OnUpdate(float)
@@ -23,6 +26,10 @@ namespace ReplayEngine::Components
             return;
         }
 
+        // External は外から書かれた値をそのまま保つ。
+        // ここでゼロへ戻すと AI が書いた軸が毎フレーム消える。
+        if (ExternalDriven()) return;
+
         // OS は framework のフレーム先頭で 1 回だけ採取済み。
         // 同じ Action を別 Component が同時に読んでも Pressed は消費されない。
         move_x_ = input->Axis("MoveX", local_player_slot);
@@ -37,6 +44,29 @@ namespace ReplayEngine::Components
         move_y_ = 0.0f;
         dash_held_ = false;
         jump_latched_ = false;
+    }
+
+    bool PlayerInputComponent::SetExternalAxes(float x, float y) noexcept
+    {
+        if (!ExternalDriven()) return false;
+        if (!std::isfinite(x) || !std::isfinite(y)) return false;
+        move_x_ = std::clamp(x, -1.0f, 1.0f);
+        move_y_ = std::clamp(y, -1.0f, 1.0f);
+        return true;
+    }
+
+    bool PlayerInputComponent::SetExternalDash(bool held) noexcept
+    {
+        if (!ExternalDriven()) return false;
+        dash_held_ = held;
+        return true;
+    }
+
+    bool PlayerInputComponent::RequestExternalJump() noexcept
+    {
+        if (!ExternalDriven()) return false;
+        jump_latched_ = true;
+        return true;
     }
 
     bool PlayerInputComponent::ConsumeJump() noexcept

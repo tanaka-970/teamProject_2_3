@@ -108,22 +108,28 @@ namespace ReplayEngine::Scripting::CSharp
             const std::string& namespace_name, const std::string& class_name)
         {
             std::ostringstream stream;
+            // 新しいスクリプトは MonoBehaviour で作る。
+            //
+            // ObjectHandle / ComponentHandle / RuntimeResult / RuntimeContext と
+            // override / deltaTime 引数は 1 つも出さない。
+            // ReplayGuid だけは Scene の参照を型名から切り離すために必要で、
+            // Asset metadata へ移すまではここに残る。
             stream <<
                 "using ReplayEngine;\n"
                 "\n"
                 "namespace " << namespace_name << ";\n"
                 "\n"
                 "[ReplayGuid(\"" << guid << "\")]\n"
-                "public sealed class " << class_name << " : ScriptBehaviour\n"
+                "public class " << class_name << " : MonoBehaviour\n"
                 "{\n"
-                "    public float Speed = 1.0f;\n"
-                "    public ObjectReference Target;\n"
+                "    [SerializeField]\n"
+                "    float speed = 1.0f;\n"
                 "\n"
-                "    public override void Awake()\n"
+                "    void Start()\n"
                 "    {\n"
                 "    }\n"
                 "\n"
-                "    public override void Update(float deltaTime)\n"
+                "    void Update()\n"
                 "    {\n"
                 "    }\n"
                 "}\n";

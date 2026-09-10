@@ -1,7 +1,8 @@
-﻿#include "framework.h"
+#include "framework.h"
 #include "mainInternal.h"
 
 #include "../../../RePlayEngine/Rendering/DX12/D3D12DeviceContext.h"
+#include "../../../RePlayEngine/Rendering/DX12/D3D12MeshBuffer.h"
 #include "../../../RePlayEngine/Rendering/DX12/D3D12DescriptorHeapAllocator.h"
 #include "../../../RePlayEngine/Rendering/Capture/GoldenImage.h"
 #include "../../../RePlayEngine/Rendering/Effects/EffectPresetAsset.h"
@@ -88,10 +89,12 @@ namespace ReplayEngine::Runtime::Detail
                 nullptr);
         }
 
+        int failed_checks = 0;
         bool Check(bool condition, const char* message, int& checks)
         {
             ++checks;
             if (condition) return true;
+            ++failed_checks;
             std::fprintf(stderr, "DX12 validation failed: %s\n", message);
             return false;
         }
@@ -654,6 +657,7 @@ namespace ReplayEngine::Runtime::Detail
             };
             preload_mesh.indices = { 0, 1, 2 };
             preload_scene.mesh_sources.push_back(std::move(preload_mesh));
+            const bool preload_resident = context.HasStaticMesh("validation:loading-preload-static");
             const auto preload_before = context.CaptureScene3DState();
             const bool preload_ok = context.PreloadScene3DResources(preload_scene, false);
             const auto preload_after = context.CaptureScene3DState();
@@ -665,7 +669,7 @@ namespace ReplayEngine::Runtime::Detail
                     preload_after.gbuffer_states[index] == preload_before.gbuffer_states[index];
             }
             Check(preload_ok && context.HasStaticMesh("validation:loading-preload-static") &&
-                preload_after.static_mesh_cache_size == preload_before.static_mesh_cache_size + 1 &&
+                preload_after.static_mesh_cache_size == preload_before.static_mesh_cache_size + (preload_resident ? 0 : 1) &&
                 preload_after.motion_frame_serial == preload_before.motion_frame_serial &&
                 preload_after.scene_history_write_serial == preload_before.scene_history_write_serial &&
                 preload_after.scene_effect_history_write_serial ==
@@ -1329,6 +1333,25 @@ namespace ReplayEngine::Runtime::Detail
             if (!Check(context.EndFrame(),
                 "DX12 composition EndFrame", checks))
                 return false;
+            // More than the shared 8 MiB frame heap: the entire UI used to vanish.
+            for (int overflow_frame=0;overflow_frame<4;++overflow_frame)
+            {
+                if (!Check(context.BeginFrame(clear), "ImGui overflow BeginFrame", checks)) return false;
+                ImGui::NewFrame();
+                auto* dense = ImGui::GetForegroundDrawList();
+                for (int triangle=0;triangle<60000;++triangle)
+                    dense->AddTriangleFilled(ImVec2(1,1),ImVec2(2,1),ImVec2(1,2),IM_COL32_WHITE);
+                ImGui::Render();
+                const auto* data = ImGui::GetDrawData();
+                const std::uint64_t bytes = static_cast<std::uint64_t>(data->TotalVtxCount)*sizeof(ImDrawVert)+
+                    static_cast<std::uint64_t>(data->TotalIdxCount)*sizeof(ImDrawIdx);
+                if (!Check(bytes > Rendering::DX12::D3D12DeviceContext::FrameUploadCapacity,
+                    "ImGui stress exceeds shared frame upload capacity", checks)) return false;
+                if (!Check(context.DrawImGui(ImGui::GetDrawData()), "oversized ImGui remains drawable", checks)) return false;
+                if (!Check(context.EndFrame(), "ImGui overflow EndFrame", checks)) return false;
+                if (!Check(context.RuntimeStats().frame_upload_capacity > Rendering::DX12::D3D12DeviceContext::FrameUploadCapacity,
+                    "ImGui overflow pages included in memory stats", checks)) return false;
+            }
             if (owns_imgui_context) ImGui::DestroyContext();
 #else
             if (!Check(false, "DX12 composition ImGui requires USE_IMGUI", checks))
@@ -1735,6 +1758,7 @@ namespace ReplayEngine::Runtime::Detail
             HasCommandLineToken(command_line, "--validate-dx12-gpu") ||
             HasCommandLineToken(command_line, "--dx12-gpu-validation=on");
 
+        failed_checks = 0;
         const HINSTANCE instance = GetModuleHandleW(nullptr);
         HWND window = CreateValidationWindow(instance);
         if (window == nullptr)
@@ -1772,6 +1796,40 @@ namespace ReplayEngine::Runtime::Detail
                 context.SceneViewTarget().width == 64 &&
                 context.SceneViewTarget().height == 64,
                 "Scene/Game offscreen render-target foundation", checks);
+        }
+        if (ok)
+        {
+            using namespace Rendering::DX12;
+            D3D12StaticVertex vertices[3]{};
+            vertices[0].position={0,0,0};vertices[1].position={0,1,0};vertices[2].position={1,0,0};
+            const std::uint32_t indices[3]={0,1,2};
+            D3D12MeshBuffer original,updated;
+            ok=Check(original.Upload(context.Device(),context.UploadContext(),vertices,sizeof(vertices),
+                sizeof(D3D12StaticVertex),indices,sizeof(indices),DXGI_FORMAT_R32_UINT),"Landscape initial VB/IB upload",checks);
+            const auto uploads=context.UploadContext().UploadCount();
+            vertices[0].position.y=0.2f;
+            if(ok) ok=Check(updated.UploadVerticesSharingIndices(context.Device(),context.UploadContext(),
+                original,vertices,sizeof(vertices),sizeof(D3D12StaticVertex)) &&
+                updated.IndexView().BufferLocation==original.IndexView().BufferLocation &&
+                updated.VertexView().BufferLocation!=original.VertexView().BufferLocation &&
+                context.UploadContext().UploadCount()==uploads+1,
+                "Landscape sculpt uploads one VB and reuses the same IB",checks);
+            original.Reset();
+            if(ok) ok=Check(updated.IsValid() && updated.IndexCount()==3,
+                "shared IB survives retirement of old mesh",checks);
+            D3D12StaticSceneSubmission initial;
+            D3D12StaticMeshSource mesh;mesh.key="validation:landscape-vertex-update";
+            mesh.vertices.assign(vertices,vertices+3);mesh.indices.assign(indices,indices+3);
+            initial.mesh_sources.push_back(mesh);
+            if(ok) ok=Check(context.PreloadScene3DResources(initial,true),"Landscape topology preload",checks);
+            auto& update=initial.mesh_sources.front();
+            update.vertices_only=true;update.replace_existing=true;update.indices.clear();
+            update.vertices[0].position.y=2;
+            D3D12MeshLocalBounds bounds;
+            if(ok) ok=Check(context.PreloadScene3DResources(initial,true) &&
+                context.GetStaticMeshLocalBounds(update.key,bounds) && bounds.maximum.y==2,
+                "Landscape vertex-only submission updates cached bounds",checks);
+            context.ReleaseStaticMesh(update.key);
         }
         if (ok && requested_debug_layer)
         {
@@ -1986,7 +2044,7 @@ namespace ReplayEngine::Runtime::Detail
         DestroyWindow(window);
         UnregisterClassW(kValidationWindowClass, instance);
 
-        if (!ok)
+        if (!ok || failed_checks != 0)
         {
             std::fprintf(stderr, "DX12 validation failed: %d checks\n", checks);
             return 81;

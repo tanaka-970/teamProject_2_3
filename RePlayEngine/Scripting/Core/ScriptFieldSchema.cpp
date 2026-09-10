@@ -65,13 +65,15 @@ namespace ReplayEngine::Scripting
     std::shared_ptr<const ScriptFieldSchema> ScriptFieldSchema::Build(
         ScriptTypeID type_id, std::uint32_t revision,
         std::vector<ScriptFieldDefinition> fields,
-        std::vector<std::string>* rejected)
+        std::vector<std::string>* rejected,
+        bool instantiate_when_inactive)
     {
         // make_shared を使わないのはコンストラクタが private のため。
         // Schema は必ず Build / MakeEmpty から作らせたい。
         std::shared_ptr<ScriptFieldSchema> schema(new ScriptFieldSchema());
         schema->type_id_ = type_id;
         schema->revision_ = revision;
+        schema->instantiate_when_inactive_ = instantiate_when_inactive;
         schema->fields_.reserve(fields.size());
 
         for (ScriptFieldDefinition& definition : fields)

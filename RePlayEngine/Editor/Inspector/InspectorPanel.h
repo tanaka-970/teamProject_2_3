@@ -1,8 +1,10 @@
-﻿#pragma once
+#pragma once
 
 #include "../ComponentBrowser/AddComponentPanel.h"
 #include "../../Object/Component/ComponentTypeID.h"
 #include "../../Object/Component/MissingComponent.h"
+
+#include "../../Core/ObjectID/ObjectID.h"
 
 #include <cstddef>
 #include <functional>
@@ -36,6 +38,8 @@ namespace ReplayEngine::Editor
 
         // 既存ウィンドウの中へ埋め込みたい場合に使う（Begin/End を呼ばない）。
         void DrawContents(EditorContext& context);
+        // Call every editor frame, including when the Inspector is hidden/collapsed.
+        void FinishPropertyEdit(EditorContext& context);
 
         // ProjectSettings の Template 表示値を plain bool で受け取る。
         // Checkbox で値が変わったときだけ true を返す。永続化は呼び出し側の責務。
@@ -49,6 +53,12 @@ namespace ReplayEngine::Editor
         }
 
     private:
+        void BeginPropertyEdit(EditorContext& context, const std::string& label);
+        bool property_edit_owned_ = false;
+        unsigned int property_edit_item_ = 0;
+        std::uint64_t directional_light_world_ = 0;
+        std::uint32_t directional_light_generation_ = 0;
+        std::vector<Core::ObjectID> directional_light_objects_;
         void DrawGameObjectHeader(EditorContext& context, Core::GameObject& object);
         void DrawPrefabHeader(EditorContext& context, Core::GameObject& object);
         void DrawMultiSelection(EditorContext& context,

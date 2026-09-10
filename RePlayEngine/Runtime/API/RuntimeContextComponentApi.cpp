@@ -9,6 +9,14 @@
 #include "RuntimeContext.h"
 
 #include "../../Components/Audio/AudioSourceComponent.h"
+#include "../../Components/Gameplay/CharacterMotorComponent.h"
+#include "../../Components/Gameplay/PlayerInputComponent.h"
+#include "../../Components/Landscape/LandscapeComponent.h"
+#include "../../Components/Physics/ColliderComponent.h"
+#include "../../Scripting/Core/ScriptComponent.h"
+#include "../../Scripting/Core/ScriptServices.h"
+#include "../../Scripting/Core/ScriptTypeCatalog.h"
+#include "../../Landscape/LandscapeEditorTool.h"
 #include "../../Components/Physics/RigidbodyComponent.h"
 #include "../../Components/Rendering/AnimatorComponent.h"
 #include "../../Components/Rendering/ParticleEmitterComponent.h"
@@ -267,6 +275,258 @@ namespace ReplayEngine::Runtime
         }
     }
 
+    namespace
+    {
+        RuntimeStatus ResolveLandscape(const HandleResolver& resolver,
+            const ComponentHandle& handle, Components::LandscapeComponent*& out)
+        {
+            out = nullptr;
+            Component* component = nullptr;
+            const RuntimeStatus status = resolver.TryResolve(handle, component);
+            if (status != RuntimeStatus::Ok) return status;
+            if (component == nullptr) return RuntimeStatus::ComponentDestroyed;
+            if (component->TypeID() != Components::LandscapeComponent::StaticTypeID())
+                return RuntimeStatus::TypeMismatch;
+            out = static_cast<Components::LandscapeComponent*>(component);
+            return RuntimeStatus::Ok;
+        }
+    }
+
+    RuntimeStatus RuntimeContext::AddScriptComponent(const ObjectHandle& owner,
+        std::uint64_t type_high, std::uint64_t type_low, ComponentHandle& out)
+    {
+        out = {};
+        GameObject* object = nullptr;
+        const RuntimeStatus status = resolver_.TryResolve(owner, object);
+        if (status != RuntimeStatus::Ok) return status;
+        if (object == nullptr) return RuntimeStatus::ObjectDestroyed;
+
+        // 型の正体は Catalog が持っている。ここで型表を作り直さない。
+        Scripting::IScriptServices* scripts = object->GetScene() != nullptr
+            ? object->GetScene()->Services().Scripts() : nullptr;
+        if (scripts == nullptr) return RuntimeStatus::ServiceUnavailable;
+
+        Reflection::TypeGUID type_id;
+        type_id.high = type_high;
+        type_id.low = type_low;
+        const Scripting::ScriptTypeDescriptor* descriptor = scripts->Catalog().Find(type_id);
+        if (descriptor == nullptr) return RuntimeStatus::ComponentNotFound;
+
+        auto* script = object->AddComponent<Scripting::ScriptComponent>();
+        if (script == nullptr) return RuntimeStatus::UnsupportedOperation;
+        script->AssignScriptType(*descriptor);
+
+        // 実体だけこの場で作る。Awake は Scene の同期点のまま。
+        //
+        // 【なぜここで作るか】
+        //   AddComponent<T>() は Unity と同じく、戻り値をその行で使える必要がある。
+        //   Awake を待つと、追加した直後は必ず null になり
+        //   controller.speed = 5 が書けない。
+        //   Awake まで一緒に走らせないのは、Awake 中に足した Component の
+        //   Start が先に走らないようにした 2 パス構成を壊さないため。
+        script->ResolveSchema();
+        if (!script->EnsureInstance())
+        {
+            LogError("AddScriptComponent: " + script->LastError(), owner);
+            // Update 走査中にも呼ばれるため、既存の同期点で安全に破棄する。
+            script->Destroy();
+            return RuntimeStatus::UnsupportedOperation;
+        }
+
+        out = resolver_.MakeHandle(script);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::IsComponentAlive(const ComponentHandle& handle,
+        bool& out) const
+    {
+        out = false;
+        Component* component = nullptr;
+        const RuntimeStatus status = resolver_.TryResolve(handle, component);
+        if (status != RuntimeStatus::Ok) return status;
+        out = component != nullptr && !component->PendingDestroy();
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::FindColliderComponent(const ObjectHandle& owner,
+        std::uint32_t collider_id, ComponentHandle& out) const
+    {
+        out = {};
+        GameObject* object = nullptr;
+        const RuntimeStatus status = resolver_.TryResolve(owner, object);
+        if (status != RuntimeStatus::Ok) return status;
+        if (object == nullptr) return RuntimeStatus::ObjectDestroyed;
+
+        // 既存の解決をそのまま使う。ここで探索を書き直さない。
+        Components::ColliderComponent* collider = Components::FindColliderByID(
+            *object, static_cast<Scene::ColliderID>(collider_id));
+        if (collider == nullptr) return RuntimeStatus::ComponentNotFound;
+
+        out = resolver_.MakeHandle(collider);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::LandscapeInfo(const ComponentHandle& handle,
+        int& out_width, int& out_height, float& out_cell_size) const
+    {
+        out_width = 0;
+        out_height = 0;
+        out_cell_size = 0.0f;
+        Components::LandscapeComponent* landscape = nullptr;
+        const RuntimeStatus status = ResolveLandscape(resolver_, handle, landscape);
+        if (status != RuntimeStatus::Ok) return status;
+
+        const Landscape::LandscapeData& data = landscape->Data();
+        if (!data.Valid()) return RuntimeStatus::UnsupportedOperation;
+        out_width = data.Width();
+        out_height = data.Height();
+        out_cell_size = data.CellSize();
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::LandscapeGetHeight(const ComponentHandle& handle,
+        int x, int z, float& out_height) const
+    {
+        out_height = 0.0f;
+        Components::LandscapeComponent* landscape = nullptr;
+        const RuntimeStatus status = ResolveLandscape(resolver_, handle, landscape);
+        if (status != RuntimeStatus::Ok) return status;
+
+        const Landscape::LandscapeData& data = landscape->Data();
+        if (!data.Contains(x, z)) return RuntimeStatus::InvalidArgument;
+        out_height = data.HeightAt(x, z);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::LandscapeSetHeight(const ComponentHandle& handle,
+        int x, int z, float value)
+    {
+        if (!std::isfinite(value)) return RuntimeStatus::InvalidArgument;
+        Components::LandscapeComponent* landscape = nullptr;
+        const RuntimeStatus status = ResolveLandscape(resolver_, handle, landscape);
+        if (status != RuntimeStatus::Ok) return status;
+
+        Landscape::LandscapeData& data = landscape->Data();
+        if (!data.Contains(x, z)) return RuntimeStatus::InvalidArgument;
+        return data.SetHeight(x, z, value) ? RuntimeStatus::Ok : RuntimeStatus::UnsupportedOperation;
+    }
+
+    RuntimeStatus RuntimeContext::LandscapeSampleHeight(const ComponentHandle& handle,
+        float local_x, float local_z, float& out_height) const
+    {
+        out_height = 0.0f;
+        if (!std::isfinite(local_x) || !std::isfinite(local_z))
+            return RuntimeStatus::InvalidArgument;
+
+        Components::LandscapeComponent* landscape = nullptr;
+        const RuntimeStatus status = ResolveLandscape(resolver_, handle, landscape);
+        if (status != RuntimeStatus::Ok) return status;
+
+        const Landscape::LandscapeData& data = landscape->Data();
+        if (!data.Valid()) return RuntimeStatus::UnsupportedOperation;
+        const float cell = data.CellSize();
+        if (!(cell > 0.0f)) return RuntimeStatus::UnsupportedOperation;
+
+        // 地形は原点が中心。格子座標へ移してから双一次補間する。
+        const float grid_x = local_x / cell + (data.Width() - 1) * 0.5f;
+        const float grid_z = local_z / cell + (data.Height() - 1) * 0.5f;
+        const int x0 = static_cast<int>(std::floor(grid_x));
+        const int z0 = static_cast<int>(std::floor(grid_z));
+        const float tx = grid_x - static_cast<float>(x0);
+        const float tz = grid_z - static_cast<float>(z0);
+
+        const auto sample = [&data](int x, int z)
+        {
+            const int cx = x < 0 ? 0 : (x >= data.Width() ? data.Width() - 1 : x);
+            const int cz = z < 0 ? 0 : (z >= data.Height() ? data.Height() - 1 : z);
+            return data.HeightAt(cx, cz);
+        };
+
+        const float h00 = sample(x0, z0);
+        const float h10 = sample(x0 + 1, z0);
+        const float h01 = sample(x0, z0 + 1);
+        const float h11 = sample(x0 + 1, z0 + 1);
+        const float top = h00 + (h10 - h00) * tx;
+        const float bottom = h01 + (h11 - h01) * tx;
+        out_height = top + (bottom - top) * tz;
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::LandscapeSculpt(const ComponentHandle& handle,
+        const DirectX::XMFLOAT3& local_center, int mode, int direction,
+        float radius, float strength, float falloff, float flatten_height,
+        float noise_scale, float delta_time)
+    {
+        if (!FiniteVector(local_center)) return RuntimeStatus::InvalidArgument;
+        if (!std::isfinite(radius) || !std::isfinite(strength) ||
+            !std::isfinite(falloff) || !std::isfinite(flatten_height) ||
+            !std::isfinite(noise_scale) || !std::isfinite(delta_time))
+            return RuntimeStatus::InvalidArgument;
+        if (!(radius > 0.0f) || !(delta_time > 0.0f)) return RuntimeStatus::InvalidArgument;
+        if (mode < 0 || mode > static_cast<int>(Landscape::LandscapeBrushMode::Subdivide))
+            return RuntimeStatus::InvalidArgument;
+        if (direction < 0 ||
+            direction > static_cast<int>(Landscape::LandscapeSculptDirection::VertexNormal))
+            return RuntimeStatus::InvalidArgument;
+
+        Components::LandscapeComponent* landscape = nullptr;
+        const RuntimeStatus status = ResolveLandscape(resolver_, handle, landscape);
+        if (status != RuntimeStatus::Ok) return status;
+
+        Landscape::LandscapeData& data = landscape->Data();
+        if (!data.Valid()) return RuntimeStatus::UnsupportedOperation;
+
+        Landscape::LandscapeBrush brush;
+        brush.radius = radius;
+        brush.strength = strength;
+        brush.falloff = falloff;
+        brush.flatten_height = flatten_height;
+        brush.noise_scale = noise_scale;
+        brush.direction = static_cast<Landscape::LandscapeSculptDirection>(direction);
+
+        // Editor と同じ 1 ストロークを、この呼び出しの中で開いて閉じる。
+        // Undo コマンドは Editor の履歴へ積むものなので Runtime では捨てる。
+        // Script から地形を変えたことを Undo で戻せてしまうと、
+        // ゲーム進行と編集履歴が混ざる。
+        Landscape::LandscapeEditorTool tool;
+        if (!tool.BeginStroke(data, static_cast<Landscape::LandscapeBrushMode>(mode), brush))
+            return RuntimeStatus::UnsupportedOperation;
+
+        const bool applied = tool.ApplySample(local_center, delta_time);
+        tool.EndStroke();
+        return applied ? RuntimeStatus::Ok : RuntimeStatus::InvalidArgument;
+    }
+
+    RuntimeStatus RuntimeContext::LandscapeRaycast(const ComponentHandle& handle,
+        const DirectX::XMFLOAT3& local_origin, const DirectX::XMFLOAT3& local_direction,
+        float max_distance, DirectX::XMFLOAT3& out_position,
+        DirectX::XMFLOAT3& out_normal, float& out_distance) const
+    {
+        out_position = {};
+        out_normal = { 0.0f, 1.0f, 0.0f };
+        out_distance = 0.0f;
+        if (!FiniteVector(local_origin) || !FiniteVector(local_direction))
+            return RuntimeStatus::InvalidArgument;
+        if (!std::isfinite(max_distance) || !(max_distance > 0.0f))
+            return RuntimeStatus::InvalidArgument;
+
+        Components::LandscapeComponent* landscape = nullptr;
+        const RuntimeStatus status = ResolveLandscape(resolver_, handle, landscape);
+        if (status != RuntimeStatus::Ok) return status;
+
+        const Landscape::LandscapeData& data = landscape->Data();
+        if (!data.Valid()) return RuntimeStatus::UnsupportedOperation;
+
+        Landscape::LandscapeRayHit hit{};
+        if (!data.Raycast(local_origin, local_direction, max_distance, hit) || !hit.hit)
+            return RuntimeStatus::ComponentNotFound;
+
+        out_position = hit.position;
+        out_normal = hit.normal;
+        out_distance = hit.distance;
+        return RuntimeStatus::Ok;
+    }
+
     RuntimeStatus RuntimeContext::RigidbodyAddForce(const ComponentHandle& handle,
         const XMFLOAT3& force)
     {
@@ -354,6 +614,34 @@ namespace ReplayEngine::Runtime
         return RuntimeStatus::Ok;
     }
 
+    namespace
+    {
+        // "x,y,z" を 1 つの XMFLOAT3 へ。Component 命令の text 引数専用。
+        bool ParseVector3Text(const std::string& text, XMFLOAT3& out)
+        {
+            float values[3]{ 0.0f, 0.0f, 0.0f };
+            std::size_t begin = 0;
+            for (int index = 0; index < 3; ++index)
+            {
+                if (begin > text.size()) return false;
+                const std::size_t comma = text.find(',', begin);
+                const std::string piece = text.substr(begin,
+                    comma == std::string::npos ? std::string::npos : comma - begin);
+                try { values[index] = std::stof(piece); }
+                catch (...) { return false; }
+                if (!std::isfinite(values[index])) return false;
+                if (comma == std::string::npos)
+                {
+                    if (index != 2) return false;
+                    break;
+                }
+                begin = comma + 1;
+            }
+            out = XMFLOAT3{ values[0], values[1], values[2] };
+            return true;
+        }
+    }
+
     RuntimeStatus RuntimeContext::InvokeComponentCommand(const ComponentHandle& handle,
         ComponentCommand command, const std::string& text, float scalar,
         float secondary_scalar, int integer)
@@ -401,6 +689,58 @@ namespace ReplayEngine::Runtime
                 if (!source->IsPlaying()) return RuntimeStatus::AssetMissing;
             }
             else source->Stop();
+            return RuntimeStatus::Ok;
+        }
+
+        if (command == ComponentCommand::InputSetAxes ||
+            command == ComponentCommand::InputSetDash ||
+            command == ComponentCommand::InputJump)
+        {
+            auto* player_input =
+                dynamic_cast<Components::PlayerInputComponent*>(component);
+            if (player_input == nullptr) return RuntimeStatus::TypeMismatch;
+
+            // Device のまま書かれたら黙って落とさずに使えないと返す。
+            bool accepted = false;
+            if (command == ComponentCommand::InputSetAxes)
+            {
+                accepted = player_input->SetExternalAxes(scalar, secondary_scalar);
+            }
+            else if (command == ComponentCommand::InputSetDash)
+            {
+                accepted = player_input->SetExternalDash(integer != 0);
+            }
+            else accepted = player_input->RequestExternalJump();
+            return accepted ? RuntimeStatus::Ok
+                : RuntimeStatus::UnsupportedOperation;
+        }
+
+        if (command == ComponentCommand::MotorMove ||
+            command == ComponentCommand::MotorImpulse ||
+            command == ComponentCommand::MotorTeleport)
+        {
+            auto* motor = dynamic_cast<Components::CharacterMotorComponent*>(component);
+            if (motor == nullptr) return RuntimeStatus::TypeMismatch;
+
+            if (command == ComponentCommand::MotorMove)
+            {
+                if (!std::isfinite(scalar) || !std::isfinite(secondary_scalar))
+                    return RuntimeStatus::InvalidArgument;
+                const float multiplier = integer > 0 ? integer / 1000.0f : 1.0f;
+                motor->Move(XMFLOAT3{ scalar, 0.0f, secondary_scalar }, multiplier);
+                return RuntimeStatus::Ok;
+            }
+
+            // "x,y,z" を読む。まれにしか来ないので確保は許容する。
+            // Impulse は 4 つ目に「勢いを保つ秒数」を足せる。
+            XMFLOAT3 vector{ 0.0f, 0.0f, 0.0f };
+            if (!ParseVector3Text(text, vector)) return RuntimeStatus::InvalidArgument;
+            if (command == ComponentCommand::MotorImpulse)
+            {
+                motor->ApplyImpulse(vector, std::isfinite(scalar) && scalar > 0.0f
+                    ? scalar : 0.0f);
+            }
+            else motor->Teleport(vector);
             return RuntimeStatus::Ok;
         }
 

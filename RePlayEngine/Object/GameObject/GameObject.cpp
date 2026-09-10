@@ -350,14 +350,55 @@ namespace ReplayEngine::Core
 
     void GameObject::SyncComponentStates()
     {
-        // SyncEnableState の中（OnEnable / OnStart）から AddComponent される可能性があるため、
+        SyncComponentInstantiate();
+        SyncComponentRestoreFields();
+        SyncComponentAwakeAndEnable();
+        SyncComponentStart();
+    }
+
+    void GameObject::SyncComponentInstantiate()
+    {
+        const std::size_t count = components_.size();
+        for (std::size_t index = 0; index < count && index < components_.size(); ++index)
+        {
+            Component* component = components_[index].get();
+            if (component == nullptr || component->PendingDestroy()) continue;
+            component->SyncInstantiateState();
+        }
+    }
+
+    void GameObject::SyncComponentRestoreFields()
+    {
+        const std::size_t count = components_.size();
+        for (std::size_t index = 0; index < count && index < components_.size(); ++index)
+        {
+            Component* component = components_[index].get();
+            if (component == nullptr || component->PendingDestroy()) continue;
+            component->SyncRestoreFieldsState();
+        }
+    }
+
+    void GameObject::SyncComponentAwakeAndEnable()
+    {
+        // ライフサイクルの中（OnEnable / OnStart）から AddComponent される可能性があるため、
         // 開始時点の個数を控えて添字で回す。この回で追加されたぶんは次のフレームから開始する。
         const std::size_t count = components_.size();
         for (std::size_t index = 0; index < count && index < components_.size(); ++index)
         {
             Component* component = components_[index].get();
             if (component == nullptr) continue;
-            component->SyncEnableState();
+            component->SyncAwakeAndEnableState();
+        }
+    }
+
+    void GameObject::SyncComponentStart()
+    {
+        const std::size_t count = components_.size();
+        for (std::size_t index = 0; index < count && index < components_.size(); ++index)
+        {
+            Component* component = components_[index].get();
+            if (component == nullptr) continue;
+            component->SyncStartState();
         }
     }
 

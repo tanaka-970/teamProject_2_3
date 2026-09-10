@@ -1,4 +1,4 @@
-#include "Component.h"
+﻿#include "Component.h"
 
 #include "../GameObject/GameObject.h"
 #include "../../Reflection/Property/PropertyBag.h"
@@ -69,6 +69,16 @@ namespace ReplayEngine::Core
 
     void Component::SyncEnableState()
     {
+        // 1 つの Component だけを進める従来の入口。
+        // Scene 初期化以外（後から有効化した場合など）はここを通る。
+        SyncInstantiateState();
+        SyncRestoreFieldsState();
+        SyncAwakeAndEnableState();
+        SyncStartState();
+    }
+
+    void Component::SyncAwakeAndEnableState()
+    {
         // Awake は「有効かどうか」に関係なく、Scene が動き出した最初の同期点で一度だけ。
         //
         // ここへ置く理由:
@@ -102,13 +112,27 @@ namespace ReplayEngine::Core
             else OnDisable();
         }
 
+    }
+
+    void Component::SyncStartState()
+    {
+        // 自分の Awake が終わるまで Start へ進まない。
+        //
+        // 【なぜここで見るか】
+        //   Awake の中で AddComponent すると、増えた Component は
+        //   1 パス目（Awake / OnEnable）の対象数を過ぎているので Awake されない。
+        //   一方 2 パス目はその時点の一覧を見るため、そのままだと
+        //   Awake を飛ばして Start だけが先に走る。
+        //   初期化前の Component が動き出すことになるので、ここで止める。
+        //   飛ばすだけで終わりにはしない。次の同期点で 1 パス目が
+        //   この Component の Awake / OnEnable を通し、そのあと Start が走る。
+        if (!runtime_awake_called_) return;
+
         // OnStart は「初めて実際に有効になった」ときだけ一度呼ぶ。
         // 無効化して再度有効化しても二度目は呼ばれない。
-        if (desired && !started_)
-        {
-            started_ = true;
-            OnStart();
-        }
+        if (!ActiveInHierarchy() || started_) return;
+        started_ = true;
+        OnStart();
     }
 
     void Component::ForceDisable()

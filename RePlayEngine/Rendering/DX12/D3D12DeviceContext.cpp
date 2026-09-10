@@ -1,4 +1,5 @@
 ﻿#include "D3D12DeviceContext.h"
+#include "../Shaders/ShaderPack.h"
 #include "D3D12ResourceFactory.h"
 #include "D3D12ObjectName.h"
 
@@ -2556,6 +2557,22 @@ namespace ReplayEngine::Rendering::DX12
         return true;
     }
 
+    bool D3D12DeviceContext::UpdateStaticMeshVertices(const D3D12StaticMeshSource& source) noexcept
+    {
+        const auto existing = static_mesh_cache_.find(source.key);
+        if (existing == static_mesh_cache_.end() || source.vertices.empty()) return false;
+        const auto bytes = source.vertices.size() * sizeof(D3D12StaticVertex);
+        if (bytes > UINT32_MAX) return false;
+        auto mesh = std::make_unique<D3D12MeshBuffer>();
+        if (!mesh->UploadVerticesSharingIndices(device_.Get(), upload_context_, *existing->second,
+            source.vertices.data(), static_cast<std::uint32_t>(bytes), sizeof(D3D12StaticVertex))) return false;
+        mesh->SetDebugName(source.key);
+        // Keep the old VB alive to its fence. The immutable IB is shared by both versions.
+        RetireStaticMesh(std::move(existing->second));
+        existing->second = std::move(mesh);
+        return true;
+    }
+
     bool D3D12DeviceContext::EnsureStaticMesh(
         const D3D12StaticMeshSource& source) noexcept
     {
@@ -2921,8 +2938,9 @@ namespace ReplayEngine::Rendering::DX12
         if (source.source_path.empty()) return false;
         ++pso_cache_misses_;
 
-        std::ifstream file(source.source_path, std::ios::binary);
-        if (!file)
+        std::ifstream file;
+        if (!ShaderPack::IsStandalone()) file.open(source.source_path, std::ios::binary);
+        if (!ShaderPack::IsStandalone() && !file)
         {
             try { custom_static_shader_failures_.insert(source.key); }
             catch (...) {}
@@ -2939,13 +2957,8 @@ namespace ReplayEngine::Rendering::DX12
         std::string combined;
         try
         {
-            combined.reserve(source.generated_declaration.size() + body.size() + 256);
-            combined += "#line 1 \"REPLAY_DX12_GENERATED\"\n";
-            combined += source.generated_declaration;
-            combined += "\n#line 1 \"";
-            combined += source.source_path.generic_string();
-            combined += "\"\n";
-            combined += body;
+            combined = ShaderPack::ComposeSource(body, source.generated_declaration,
+                source.source_path, false);
         }
         catch (...)
         {
@@ -2955,14 +2968,8 @@ namespace ReplayEngine::Rendering::DX12
         D3D12ShaderCompiler compiler;
         if (!compiler.Initialize(D3D12ShaderCompiler::FindDefaultLibraryPath()))
             return false;
-        D3D12ShaderCompileOptions options;
-        options.debug = debug_layer_enabled_;
-        options.optimize = !debug_layer_enabled_;
-        options.warnings_as_errors = false;
-        options.include_directories.push_back(std::filesystem::current_path() / "Shader");
-        options.include_directories.push_back(
-            std::filesystem::current_path() / "Shader" / "Include");
-        options.defines.push_back({ L"REPLAY_SKINNED", L"0" });
+        const auto options = ShaderPack::SurfaceOptions(debug_layer_enabled_);
+        // replay-pack-source: surface
         const D3D12ShaderCompileResult compiled = compiler.CompileSource(combined,
             source.source_path, L"main", L"ps_6_0", options);
         compiler.Shutdown();
@@ -3348,6 +3355,15 @@ namespace ReplayEngine::Rendering::DX12
         ReleaseRetiredStaticMeshes(completed);
     }
 
+    void D3D12DeviceContext::ReleaseStaticMesh(const std::string& key) noexcept
+    {
+        const auto existing = static_mesh_cache_.find(key);
+        if (existing == static_mesh_cache_.end()) return;
+        RetireStaticMesh(std::move(existing->second));
+        static_mesh_cache_.erase(existing);
+        static_mesh_bounds_cache_.erase(key);
+    }
+
     // 置換で外した静的メッシュは、次に Signal する Fence を越えるまで解放しない。
     void D3D12DeviceContext::RetireStaticMesh(std::unique_ptr<D3D12MeshBuffer> mesh) noexcept
     {
@@ -3358,6 +3374,7 @@ namespace ReplayEngine::Rendering::DX12
         }
         catch (...)
         {
+            mesh.release();
         }
     }
 
@@ -3738,7 +3755,7 @@ namespace ReplayEngine::Rendering::DX12
         }
         frame_resources_[submitted_frame].fence_value = signal_value;
         frame_upload_peak_ = (std::max)(frame_upload_peak_,
-            frame_resources_[submitted_frame].upload_allocator.Used());
+            frame_resources_[submitted_frame].TotalUploadUsed());
         diagnostics_.SetRuntimeStats(BuildRuntimeStats());
         diagnostics_.MarkSubmitted(submitted_frame, signal_value);
         diagnostics_.DrainInfoQueue();
@@ -3825,8 +3842,8 @@ namespace ReplayEngine::Rendering::DX12
         stats.sampler_descriptor_peak = sampler_descriptor_allocator_.PeakUsed();
         stats.sampler_descriptor_fragmentation = sampler_descriptor_allocator_.FragmentationRatio();
         stats.sampler_descriptor_failures = sampler_descriptor_allocator_.AllocationFailures();
-        stats.frame_upload_used = frame_resources_[frame_index_].upload_allocator.Used();
-        stats.frame_upload_capacity = frame_resources_[frame_index_].upload_allocator.Capacity();
+        stats.frame_upload_used = frame_resources_[frame_index_].TotalUploadUsed();
+        stats.frame_upload_capacity = frame_resources_[frame_index_].TotalUploadCapacity();
         stats.frame_upload_peak = frame_upload_peak_;
         stats.upload_wait_count = upload_context_.WaitCount();
         stats.upload_wait_nanoseconds = upload_context_.WaitNanoseconds();

@@ -6,6 +6,9 @@ namespace ReplayEngine;
 // ビヘイビアスクリプトの基底クラス。ゲームオブジェクトにアタッチされるスクリプトは、このクラスを継承する必要があるよ。
 public abstract class ScriptBehaviour
 {
+    internal bool RuntimeLifecycleStarted { get; private set; }
+    internal void BeginRuntimeLifecycle() => RuntimeLifecycleStarted = true;
+
 	// ゲームオブジェクトにアタッチされたスクリプトのライフサイクルイベントを定義
 	private readonly List<EventSubscription> eventSubscriptions = new();
 	private readonly CoroutineRunner runner = new();
@@ -28,6 +31,37 @@ public abstract class ScriptBehaviour
     // プロパティにすると Transform.Position = v が CS1612 で弾かれる。
     // 代入先が「値のコピー」になるため。フィールドなら変数なので代入できる。
     public TransformAccess Transform;
+
+    // 名前で引いた GameObject を覚えておく入れ物と、その World 番号。
+    private readonly Dictionary<string, ObjectHandle> objectsByName = new();
+    private ulong objectCacheWorld;
+
+    // 名前で GameObject を引く。見つかった分は覚えて毎フレームの走査を避ける。
+    // World が入れ替わったら覚えた分は捨てる。前の World のハンドルは別物を指すため。
+    // 見つからなかった分は覚えない。あとから生成される場合があるから。
+    protected bool TryFindObject(string name, out ObjectHandle handle)
+    {
+        if (objectCacheWorld != GameObject.World)
+        {
+            objectsByName.Clear();
+            objectCacheWorld = GameObject.World;
+        }
+        if (objectsByName.TryGetValue(name, out handle)) return true;
+
+        var found = Runtime.FindGameObject(name);
+        handle = found.Succeeded ? found.Value : default;
+        if (handle.IsEmpty) return false;
+        objectsByName[name] = handle;
+        return true;
+    }
+
+    // 無いと成立しない GameObject を引く。欠けていたら名前付きの例外で止める。
+    // 黙って何もしないと、後続の無反応からは原因が追えない。
+    protected ObjectHandle RequireObject(string name)
+    {
+        if (TryFindObject(name, out var handle)) return handle;
+        throw new System.InvalidOperationException("GameObject が見つかりません: " + name);
+    }
 
     // 自分と同じ GameObject から型で Component を引く。
     protected RuntimeResult<T> GetComponent<T>() where T : IComponentBinding<T>
@@ -111,6 +145,10 @@ public abstract class ScriptBehaviour
 
     protected Coroutine StartCoroutine(IEnumerator body) => runner.Start(body);
 
+    // 新 MonoBehaviour が、Unity と同じく「呼んだ時点で最初の yield まで」
+    // Coroutine を進めるための内部入口。Legacy StartCoroutine は Start() のまま。
+    internal Coroutine StartCoroutinePrimed(IEnumerator body) => runner.StartPrimed(body);
+
     protected void StopCoroutine(Coroutine coroutine) => coroutine?.Cancel();
 
     protected void StopAllCoroutines() => runner.CancelAll();
@@ -129,6 +167,7 @@ public abstract class ScriptBehaviour
 
     internal void ReleaseManagedSubscriptions()
     {
+        RuntimeLifecycleStarted = false;
         foreach (var subscription in eventSubscriptions)
         {
             Runtime.UnsubscribeEvent(subscription);
@@ -160,6 +199,11 @@ public abstract class ScriptBehaviour
     public virtual void OnWorldChanged(SceneEventInfo scene) { }
     public virtual void OnApplicationQuit(ApplicationQuitEventInfo application) { }
     public virtual void OnButtonClicked(ButtonEventInfo button) { }
+    // 自分以外のボタンの Click も受け取る。メニューを1つの Director で捌くための入口。
+    // OnButtonClicked は発生元が自分自身の場合しか呼ばれないため、
+    // ボタンを持たない制御用スクリプトはこちらを override する。
+    // どのボタンかは button.Button を RequireObject() の戻り値と比べて判別する。
+    public virtual void OnAnyButtonClicked(ButtonEventInfo button) { }
     public virtual void OnButtonStateChanged(ButtonEventInfo button) { }
     public virtual void OnInputFieldValueChanged(InputFieldEventInfo input) { }
     public virtual void OnInputFieldSubmitted(InputFieldEventInfo input) { }
@@ -169,12 +213,60 @@ public abstract class ScriptBehaviour
     public virtual void OnAnimatorStateChanged(AnimatorStateEventInfo animator) { }
     public virtual void OnSliderValueChanged(SliderEventInfo slider) { }
 
-    // Engine が毎フレーム呼ぶ。Update の直前に接触と時間を進める。
-    internal void PumpFrame(float deltaTime)
+    // 接触などの Engine イベントを配る。
+    //
+    // Update からではなく、物理と EventBus の配送が終わった同期点から呼ぶ。
+    // Update で読むと、読めるのは前フレームぶんになり、
+    // Native Behaviour より 1 フレーム遅れて届いてしまう。
+    internal void PumpEngineEvents(bool contacts = true, bool engineEvents = true)
     {
         eventPump ??= new EngineEventPump(this);
-        eventPump.Pump();
-        runner.Advance(deltaTime);
+        eventPump.Pump(contacts, engineEvents);
+    }
+
+    // Engine イベントを 1 つでも購読しているか。
+    //
+    // 初回にここで購読を作る。以降は bool を見るだけなので、
+    // 接触も Scene イベントも使っていない Behaviour には毎フレームの
+    // 追加コストが乗らない。
+    internal bool HasEngineEventSubscriptions
+    {
+        get
+        {
+            eventPump ??= new EngineEventPump(this);
+            return eventPump.SubscriptionCount != 0;
+        }
+    }
+
+    // Coroutine / Timer / Tween が 1 本でも走っているか。
+    internal bool HasPendingRoutines => runner.HasPending;
+
+    // Coroutine / Timer / Tween を進める。
+    //
+    // イベント配送と分けてあるのは、enabled = false の Behaviour でも
+    // Coroutine は進められるようにするため。Update 経由だと、
+    // Component が無効なあいだ Invoke が来ず Coroutine まで止まる。
+    internal void AdvanceCoroutines(float deltaTime) => runner.Advance(deltaTime);
+
+    // GameObject が非 Active になったときに呼ぶ。途中から再開させない。
+    internal void StopCoroutinesForInactive() => runner.CancelAll();
+
+    [System.Obsolete("イベント配送と Coroutine は分離した。呼び出し互換のために残す。")]
+    internal void PumpFrame(float deltaTime)
+    {
+        PumpEngineEvents();
+        AdvanceCoroutines(deltaTime);
+    }
+
+    // この Behaviour がその Engine イベントを受け取るか。
+    // 既定は「仮想メソッドを override したか」。今までと同じ判定。
+    // MonoBehaviour を載せる Host は必ず override してしまう都合で、
+    // ここを差し替えてユーザーのスクリプトが実際に持つかで決める。
+    internal virtual bool HandlesMessage(string methodName)
+    {
+        var method = GetType().GetMethod(methodName,
+            BindingFlags.Public | BindingFlags.Instance);
+        return method != null && method.DeclaringType != typeof(ScriptBehaviour);
     }
 
     public virtual void Awake() { }
@@ -209,6 +301,7 @@ public abstract class ScriptBehaviour
             Subscribe(nameof(OnWorldChanged), EngineEventIds.WorldChanged, 11, global: true);
             Subscribe(nameof(OnApplicationQuit), EngineEventIds.ApplicationQuitRequested, 12, global: true);
             Subscribe(nameof(OnButtonClicked), EngineEventIds.ButtonClicked, 13, ownSource: true);
+            Subscribe(nameof(OnAnyButtonClicked), EngineEventIds.ButtonClicked, 22);
             Subscribe(nameof(OnButtonStateChanged), EngineEventIds.ButtonStateChanged, 14, ownSource: true);
             Subscribe(nameof(OnInputFieldValueChanged), EngineEventIds.InputFieldValueChanged, 15,
                 ownSource: true);
@@ -238,15 +331,15 @@ public abstract class ScriptBehaviour
             }
         }
 
-        private bool Overrides(string methodName)
-        {
-            var method = owner.GetType().GetMethod(methodName,
-                BindingFlags.Public | BindingFlags.Instance);
-            return method != null && method.DeclaringType != typeof(ScriptBehaviour);
-        }
+        internal int SubscriptionCount => subscriptions.Count;
 
-        internal void Pump()
+        private bool Overrides(string methodName)
+            => owner.HandlesMessage(methodName);
+
+        internal void Pump(bool contacts, bool engineEvents)
         {
+            // Awake 前でも非 Active 期間のキューを捨てるだけの Poll は許す。
+            if (!owner.RuntimeLifecycleStarted && (contacts || engineEvents)) return;
             foreach (var (subscription, kind, ownSource) in subscriptions)
             {
                 // 1 フレームで積まれたぶんをすべて配る。
@@ -256,6 +349,16 @@ public abstract class ScriptBehaviour
                     var polled = owner.Runtime.PollEvent(subscription);
                     if (!polled.Succeeded || string.IsNullOrEmpty(polled.Value.TypeGuid)) break;
                     if (ownSource && !SameObject(polled.Value.Source, owner.GameObject)) continue;
+                    // Poll は続け、配送しない期間のイベントを次の有効化へ持ち越さない。
+                    if (kind <= 5 ? !contacts : !engineEvents) continue;
+                    if (!NativeBridge.IsComponentAlive(owner.Component) ||
+                        !NativeBridge.ActiveInHierarchy(owner.GameObject)) continue;
+                    // 接触で自身を有効化できる MonoBehaviour のみ disabled 配送を許す。
+                    if (kind > 5 || owner is not MonoBehaviourHost)
+                    {
+                        var enabled = NativeBridge.IsComponentEnabled(owner.Component);
+                        if (!enabled.Succeeded || !enabled.Value) continue;
+                    }
                     Dispatch(kind, polled.Value);
                 }
             }
@@ -287,6 +390,7 @@ public abstract class ScriptBehaviour
             case 19: owner.OnCompositionMarker(new MotionEventInfo(record)); break;
             case 20: owner.OnAnimatorStateChanged(new AnimatorStateEventInfo(record)); break;
             case 21: owner.OnSliderValueChanged(new SliderEventInfo(record)); break;
+            case 22: owner.OnAnyButtonClicked(new ButtonEventInfo(record)); break;
             }
         }
 

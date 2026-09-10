@@ -1,9 +1,19 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Object/Component/Component.h"
 
 namespace ReplayEngine::Components
 {
+    // 入力をどこから取るか。
+    enum class PlayerInputSource : int
+    {
+        // キーボードやパッドから読む。
+        Device = 0,
+
+        // デバイスを読まず、スクリプトや AI が書き込む。
+        External = 1,
+    };
+
     // 入力の取得だけを担当する。
     //
     // 禁止していること:
@@ -44,12 +54,33 @@ namespace ReplayEngine::Components
         // 消費せずに状態だけ見る（Inspector 表示やデバッグ用）。
         bool JumpLatched() const noexcept { return jump_latched_; }
 
+        // ---- 外部からの書き込み ---------------------------------------
+        // input_source が External のときだけ受け付ける。
+        // Device のときに黙って上書きされると原因を追えなくなる。
+        bool ExternalDriven() const noexcept
+        {
+            return input_source == static_cast<int>(PlayerInputSource::External);
+        }
+
+        // 移動軸を書く。幅は -1..1 へ丸める。
+        bool SetExternalAxes(float x, float y) noexcept;
+
+        // ダッシュの押しっ放し状態を書く。
+        bool SetExternalDash(bool held) noexcept;
+
+        // ジャンプを 1 回分ラッチする。消費側は人間と同じ。
+        bool RequestExternalJump() noexcept;
+
         // ---- 保存される設定 -------------------------------------------------
 
         // false の間は入力を一切拾わない。
         // Component 自体を無効にしても同じ結果になるが、
         // ムービー中だけ操作を止めるといった用途で使い分けられるようにしておく。
         bool input_enabled = true;
+
+        // 入力をどこから取るか。PlayerInputSource の値を入れる。
+        // External にすれば CPU も replay も人間と同じ Controller を通る。
+        int input_source = static_cast<int>(PlayerInputSource::Device);
 
         // ローカルプレイヤー番号。将来の 2P 対応やデバイス割り当て用。
         // 現状は 0 のみを扱い、値は保存だけする。

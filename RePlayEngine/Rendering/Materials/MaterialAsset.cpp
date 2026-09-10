@@ -16,6 +16,8 @@
 #include <limits>
 #include <sstream>
 #include <unordered_set>
+#include <unordered_map>
+#include <mutex>
 
 namespace ReplayEngine::Rendering
 {
@@ -84,6 +86,31 @@ namespace ReplayEngine::Rendering
             return true;
         }
 
+    }
+
+    namespace
+    {
+        std::mutex shading_metadata_mutex;
+        std::unordered_map<std::wstring, int> shading_metadata;
+        std::wstring MetadataKey(const std::filesystem::path& path)
+        {
+            std::error_code error;
+            auto absolute = std::filesystem::absolute(path, error);
+            return (error ? path : absolute).lexically_normal().generic_wstring();
+        }
+    }
+    void MaterialAsset::PublishShadingMetadata(const std::filesystem::path& path, int model)
+    {
+        const auto key = MetadataKey(path);
+        std::lock_guard<std::mutex> lock(shading_metadata_mutex);
+        shading_metadata[key] = model;
+    }
+    int MaterialAsset::LoadedShadingModel(const std::filesystem::path& path)
+    {
+        const auto key = MetadataKey(path);
+        std::lock_guard<std::mutex> lock(shading_metadata_mutex);
+        const auto found = shading_metadata.find(key);
+        return found == shading_metadata.end() ? -1 : found->second;
     }
 
     void MaterialAsset::SyncLegacyFieldsToProperties()
@@ -263,6 +290,7 @@ namespace ReplayEngine::Rendering
             error = "Material一時ファイルを置換できません";
             return false;
         }
+        PublishShadingMetadata(path, material.shading_model);
         return true;
     }
 

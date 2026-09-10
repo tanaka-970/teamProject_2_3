@@ -644,8 +644,7 @@ void framework::draw_editor_main_menu()
         if (ImGui::MenuItem("Save As...", save_as_shortcut.c_str())) save_object_scene(true);
         if (ImGui::MenuItem(u8"ゲームを書き出す...")) open_export_game_dialog();
         ImGui::Separator();
-        if (ImGui::MenuItem("Exit"))
-            request_object_scene_action(object_scene_action::exit_application);
+        if (ImGui::MenuItem("Exit")) request_application_quit();
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Edit"))

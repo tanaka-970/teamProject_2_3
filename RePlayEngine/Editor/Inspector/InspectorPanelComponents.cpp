@@ -146,11 +146,20 @@ namespace ReplayEngine::Editor
         const ComponentTypeInfo* info = ComponentRegistry::Find(component.TypeID());
         const auto* missing = dynamic_cast<const Core::MissingComponent*>(&component);
 
-        const std::string title = missing != nullptr
+        std::string title = missing != nullptr
             ? missing->DescribeMissingType()
             : (info != nullptr
                 ? info->DisplayName()
                 : std::string("(未登録) ") + component.TypeName());
+
+        // Identify attached behaviours even while their property cards are folded.
+        if (const auto* script = dynamic_cast<const Scripting::ScriptComponent*>(&component))
+        {
+            if (!script->ClassName().empty())
+                title = script->ClassName() + " (Script)";
+            else
+                title += " (未指定)";
+        }
 
         const bool editable = context.CanEdit();
         const bool removable = ComponentRegistry::IsRemovable(component.TypeID());
@@ -429,12 +438,26 @@ namespace ReplayEngine::Editor
             int active_directional_lights = 0;
             if (scene != nullptr)
             {
-                for (std::size_t i = 0; i < scene->GameObjectCount(); ++i)
+                if (directional_light_world_ != scene->WorldInstanceID() ||
+                    directional_light_generation_ != scene->StructureGeneration())
                 {
-                    GameObject* candidate = scene->GameObjectAt(i);
-                    if (candidate == nullptr || !candidate->ActiveInHierarchy()) continue;
-                    auto* light = candidate->GetComponent<Components::DirectionalLightComponent>();
-                    if (light != nullptr && light->Enabled()) ++active_directional_lights;
+                    directional_light_objects_.clear();
+                    for (std::size_t i = 0; i < scene->GameObjectCount(); ++i)
+                    {
+                        const auto* candidate = scene->GameObjectAt(i);
+                        if (candidate && candidate->GetComponent<Components::DirectionalLightComponent>())
+                            directional_light_objects_.push_back(candidate->ID());
+                    }
+                    directional_light_world_ = scene->WorldInstanceID();
+                    directional_light_generation_ = scene->StructureGeneration();
+                }
+                // Enabled / parent activation can change without a structural edit.
+                for (const auto id : directional_light_objects_)
+                {
+                    const auto* candidate = scene->FindGameObjectByID(id);
+                    if (!candidate || candidate->PendingDestroy() || !candidate->ActiveInHierarchy()) continue;
+                    const auto* light = candidate->GetComponent<Components::DirectionalLightComponent>();
+                    if (light && light->Enabled()) ++active_directional_lights;
                 }
             }
             if (active_directional_lights > 1)
@@ -452,15 +475,6 @@ namespace ReplayEngine::Editor
 
         if (Reflection::PropertyRegistry::HasProperties(component.TypeID()) || has_dynamic)
         {
-            const bool had_transaction = context.History().InTransaction();
-            // BeginEdit の Snapshot は Scene 全体を写す。Inspector は毎フレーム
-            // ここを通るので、無条件に取ると選択しているだけで重くなる。
-            const ImGuiIO& edit_io = ImGui::GetIO();
-            const bool may_change_now = ImGui::IsAnyItemActive() ||
-                ImGui::IsAnyMouseDown() || edit_io.MouseWheel != 0.0f ||
-                edit_io.WantTextInput || edit_io.WantCaptureKeyboard;
-            if (editable && !had_transaction && may_change_now)
-                context.BeginEdit(title + " の設定を変更");
             if (!editable)
             {
                 ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
@@ -468,7 +482,10 @@ namespace ReplayEngine::Editor
             }
 
             const bool changed = PropertyDrawer::DrawAll(component,
-                context.GetAssetDatabase(), context.GetScene());
+                context.GetAssetDatabase(), context.GetScene(), [&]()
+                {
+                    if (editable) BeginPropertyEdit(context, title + " の設定を変更");
+                });
 
             if (!editable)
             {
@@ -481,33 +498,7 @@ namespace ReplayEngine::Editor
                 prefab_cache_valid_ = false;
             }
 
-            // Draw の前に Snapshot を取るため、最初の変更も Undo へ正しく入る。
-            // Drag 中は transaction を保持し、マウスを離した Frame で 1 操作として確定する。
-            if (editable && context.History().InTransaction() && !ImGui::IsAnyItemActive())
-            {
-                if (changed || had_transaction)
-                {
-                    // 編集が確定したこの瞬間に、型へ変更を知らせる。
-                    //
-                    // ここへ置く理由:
-                    //   DrawAll が回している最中に呼ぶと、DynamicProperties() が
-                    //   返した配列を型が作り直した場合に、走査中のコンテナが
-                    //   入れ替わる。ここは「どの入力欄も掴まれていないフレーム」なので、
-                    //   走査はすべて終わっている。
-                    //
-                    //   Drag 中は毎フレーム呼ばれない。掴んでいる間は
-                    //   IsAnyItemActive() が true のままで、この分岐へ来ない。
-                    //
-                    //   Script では、これによって Script Asset を選び替えた直後に
-                    //   Field の顔ぶれが入れ替わる。
-                    component.OnPropertyChanged(nullptr);
-                    context.CommitEdit();
-                }
-                else
-                {
-                    context.CancelEdit();
-                }
-            }
+            FinishPropertyEdit(context);
         }
         else
         {

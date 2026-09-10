@@ -419,12 +419,19 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             std::string& error)
         {
             std::vector<ScriptFieldDefinition> fields;
+            bool instantiate_when_inactive = false;
             std::istringstream stream(text);
             std::string line;
             while (std::getline(stream, line))
             {
                 if (line.empty()) continue;
                 const std::vector<std::string> parts = Split(line, '\t');
+                if (parts.size() >= 3 && parts[0] == "TYPE" &&
+                    parts[1] == "AUTHORING_MONO")
+                {
+                    instantiate_when_inactive = parts[2] == "1";
+                    continue;
+                }
                 if (parts.size() < 6 || parts[0] != "FIELD") continue;
 
                 ScriptValueType type = Reflection::PropertyType::Float;
@@ -487,7 +494,7 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
             std::vector<std::string> rejected;
             out_schema = ScriptFieldSchema::Build(type_id, revision,
-                std::move(fields), &rejected);
+                std::move(fields), &rejected, instantiate_when_inactive);
             if (!rejected.empty())
             {
                 error = rejected.front();

@@ -1,4 +1,4 @@
-﻿#include "AINavigationDebugDraw.h"
+#include "AINavigationDebugDraw.h"
 
 #include "../../Components/Gameplay/EnemyBehaviourComponent.h"
 #include "../../Components/Navigation/NavAgentComponent.h"
@@ -293,9 +293,18 @@ namespace ReplayEngine::Editor
     }
 
     void AINavigationDebugDraw::Build(const Scene::Scene& scene,
-        Core::ObjectID selected_object, AINavigationDebugFrame& out)
+        Core::ObjectID selected_object, AINavigationDebugFrame& out, bool all_objects)
     {
         out.Clear();
+        if (!all_objects)
+        {
+            const auto* object = scene.FindGameObjectByID(selected_object);
+            if (object && !object->PendingDestroy() && object->ActiveInHierarchy())
+                if (const auto* enemy = object->GetComponent<Components::EnemyBehaviourComponent>();
+                    enemy && enemy->ActiveInHierarchy() && enemy->debug_draw)
+                    AppendEnemy(scene, *object, *enemy, true, out);
+            return;
+        }
         for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
         {
             Core::GameObject* object = scene.GameObjectAt(index);

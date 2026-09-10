@@ -13,6 +13,7 @@
 #include <memory>
 #include <sstream>
 #include <system_error>
+#include "ShaderPack.h"
 
 namespace ReplayEngine::Rendering
 {
@@ -50,6 +51,12 @@ namespace ReplayEngine::Rendering
     ShaderLibrary::ScanReport ShaderLibrary::ScanAll(
         const std::filesystem::path& project_root)
     {
+        if (ShaderPack::IsStandalone())
+        {
+            std::string error;
+            if (!LoadPack(error)) Log("Error", error);
+            return last_report_;
+        }
         ++generation_;
         catalog_.Clear();
         ScanReport report;
@@ -62,6 +69,11 @@ namespace ReplayEngine::Rendering
             std::error_code error;
             if (!std::filesystem::exists(folder, error) || error)
             {
+                if (error && ShaderPack::IsRecordingExport())
+                {
+                    ++report.failed;
+                    Log("Error", "Cannot scan export shaders: " + error.message(), folder);
+                }
                 // フォルダが無いのは異常ではない。
                 // まだ 1 枚も置いていないだけ。黙って飛ばす。
                 error.clear();
@@ -69,7 +81,8 @@ namespace ReplayEngine::Rendering
             }
 
             std::filesystem::recursive_directory_iterator iterator(folder,
-                std::filesystem::directory_options::skip_permission_denied, error);
+                ShaderPack::IsRecordingExport() ? std::filesystem::directory_options::none
+                    : std::filesystem::directory_options::skip_permission_denied, error);
             if (error)
             {
                 ++report.failed;
@@ -81,7 +94,13 @@ namespace ReplayEngine::Rendering
             for (const std::filesystem::directory_entry& entry : iterator)
             {
                 std::error_code entry_error;
-                if (!entry.is_regular_file(entry_error) || entry_error) continue;
+                const bool regular_file = entry.is_regular_file(entry_error);
+                if (entry_error && ShaderPack::IsRecordingExport())
+                {
+                    ++report.failed;
+                    Log("Error", "Cannot inspect export shader: " + entry_error.message(), entry.path());
+                }
+                if (!regular_file || entry_error) continue;
 
                 std::string extension = entry.path().extension().u8string();
                 std::transform(extension.begin(), extension.end(), extension.begin(),
@@ -266,6 +285,7 @@ namespace ReplayEngine::Rendering
 
     bool ShaderLibrary::CompileEntry(ShaderCatalog::Entry& entry, bool debug_build)
     {
+        if (ShaderPack::IsStandalone()) return entry.AllCompiled();
         bool all_ok = true;
         for (int index = 0; index < shader_variant_count; ++index)
         {
@@ -472,6 +492,7 @@ namespace ReplayEngine::Rendering
 
     std::size_t ShaderLibrary::PollSourceChanges(bool debug_build)
     {
+        if (ShaderPack::IsStandalone()) return 0;
         std::size_t recompiled = 0;
 
         for (ShaderCatalog::Entry& entry : catalog_.AllMutable())
@@ -597,5 +618,20 @@ namespace ReplayEngine::Rendering
             last_report_.compile_failed = ng;
         }
         return recompiled;
+    }
+
+    bool ShaderLibrary::LoadPack(std::string& error)
+    {
+        if (!ShaderPack::RestoreCatalog(catalog_, error))
+        {
+            last_report_ = {};
+            last_report_.failed = 1;
+            return false;
+        }
+        ++generation_;
+        last_report_ = {};
+        last_report_.registered = catalog_.Count();
+        last_report_.compiled = catalog_.Count();
+        return true;
     }
 }

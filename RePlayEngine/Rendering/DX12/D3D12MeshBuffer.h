@@ -24,6 +24,9 @@ namespace ReplayEngine::Rendering::DX12
             std::uint32_t vertex_stride, const void* indices,
             std::uint32_t index_size, DXGI_FORMAT index_format) noexcept;
         void Reset() noexcept;
+        bool UploadVerticesSharingIndices(ID3D12Device* device, D3D12UploadContext& uploader,
+            const D3D12MeshBuffer& previous, const void* vertices,
+            std::uint32_t vertex_size, std::uint32_t vertex_stride) noexcept;
         void SetDebugName(std::string_view key) noexcept;
 
         bool IsValid() const noexcept

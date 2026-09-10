@@ -74,12 +74,13 @@ namespace ReplayEngine::Rendering::DX12
 
         bool IsInitialized() const noexcept
         {
-            return library_ != nullptr && utils_ != nullptr && compiler_ != nullptr;
+            return cache_only_ || (library_ != nullptr && utils_ != nullptr && compiler_ != nullptr);
         }
 
         static std::filesystem::path FindDefaultLibraryPath();
 
     private:
+        bool cache_only_ = false;
         HMODULE library_ = nullptr;
         DxcCreateInstanceProc create_instance_ = nullptr;
         Microsoft::WRL::ComPtr<IDxcUtils> utils_;

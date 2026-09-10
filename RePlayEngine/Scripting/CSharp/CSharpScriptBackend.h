@@ -46,6 +46,9 @@ namespace ReplayEngine::Scripting::CSharp
 
         std::size_t LiveInstanceCount() const noexcept override;
 
+        // 物理と Event の配送が終わった同期点で Managed 側の配送を回す。
+        void PumpScriptEvents() override;
+
         const std::string& LastErrorMessage() const noexcept override { return last_error_; }
         const std::string& LastErrorFile() const noexcept override { return last_error_file_; }
         int LastErrorLine() const noexcept override { return last_error_line_; }
@@ -54,6 +57,23 @@ namespace ReplayEngine::Scripting::CSharp
         bool ReloadLastBuiltAssembly();
         const CSharpBuildResult& LastBuildResult() const noexcept { return last_build_; }
         bool AssemblyLoaded() const noexcept { return assembly_loaded_; }
+        bool ValidateExportAssemblies(std::string& configuration, std::string& error) const;
+        const ScriptTypeCatalog& PackagedCatalog() const noexcept { return packaged_catalog_; }
+
+        // 起動時に C# を用意できなかった理由。空なら問題なく用意できた。
+        // Initialize() は Editor を止めないため戻り値だけでは理由が残らない。
+        // 呼び出し側がログへ出せるよう、ここに保持する。
+        const std::string& StartupDiagnostic() const noexcept
+        {
+            return startup_diagnostic_;
+        }
+
+        // 起動時のビルドに失敗し、ディスクに残っていた前回の Assembly で
+        // 復旧したか。true のときスクリプトは動くがソースより古い。
+        bool StartupUsedExistingAssembly() const noexcept
+        {
+            return startup_used_existing_assembly_;
+        }
 
     private:
         struct TypeState final
@@ -66,6 +86,7 @@ namespace ReplayEngine::Scripting::CSharp
         bool LoadManagedApi();
         bool ResolveManagedEntryPoints();
         bool SetNativeApi();
+        bool RecordStartupFailure();
         std::filesystem::path ShadowCopyAssembly(
             const std::filesystem::path& assembly_path, std::string& error) const;
         bool LoadGameAssembly(const std::filesystem::path& assembly_path,
@@ -94,18 +115,26 @@ namespace ReplayEngine::Scripting::CSharp
         void* get_field_ = nullptr;
         void* set_time_ = nullptr;
         void* live_instance_count_ = nullptr;
+        void* pump_events_ = nullptr;
         void* last_error_function_ = nullptr;
 
         std::unordered_map<ScriptTypeID, TypeState> type_states_;
         std::unordered_map<ScriptInstanceHandle, ScriptTypeID> instance_types_;
 
         CSharpBuildResult last_build_;
+        ScriptTypeCatalog packaged_catalog_;
+        std::string packaged_configuration_;
+        std::filesystem::path loaded_game_assembly_;
+        std::string loaded_game_fingerprint_;
+        std::string loaded_api_fingerprint_;
         mutable std::string last_error_;
         mutable std::string last_error_file_;
         mutable int last_error_line_ = 0;
+        std::string startup_diagnostic_;
 
         bool initialized_ = false;
         bool assembly_loaded_ = false;
         bool packaged_mode_ = false;
+        bool startup_used_existing_assembly_ = false;
     };
 }

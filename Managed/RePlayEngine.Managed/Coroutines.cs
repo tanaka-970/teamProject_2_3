@@ -168,6 +168,20 @@ internal sealed class CoroutineRunner
         return coroutine;
     }
 
+    // 新 MonoBehaviour の StartCoroutine / IEnumerator Start() 用。呼び出した時点で
+    // 最初の yield まで実行し、yield 後だけを通常のフレーム Pump へ残す。
+    // Legacy ScriptBehaviour は既存タイミングを守るため Start() を使う。
+    public Coroutine StartPrimed(IEnumerator body)
+    {
+        var coroutine = new Coroutine(body);
+        // MoveNext 中に StopAllCoroutines() が呼ばれても、この coroutine 自身を
+        // 正しく Cancel 対象に含めるため、最初の Step より先に一覧へ載せる。
+        coroutines.Add(coroutine);
+        Step(coroutine, 0.0f);
+        if (coroutine.Finished) coroutines.Remove(coroutine);
+        return coroutine;
+    }
+
     public Timer AddTimer(Timer timer)
     {
         timers.Add(timer);
@@ -179,6 +193,14 @@ internal sealed class CoroutineRunner
         tweens.Add(tween);
         return tween;
     }
+
+    // 進めるものが 1 つでもあるか。
+    //
+    // フレーム末尾の Pump は、これが false の Behaviour には
+    // Active 判定すら聞きに行かない。Coroutine を使っていないスクリプトへ
+    // 毎フレームの Native 問い合わせを増やさないため。
+    public bool HasPending => coroutines.Count != 0 || timers.Count != 0 ||
+        tweens.Count != 0;
 
     public void CancelAll()
     {

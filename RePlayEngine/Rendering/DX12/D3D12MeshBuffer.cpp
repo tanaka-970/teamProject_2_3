@@ -1,4 +1,4 @@
-﻿#include "D3D12MeshBuffer.h"
+#include "D3D12MeshBuffer.h"
 #include "D3D12ObjectName.h"
 
 namespace ReplayEngine::Rendering::DX12
@@ -27,6 +27,19 @@ namespace ReplayEngine::Rendering::DX12
             return false;
         }
         index_count_ = index_size / index_stride;
+        return true;
+    }
+
+    bool D3D12MeshBuffer::UploadVerticesSharingIndices(ID3D12Device* device,
+        D3D12UploadContext& uploader, const D3D12MeshBuffer& previous,
+        const void* vertices, std::uint32_t vertex_size, std::uint32_t vertex_stride) noexcept
+    {
+        if (!previous.IsValid() || vertex_size != previous.vertex_view_.SizeInBytes) return false;
+        if (!D3D12ResourceFactory::CreateVertexBuffer(device, uploader, vertices,
+            vertex_size, vertex_stride, vertex_buffer_, vertex_view_)) return false;
+        index_buffer_ = previous.index_buffer_;
+        index_view_ = previous.index_view_;
+        index_count_ = previous.index_count_;
         return true;
     }
 

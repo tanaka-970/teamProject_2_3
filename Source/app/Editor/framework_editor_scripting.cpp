@@ -169,6 +169,7 @@ bool framework::rebuild_all_csharp()
 
 bool framework::refresh_csharp_scripts()
 {
+    if (standalone_game_mode) return false;
     namespace CSharp = ReplayEngine::Scripting::CSharp;
     namespace Scripting = ReplayEngine::Scripting;
 

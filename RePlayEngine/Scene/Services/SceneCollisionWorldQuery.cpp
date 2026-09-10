@@ -152,11 +152,8 @@ namespace ReplayEngine::Scene
         {
             const auto& landscape =
                 static_cast<const Components::LandscapeColliderComponent&>(collider);
-            if (!landscape.ReadyForQuery() || landscape.Cooked() == nullptr) return false;
+            if (!landscape.ReadyForQuery()) return false;
 
-            // Landscape も任意 topology になったので、8k/数万 triangle を毎 query
-            // 総当たりしない。MeshCollider と同じ local-space XZ grid で候補を絞る。
-            const auto& cooked = landscape.Cooked();
             const XMMATRIX inverse = XMLoadFloat4x4(&landscape.InverseWorldMatrix());
             XMFLOAT3 local_start{};
             XMFLOAT3 local_end{};
@@ -173,15 +170,35 @@ namespace ReplayEngine::Scene
                 (std::max)(local_start.y, local_end.y) + local_radius,
                 (std::max)(local_start.z, local_end.z) + local_radius };
 
-            cooked->CollectTriangles(local_min, local_max, scratch_indices_);
-            if (scratch_indices_.empty()) return false;
             scratch_triangles_.clear();
-            scratch_triangles_.reserve(scratch_indices_.size());
-            const Physics::Triangle* source = cooked->Triangles();
-            for (const std::uint32_t triangle_index : scratch_indices_)
+            bool face_order_available = true;
+            for (const auto& chunk : landscape.CookedChunks())
             {
-                scratch_triangles_.push_back(source[triangle_index]);
+                const auto& cooked = chunk.cooked;
+                if (cooked == nullptr || !cooked->Valid() ||
+                    !Physics::BoundsOverlap(local_min, local_max,
+                        cooked->LocalBoundsMin(), cooked->LocalBoundsMax())) continue;
+                cooked->CollectTriangles(local_min, local_max, scratch_indices_);
+                const Physics::Triangle* source = cooked->Triangles();
+                const bool face_map_valid =
+                    chunk.face_indices.size() == cooked->TriangleCount();
+                face_order_available = face_order_available && face_map_valid;
+                for (const std::uint32_t triangle_index : scratch_indices_)
+                {
+                    Physics::Triangle triangle = source[triangle_index];
+                    if (face_map_valid)
+                        triangle.material_index = static_cast<int>(chunk.face_indices[triangle_index]);
+                    scratch_triangles_.push_back(triangle);
+                }
             }
+            if (scratch_triangles_.empty()) return false;
+            if (face_order_available)
+            {
+                std::sort(scratch_triangles_.begin(), scratch_triangles_.end(),
+                    [](const Physics::Triangle& left, const Physics::Triangle& right)
+                    { return left.material_index < right.material_index; });
+            }
+            for (Physics::Triangle& triangle : scratch_triangles_) triangle.material_index = 0;
 
             return SweepLocalTriangles(landscape.WorldMatrix(), landscape.InverseWorldMatrix(),
                 landscape.NegativeScale(), landscape.LocalRadiusScale(),

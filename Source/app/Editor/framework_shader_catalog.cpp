@@ -12,8 +12,16 @@
 
 void framework::scan_shader_library()
 {
-    // standalone でも走査する。Catalog は Material Asset のシェーダ解決に使われるため、
-    // 飛ばすと書き出したゲームで Material が Unlit/Magenta へ落ちる。
+    if (standalone_game_mode)
+    {
+        std::string error;
+        if (!shader_library.LoadPack(error))
+        {
+            push_editor_log("Error", error);
+            set_runtime_blocked(error);
+        }
+        return;
+    }
 
     // ログをエディタの Console と Saved/Diagnostics へ流す。
     //

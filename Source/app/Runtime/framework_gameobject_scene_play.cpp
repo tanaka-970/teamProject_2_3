@@ -50,6 +50,43 @@ namespace
     constexpr float editor_play_loading_minimum_seconds = 0.5f;
 }
 
+// Play を始める前に、C# の Assembly をソースへ追いつかせる。
+//
+// 変更検出は poll_csharp_script_changes() が 1 秒ごとに回し、さらに
+// 「変化が落ち着いた次の回」まで再コンパイルを待つ。保存してすぐ F5 を押すと
+// その待ちの途中で Play が始まり、古い Assembly のまま実行用 World ができる。
+// 画面は出るのに直したはずの挙動が変わらず、原因が追えなくなる。
+// 起動時のビルド失敗で Assembly が 1 つも無い場合もここで拾い直す。
+void framework::ensure_csharp_ready_for_play()
+{
+    namespace CSharp = ReplayEngine::Scripting::CSharp;
+    namespace Scripting = ReplayEngine::Scripting;
+
+    // 書き出したゲームに dotnet は無い。ビルドは Editor だけの機能。
+    if (standalone_game_mode || !object_script_runtime) return;
+
+    auto* backend = dynamic_cast<CSharp::CSharpScriptBackend*>(
+        object_script_runtime->Backend(Scripting::ScriptLanguage::CSharp));
+    if (backend == nullptr) return;
+
+    // ファイル時刻を直接見る。巡回の周期に Play の正しさを依存させない。
+    const bool assembly_missing = !backend->AssemblyLoaded();
+    const bool sources_are_newer =
+        CSharp::CSharpProject::GameScriptsBuildRequired(content_root_path());
+    if (!assembly_missing && !sources_are_newer) return;
+
+    push_editor_log("Info", assembly_missing
+        ? "C# Assembly が無いため、Play の前にビルドします"
+        : "C# のソースが Assembly より新しいため、Play の前にビルドします");
+
+    if (build_and_reload_csharp_scripts()) return;
+
+    // 失敗しても Play は止めない。直前に成功した Assembly が残っていれば動く。
+    // 何も無ければ、この直後の Play 診断が「Assembly ロード: 未」を出す。
+    push_editor_log("Error",
+        "Play 前の C# ビルドに失敗しました。C# の変更は反映されていません");
+}
+
 void framework::enter_object_play_mode(bool show_loading_screen)
 {
     // 呼ばれたこと自体を必ず残す。
@@ -75,6 +112,21 @@ void framework::enter_object_play_mode(bool show_loading_screen)
     // Scene が生ポインタで結ばれておりコピー不可なため。
     // これにより Play 中の変更が編集 Scene へ戻らないことが構造的に保証される。
     initialize_runtime_services();
+
+    // 実行用 Scene を複製する前に C# を最新にする。
+    ensure_csharp_ready_for_play();
+
+    // Play がメモリから複製するのは、いま開いているシーン 1 枚だけ。
+    // SceneFlow の遷移先は RuntimeSceneService がアセットのファイルから読むため、
+    // 保存していない編集は遷移した先の画面には現れない。
+    // 黙って古いファイルが使われると「直したのに実行すると以前のまま」になる。
+    if (!standalone_game_mode && object_editor_context.Dirty() &&
+        !project_settings.SceneFlowGuid().empty())
+    {
+        push_editor_log("Warning",
+            "未保存の編集があります。SceneFlow の遷移先は保存済みのファイルから"
+            "読み込むため、遷移した先の画面には反映されません");
+    }
 
     // 編集 Scene の内容を RuntimeSceneService へ渡す。
     //

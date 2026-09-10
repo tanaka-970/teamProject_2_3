@@ -1,4 +1,4 @@
-﻿#include "MaterialAsset.h"
+#include "MaterialAsset.h"
 #include "../RenderStats.h"
 #include "MaterialAssetInternal.h"
 #include "../Shaders/BuiltInShaders.h"
@@ -354,6 +354,7 @@ namespace ReplayEngine::Rendering
             return false;
         }
         material = std::move(loaded);
+        PublishShadingMetadata(path, material.shading_model);
         return true;
     }
 }

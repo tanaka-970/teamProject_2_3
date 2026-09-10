@@ -1,10 +1,12 @@
-﻿#pragma once
+#pragma once
 
 #include <d3d12.h>
 #include <wrl.h>
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <vector>
 
 namespace ReplayEngine::Rendering::DX12
 {
@@ -56,6 +58,12 @@ namespace ReplayEngine::Rendering::DX12
     {
         Microsoft::WRL::ComPtr<ID3D12CommandAllocator> command_allocator;
         D3D12LinearUploadAllocator upload_allocator;
+        // Overflow pages remain alive until this frame's GPU fence completes.
+        std::vector<std::unique_ptr<D3D12LinearUploadAllocator>> imgui_upload_pages;
+        D3D12LinearUploadAllocator* ImGuiUploadAllocator(ID3D12Device* device,
+            std::uint64_t required) noexcept;
+        std::uint64_t TotalUploadUsed() const noexcept;
+        std::uint64_t TotalUploadCapacity() const noexcept;
         std::uint64_t fence_value = 0;
         D3D12_GPU_VIRTUAL_ADDRESS frame_constants_gpu = 0;
 

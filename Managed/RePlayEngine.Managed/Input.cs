@@ -98,7 +98,7 @@ public enum GamepadAxis
 // Action / Axis で足りるなら ScriptRuntimeContext の InputHeld / InputAxis を使うこと。
 // ここはキーコンフィグ画面や一時的な入力のための窓口。
 // Editor がキーボード/マウスを掴んでいる間は false / 0 を返す。
-public static class Input
+public static partial class Input
 {
     public static RuntimeResult<bool> GetAction(InputActionId action, int playerSlot = 0)
         => action.IsValid ? NativeBridge.InputHeld(action.Name, playerSlot)

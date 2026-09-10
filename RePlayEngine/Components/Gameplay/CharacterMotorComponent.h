@@ -72,13 +72,25 @@ namespace ReplayEngine::Components
 
         // JumpPad など汎用 Gameplay Component から速度を加える。
         // Player 型や入力系には依存せず、次の FixedUpdate で通常の衝突解決を通る。
-        void ApplyImpulse(const DirectX::XMFLOAT3& impulse) noexcept
+        // hold_seconds のあいだ、水平の加速・減速・上限を止める。
+        //
+        // 【なぜ必要か】
+        //   水平速度は毎回 move_speed へ丸められる。撃力だけ足しても
+        //   次の更新でその上限まで削られ、まったく飛ばない。
+        //   ふっとばしのように「しばらく勢いを保ちたい」ときはここへ秒数を渡す。
+        //   0 のままなら今までどおり、次の更新から通常の制御へ戻る。
+        void ApplyImpulse(const DirectX::XMFLOAT3& impulse,
+            float hold_seconds = 0.0f) noexcept
         {
             velocity_.x += impulse.x;
             velocity_.y += impulse.y;
             velocity_.z += impulse.z;
             grounded_ = false;
+            if (hold_seconds > impulse_hold_) impulse_hold_ = hold_seconds;
         }
+
+        // 勢いを保っている残り秒数。0 なら通常の制御。
+        float ImpulseHold() const noexcept { return impulse_hold_; }
 
         // ---- 公開状態（Animator などが読む）--------------------------------
 
@@ -160,6 +172,15 @@ namespace ReplayEngine::Components
         // 地形が無い場合に床とみなす高さ。旧 Player の ground_y に相当。
         float fallback_ground_y = 0.0f;
 
+        // 奥行きを固定する。横スクロールの対戦・アクション用。
+        //
+        // 【なぜ Component 側で持つか】
+        //   Script から毎フレーム Teleport で引き戻すと、速度が残ったまま
+        //   位置だけ戻るので震える。速度ごとここで消すのが素直。
+        //   既定は false なので、既存の Scene の挙動は変わらない。
+        bool lock_plane_z = false;
+        float plane_z = 0.0f;
+
         // 登れる段差の高さ。接地判定はこの高さだけ上から真下へ球を落として探す。
         //
         // 【なぜ必要か】
@@ -224,6 +245,9 @@ namespace ReplayEngine::Components
 
         // 実行時のみの状態。保存しない。
         DirectX::XMFLOAT3 velocity_{ 0.0f, 0.0f, 0.0f };
+
+        // ApplyImpulse で与えた勢いを保つ残り秒数。
+        float impulse_hold_ = 0.0f;
         DirectX::XMFLOAT3 ground_normal_{ 0.0f, 1.0f, 0.0f };
         DirectX::XMFLOAT3 pending_move_{ 0.0f, 0.0f, 0.0f };
         float pending_speed_multiplier_ = 1.0f;

@@ -1,4 +1,4 @@
-﻿#include "D3D12FrameResource.h"
+#include "D3D12FrameResource.h"
 #include "D3D12ObjectName.h"
 
 #include <limits>
@@ -107,14 +107,52 @@ namespace ReplayEngine::Rendering::DX12
         return true;
     }
 
+    D3D12LinearUploadAllocator* D3D12FrameResource::ImGuiUploadAllocator(
+        ID3D12Device* device, std::uint64_t required) noexcept
+    {
+        if (required <= upload_allocator.Capacity()-upload_allocator.Used())
+            return &upload_allocator;
+        for (auto& page : imgui_upload_pages)
+            if (required <= page->Capacity()-page->Used()) return page.get();
+        try
+        {
+            auto page = std::make_unique<D3D12LinearUploadAllocator>();
+            std::uint64_t capacity = 1024*1024;
+            while (capacity < required)
+            {
+                if (capacity > (std::numeric_limits<std::uint64_t>::max)()/2) return nullptr;
+                capacity *= 2;
+            }
+            if (!page->Initialize(device,capacity)) return nullptr;
+            imgui_upload_pages.push_back(std::move(page));
+            return imgui_upload_pages.back().get();
+        }
+        catch (...) { return nullptr; }
+    }
+
+    std::uint64_t D3D12FrameResource::TotalUploadUsed() const noexcept
+    {
+        std::uint64_t total = upload_allocator.Used();
+        for (const auto& page : imgui_upload_pages) total += page->Used();
+        return total;
+    }
+    std::uint64_t D3D12FrameResource::TotalUploadCapacity() const noexcept
+    {
+        std::uint64_t total = upload_allocator.Capacity();
+        for (const auto& page : imgui_upload_pages) total += page->Capacity();
+        return total;
+    }
+
     void D3D12FrameResource::ResetAfterGpu() noexcept
     {
         upload_allocator.Reset();
+        for (auto& page : imgui_upload_pages) page->Reset();
         frame_constants_gpu = 0;
     }
 
     void D3D12FrameResource::Shutdown() noexcept
     {
+        imgui_upload_pages.clear();
         upload_allocator.Shutdown();
         command_allocator.Reset();
         fence_value = 0;

@@ -56,6 +56,19 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 : RuntimeStatus::Ok);
         }
 
+        int NativeFindActiveGameObjectByName(const char* name,
+            Runtime::ObjectHandle* out) noexcept
+        {
+            if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            *out = Runtime::ObjectHandle::None();
+            if (name == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+
+            *out = g_runtime_context->FindActiveByName(CString(name));
+            return StatusCode(out->IsEmpty() ? RuntimeStatus::InvalidHandle
+                : RuntimeStatus::Ok);
+        }
+
         int NativeIsGameObjectValid(Runtime::ObjectHandle handle) noexcept
         {
             if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());

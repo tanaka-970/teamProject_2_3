@@ -6,27 +6,95 @@
 #include <cfloat>
 #include <cmath>
 #include <cstring>
+#include <utility>
 
 using namespace DirectX;
 
 namespace ReplayEngine::Components
 {
+    void LandscapeColliderComponent::RebuildLegacyTriangles() const
+    {
+        if (!legacy_triangles_dirty_) return;
+        triangles_.clear();
+        std::size_t triangle_count = 0;
+        bool face_order_available = true;
+        for (const CookedChunk& chunk : cooked_chunks_)
+        {
+            if (chunk.cooked == nullptr) continue;
+            triangle_count += chunk.cooked->TriangleCount();
+            face_order_available = face_order_available &&
+                chunk.face_indices.size() == chunk.cooked->TriangleCount();
+        }
+        if (face_order_available) triangles_.resize(triangle_count);
+        else triangles_.reserve(triangle_count);
+        for (const CookedChunk& chunk : cooked_chunks_)
+        {
+            if (chunk.cooked == nullptr || !chunk.cooked->Valid()) continue;
+            const Physics::Triangle* source = chunk.cooked->Triangles();
+            if (!face_order_available)
+            {
+                triangles_.insert(triangles_.end(), source,
+                    source + chunk.cooked->TriangleCount());
+                continue;
+            }
+            for (std::size_t i = 0; i < chunk.cooked->TriangleCount(); ++i)
+                if (chunk.face_indices[i] < triangles_.size())
+                    triangles_[chunk.face_indices[i]] = source[i];
+        }
+        legacy_triangles_dirty_ = false;
+    }
+
+    const std::vector<Physics::Triangle>& LandscapeColliderComponent::Triangles() const
+    {
+        RebuildLegacyTriangles();
+        return triangles_;
+    }
+
+    const std::shared_ptr<const Physics::CookedMeshCollisionData>&
+        LandscapeColliderComponent::Cooked() const
+    {
+        if (!legacy_cooked_dirty_) return cooked_;
+        RebuildLegacyTriangles();
+        if (triangles_.empty())
+        {
+            cooked_.reset();
+        }
+        else
+        {
+            Physics::CookKey key;
+            key.asset_guid = "runtime-landscape-legacy";
+            key.content_revision = std::to_string(geometry_revision_);
+            key.settings.cell_size = cooked_cell_size_;
+            key.settings.double_sided = cooked_double_sided_;
+            key.settings.sub_mesh_index = -1;
+            cooked_ = Physics::CookedMeshCollisionData::Build(key, triangles_);
+        }
+        legacy_cooked_dirty_ = false;
+        return cooked_;
+    }
+
     bool LandscapeColliderComponent::RefreshGeometryIfChanged()
     {
+        last_recooked_chunk_count_ = 0;
+        last_recooked_triangle_count_ = 0;
         const Core::GameObject* owner = Owner();
         if (owner == nullptr)
         {
             status_ = "Owner GameObject がありません。";
+            cooked_chunks_.clear();
             triangles_.clear();
             cooked_.reset();
+            cooked_chunk_count_ = 0;
             return false;
         }
         const auto* landscape = owner->GetComponent<LandscapeComponent>();
         if (landscape == nullptr || !landscape->Data().Valid())
         {
             status_ = "Landscape Component が無いか、geometry が無効です。";
+            cooked_chunks_.clear();
             triangles_.clear();
             cooked_.reset();
+            cooked_chunk_count_ = 0;
             return false;
         }
 
@@ -34,45 +102,85 @@ namespace ReplayEngine::Components
         const auto& data = landscape->Data();
         const float requested_cell_size = (std::max)(0.05f, collision_cell_size);
         const bool geometry_changed = geometry_revision_ != data.Revision();
-        const bool cook_settings_changed = cooked_ == nullptr ||
+        const bool cook_settings_changed = cooked_cell_size_ <= 0.0f ||
             cooked_double_sided_ != double_sided ||
             std::fabs(cooked_cell_size_ - requested_cell_size) > 1.0e-6f;
-        // Sculpt のドラッグ中に毎フレーム 8k+ triangles を再Cookしない。
-        // 既存 cooked geometry はそのまま問い合わせ可能で、終了後の最初の Refresh で
-        // 最新 revision へ一度だけ追いつく。
-        if ((geometry_changed || cook_settings_changed) && !interactive_edit_active_)
+        const auto& source_chunks = data.Chunks();
+        bool chunk_layout_changed = cooked_chunks_.size() != source_chunks.size();
+        if (!chunk_layout_changed)
         {
-            if (geometry_changed)
+            for (std::size_t i = 0; i < source_chunks.size(); ++i)
             {
-                triangles_.clear();
-                triangles_.reserve(data.FaceCount());
-                const auto& vertices = data.Vertices();
-                const auto& indices = data.Indices();
-                for (std::size_t i = 0; i + 2 < indices.size(); i += 3)
+                if (!(cooked_chunks_[i].coord == source_chunks[i].coord))
+                {
+                    chunk_layout_changed = true;
+                    break;
+                }
+            }
+        }
+
+        // ドラッグ終了後に revision が変わったチャンクだけを一度 cook する。
+        if ((geometry_changed || cook_settings_changed || chunk_layout_changed) &&
+            !interactive_edit_active_)
+        {
+            if (chunk_layout_changed)
+                cooked_chunks_.assign(source_chunks.size(), CookedChunk{});
+
+            const auto& vertices = data.Vertices();
+            for (std::size_t chunk_index = 0; chunk_index < source_chunks.size(); ++chunk_index)
+            {
+                const auto& source_chunk = source_chunks[chunk_index];
+                CookedChunk& target_chunk = cooked_chunks_[chunk_index];
+                if (!(target_chunk.coord == source_chunk.coord))
+                {
+                    target_chunk = {};
+                    target_chunk.coord = source_chunk.coord;
+                }
+                const bool chunk_changed = cook_settings_changed ||
+                    target_chunk.source_revision != source_chunk.revision ||
+                    target_chunk.cooked == nullptr;
+                if (!chunk_changed) continue;
+
+                std::vector<Physics::Triangle> chunk_triangles;
+                chunk_triangles.reserve(source_chunk.indices.size() / 3u);
+                for (std::size_t i = 0; i + 2 < source_chunk.indices.size(); i += 3)
                 {
                     Physics::Triangle triangle{};
-                    triangle.vertices[0] = vertices[indices[i]].position;
-                    triangle.vertices[1] = vertices[indices[i + 1]].position;
-                    triangle.vertices[2] = vertices[indices[i + 2]].position;
+                    triangle.vertices[0] = vertices[source_chunk.indices[i]].position;
+                    triangle.vertices[1] = vertices[source_chunk.indices[i + 1]].position;
+                    triangle.vertices[2] = vertices[source_chunk.indices[i + 2]].position;
                     triangle.material_index = 0;
-                    triangles_.push_back(triangle);
+                    chunk_triangles.push_back(triangle);
                 }
-                geometry_revision_ = data.Revision();
+
+                Physics::CookKey key;
+                key.asset_guid = "runtime-landscape:" + std::to_string(source_chunk.coord.x) +
+                    ":" + std::to_string(source_chunk.coord.z);
+                key.content_revision = std::to_string(source_chunk.revision);
+                key.settings.cell_size = requested_cell_size;
+                key.settings.double_sided = double_sided;
+                key.settings.sub_mesh_index = -1;
+                target_chunk.cooked = Physics::CookedMeshCollisionData::Build(
+                    std::move(key), std::move(chunk_triangles));
+                target_chunk.source_revision = source_chunk.revision;
+                target_chunk.face_indices = data.ChunkFaceIndices(chunk_index);
+                ++last_recooked_chunk_count_;
+                last_recooked_triangle_count_ += source_chunk.indices.size() / 3u;
             }
 
-            // MeshCollider と同じ XZ spatial grid を Landscape にも利用する。
-            // AssetGUID cache は使わない。Sculpt/Topology edit の revision が変わった
-            // ときだけ、この Component が local triangles から cook し直す。
-            Physics::CookKey key;
-            key.asset_guid = "runtime-landscape";
-            key.content_revision = std::to_string(data.Revision());
-            key.settings.cell_size = requested_cell_size;
-            key.settings.double_sided = double_sided;
-            key.settings.sub_mesh_index = -1;
-            cooked_ = Physics::CookedMeshCollisionData::Build(key, triangles_);
+            geometry_revision_ = data.Revision();
             cooked_double_sided_ = double_sided;
             cooked_cell_size_ = requested_cell_size;
-            changed = true;
+            cooked_chunk_count_ = 0;
+            for (const CookedChunk& chunk : cooked_chunks_)
+                if (chunk.cooked != nullptr && chunk.cooked->Valid()) ++cooked_chunk_count_;
+            if (last_recooked_chunk_count_ != 0 || chunk_layout_changed)
+            {
+                legacy_triangles_dirty_ = true;
+                legacy_cooked_dirty_ = true;
+                cooked_.reset();
+                changed = true;
+            }
         }
 
         XMFLOAT4X4 current_world = owner->GetTransform().WorldMatrixFloat4x4();
@@ -125,7 +233,7 @@ namespace ReplayEngine::Components
     bool LandscapeColliderComponent::ComputeWorldBounds(XMFLOAT3& minimum,
         XMFLOAT3& maximum) const
     {
-        if (triangles_.empty() || !transform_valid_) return false;
+        if (cooked_chunk_count_ == 0 || !transform_valid_) return false;
         minimum = world_bounds_min_;
         maximum = world_bounds_max_;
         return true;
