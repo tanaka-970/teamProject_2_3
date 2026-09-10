@@ -14,7 +14,7 @@ namespace ReplayEngine::Scripting
     //
     // 【追加時の約束】
     //   末尾へ足すこと。Scene ファイルへは int として書き出されるため、
-    //   途中へ挿入すると保存済みの Scene の言語が別のものへ化ける。
+    //   途中へ挿入すると保存済みの Scene の言語が別のものへ化ける。なぜかはしらん
     enum class ScriptLanguage : std::int32_t
     {
         Lua = 0,

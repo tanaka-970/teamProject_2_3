@@ -1,6 +1,6 @@
 ﻿// Editor Gizmo のうち、Scene Grid と Transform Gizmo の描画・操作だけを持つ。
 //
-//   framework_gizmo.cpp        ... Grid と Transform Gizmo（このファイル）
+//   framework_gizmo.cpp        ... Grid と Transform Gizmo、骨のポーズ（このファイル）
 //   framework_gizmo_pivot.cpp  ... Pivot 解決と Mesh Surface Snap
 
 #include "framework.h"
@@ -12,12 +12,49 @@
 #include "../../RePlayEngine/Components/Landscape/LandscapeColliderComponent.h"
 #include "../../RePlayEngine/Physics/CookedMeshCollision.h"
 
+#include "imgui/ImGuizmo.h"
+
+#include "../../RePlayEngine/Motion/RigClip.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
 
 namespace
 {
+    // ポーズ 1 本ぶんの補正行列。描画側の組み立てと同じ順序でないと差分が合わない。
+    DirectX::XMMATRIX BonePoseAdjust(const DirectX::XMFLOAT3& translation,
+        const DirectX::XMFLOAT3& rotation, const DirectX::XMFLOAT3& scale)
+    {
+        return DirectX::XMMatrixScaling(scale.x, scale.y, scale.z) *
+            DirectX::XMMatrixRotationRollPitchYaw(
+                DirectX::XMConvertToRadians(rotation.x),
+                DirectX::XMConvertToRadians(rotation.y),
+                DirectX::XMConvertToRadians(rotation.z)) *
+            DirectX::XMMatrixTranslation(translation.x, translation.y, translation.z);
+    }
+
+    // XMMatrixRotationRollPitchYaw の逆。Z→X→Y の順に組まれた行列から角度を戻す。
+    DirectX::XMFLOAT3 BoneEulerDegrees(DirectX::FXMMATRIX rotation)
+    {
+        DirectX::XMFLOAT4X4 m{};
+        DirectX::XMStoreFloat4x4(&m, rotation);
+        const float sin_pitch = std::clamp(-m.m[2][1], -1.0f, 1.0f);
+        DirectX::XMFLOAT3 euler{ std::asin(sin_pitch), 0.0f, 0.0f };
+        if (std::abs(sin_pitch) < 0.999999f)
+        {
+            euler.y = std::atan2(m.m[2][0], m.m[2][2]);
+            euler.z = std::atan2(m.m[0][1], m.m[1][1]);
+        }
+        else
+        {
+            // ジンバル。Y と Z が縮退するので Z を捨てて Y へまとめる。
+            euler.y = std::atan2(-m.m[0][2], m.m[0][0]);
+        }
+        return DirectX::XMFLOAT3{ DirectX::XMConvertToDegrees(euler.x),
+            DirectX::XMConvertToDegrees(euler.y), DirectX::XMConvertToDegrees(euler.z) };
+    }
+
     bool ProjectPoint(const DirectX::XMFLOAT3& world, DirectX::FXMMATRIX view,
         DirectX::FXMMATRIX projection, float width, float height,
         const POINT& client_origin, ImVec2& screen)
@@ -32,27 +69,6 @@ namespace
         screen = ImVec2(projected.x + static_cast<float>(client_origin.x),
             projected.y + static_cast<float>(client_origin.y));
         return true;
-    }
-
-    float DistanceToSegment(const ImVec2& point, const ImVec2& first,
-        const ImVec2& second) noexcept
-    {
-        const float dx = second.x - first.x;
-        const float dy = second.y - first.y;
-        const float length_squared = dx * dx + dy * dy;
-        if (length_squared <= 0.0001f) return 100000.0f;
-        float amount = ((point.x - first.x) * dx + (point.y - first.y) * dy) /
-            length_squared;
-        amount = (std::max)(0.0f, (std::min)(amount, 1.0f));
-        const float px = point.x - (first.x + dx * amount);
-        const float py = point.y - (first.y + dy * amount);
-        return std::sqrt(px * px + py * py);
-    }
-
-    float SnapDelta(float value, bool enabled, float step) noexcept
-    {
-        if (!enabled || step <= 0.0f) return value;
-        return std::round(value / step) * step;
     }
 
 }
@@ -100,217 +116,82 @@ void framework::draw_scene_grid_overlay()
     draw_list->PopClipRect();
 }
 
+// 選択中の GameObject のギズモ。ImGuizmo へ 1 つ渡し、返った行列の差分を選択全体へ配る。
+// 回転・拡縮の中心は Pivot。掴んでいる間と Hover 中は true を返して選択へ渡さない。
 bool framework::draw_object_transform_gizmo()
 {
     if (active_editor_view != editor_view::scene || !show_scene_view) return false;
+    // 骨のギズモが出ている間は譲る。2 つ重なるとどちらを掴んだのか分からなくなる。
+    if (!rig_selected_bone.empty() && (show_rig_debug_draw || show_motion_rig_panel))
+        return false;
 
     ReplayEngine::Scene::Scene& scene = active_object_scene();
     ReplayEngine::Core::GameObject* primary =
         object_editor_context.Selection().ResolvePrimary(scene);
     if (primary == nullptr) return false;
+    ImGuiWindow* scene_window = ImGui::FindWindowByName("Scene View");
+    if (scene_window == nullptr) return false;
 
-    POINT client_origin{ 0, 0 };
-    ClientToScreen(hwnd, &client_origin);
-    const DirectX::XMMATRIX view = viewport_view_matrix();
-    const DirectX::XMMATRIX projection = viewport_projection_matrix();
-    const ReplayEngine::Editor::GizmoOperation operation = transform_gizmo.Operation();
-    // Pivot は移動そのものには使わない。回転・拡縮の中心だけを差し替える。
-    const DirectX::XMFLOAT3 center_world = operation == ReplayEngine::Editor::GizmoOperation::Translate
-        ? primary->GetTransform().WorldPosition() : resolve_object_pivot_world(*primary, scene);
-    ImVec2 center_screen;
-    if (!ProjectPoint(center_world, view, projection, static_cast<float>(client_width),
-        static_cast<float>(client_height), client_origin, center_screen)) return object_gizmo_dragging;
+    using namespace DirectX;
+    const ReplayEngine::Editor::GizmoOperation current = transform_gizmo.Operation();
+    const ImGuizmo::OPERATION operation =
+        current == ReplayEngine::Editor::GizmoOperation::Translate ? ImGuizmo::TRANSLATE
+        : current == ReplayEngine::Editor::GizmoOperation::Rotate ? ImGuizmo::ROTATE
+        : ImGuizmo::SCALE;
 
-    DirectX::XMFLOAT3 axes[3] = {
-        { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }
-    };
-    if (gizmo_local_space)
+    // 掴んでいる間は前フレームの結果をそのまま渡す。作り直すと差分が二重に効く。
+    XMFLOAT4X4 world = object_gizmo_matrix;
+    if (!object_gizmo_dragging)
     {
-        const DirectX::XMMATRIX world = primary->GetTransform().WorldMatrix();
-        for (int axis = 0; axis < 3; ++axis)
+        // Pivot は移動そのものには使わない。回転・拡縮の中心だけを差し替える。
+        const XMFLOAT3 center = current == ReplayEngine::Editor::GizmoOperation::Translate
+            ? primary->GetTransform().WorldPosition() : resolve_object_pivot_world(*primary, scene);
+        XMMATRIX basis = XMMatrixIdentity();
+        if (gizmo_local_space)
         {
-            DirectX::XMVECTOR transformed = DirectX::XMVector3TransformNormal(
-                DirectX::XMLoadFloat3(&axes[axis]), world);
-            const float length = DirectX::XMVectorGetX(DirectX::XMVector3Length(transformed));
-            if (std::isfinite(length) && length > 0.0001f)
-                DirectX::XMStoreFloat3(&axes[axis], DirectX::XMVectorScale(transformed, 1.0f / length));
-        }
-    }
-
-    const DirectX::XMFLOAT3 eye = viewport_eye_position();
-    const float dx = center_world.x - eye.x;
-    const float dy = center_world.y - eye.y;
-    const float dz = center_world.z - eye.z;
-    const float camera_distance = std::sqrt(dx * dx + dy * dy + dz * dz);
-    const float handle_length = (std::max)(0.5f, camera_distance * 0.10f);
-
-    ImVec2 endpoints[3];
-    bool endpoint_valid[3]{};
-    float pixel_lengths[3]{};
-    for (int axis = 0; axis < 3; ++axis)
-    {
-        const DirectX::XMFLOAT3 endpoint_world{
-            center_world.x + axes[axis].x * handle_length,
-            center_world.y + axes[axis].y * handle_length,
-            center_world.z + axes[axis].z * handle_length
-        };
-        endpoint_valid[axis] = ProjectPoint(endpoint_world, view, projection,
-            static_cast<float>(client_width), static_cast<float>(client_height),
-            client_origin, endpoints[axis]);
-        if (endpoint_valid[axis])
-        {
-            const float sx = endpoints[axis].x - center_screen.x;
-            const float sy = endpoints[axis].y - center_screen.y;
-            pixel_lengths[axis] = std::sqrt(sx * sx + sy * sy);
-        }
-    }
-
-    // ---- モードごとの形 ---------------------------------------------------
-    //
-    // 動作は Operation で分岐していたが、見た目は 3 モードとも
-    // 「線 + 先端の丸」で同じだった。今どのモードなのかが画面から分からない。
-    //   移動 … 線 + 先端の丸（従来のまま）
-    //   回転 … 各軸に垂直な円
-    //   拡縮 … 線 + 先端の四角
-    //
-    // 掴める場所は必ず描いた形と一致させる。回転は円を折れ線に落とし、
-    // その折れ線をそのまま当たり判定に使うので、見えている線の上でだけ掴める。
-    const bool rotate_mode = operation == ReplayEngine::Editor::GizmoOperation::Rotate;
-
-    constexpr int ring_sample_count = 48;
-    ImVec2 ring_points[3][ring_sample_count + 1]{};
-    bool ring_point_valid[3][ring_sample_count + 1]{};
-    if (rotate_mode)
-    {
-        for (int axis = 0; axis < 3; ++axis)
-        {
-            // その軸に垂直な平面を張る 2 本。残り 2 軸をそのまま使う。
-            const DirectX::XMFLOAT3& plane_u = axes[(axis + 1) % 3];
-            const DirectX::XMFLOAT3& plane_v = axes[(axis + 2) % 3];
-            for (int step = 0; step <= ring_sample_count; ++step)
+            // 姿勢だけ借りる。大きさは 1 に潰してギズモの寸法へ響かせない。
+            basis = primary->GetTransform().WorldMatrix();
+            for (int axis = 0; axis < 3; ++axis)
             {
-                const float angle = DirectX::XM_2PI * static_cast<float>(step) /
-                    static_cast<float>(ring_sample_count);
-                const float cosine = std::cos(angle);
-                const float sine = std::sin(angle);
-                const DirectX::XMFLOAT3 point_world{
-                    center_world.x + (plane_u.x * cosine + plane_v.x * sine) * handle_length,
-                    center_world.y + (plane_u.y * cosine + plane_v.y * sine) * handle_length,
-                    center_world.z + (plane_u.z * cosine + plane_v.z * sine) * handle_length
-                };
-                ring_point_valid[axis][step] = ProjectPoint(point_world, view, projection,
-                    static_cast<float>(client_width), static_cast<float>(client_height),
-                    client_origin, ring_points[axis][step]);
+                const XMVECTOR row = XMVector3Normalize(basis.r[axis]);
+                basis.r[axis] = XMVector3Equal(row, XMVectorZero())
+                    ? XMVectorSetByIndex(XMVectorZero(), 1.0f, static_cast<size_t>(axis)) : row;
             }
         }
+        basis.r[3] = XMVectorSet(center.x, center.y, center.z, 1.0f);
+        XMStoreFloat4x4(&world, basis);
     }
 
-    const ImVec2 mouse = ImGui::GetMousePos();
-    int hovered_axis = -1;
-    int hovered_ring_step = -1;
-    float nearest_handle = 9.0f;
-    for (int axis = 0; axis < 3; ++axis)
+    XMFLOAT4X4 view{}, projection{};
+    XMStoreFloat4x4(&view, viewport_view_matrix());
+    XMStoreFloat4x4(&projection, viewport_projection_matrix());
+    const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+    ImGuizmo::SetDrawlist(scene_window->DrawList);
+    ImGuizmo::SetRect(main_viewport->Pos.x, main_viewport->Pos.y,
+        main_viewport->Size.x, main_viewport->Size.y);
+
+    float snap[3]{};
+    const float* snap_values = nullptr;
+    if (transform_gizmo.SnapEnabled())
     {
-        if (rotate_mode)
-        {
-            for (int step = 0; step < ring_sample_count; ++step)
-            {
-                if (!ring_point_valid[axis][step] || !ring_point_valid[axis][step + 1]) continue;
-                const float distance = DistanceToSegment(mouse,
-                    ring_points[axis][step], ring_points[axis][step + 1]);
-                if (distance < nearest_handle)
-                {
-                    nearest_handle = distance;
-                    hovered_axis = axis;
-                    hovered_ring_step = step;
-                }
-            }
-            continue;
-        }
-        if (!endpoint_valid[axis]) continue;
-        const float distance = DistanceToSegment(mouse, center_screen, endpoints[axis]);
-        if (distance < nearest_handle)
-        {
-            nearest_handle = distance;
-            hovered_axis = axis;
-        }
+        snap[0] = snap[1] = snap[2] = (std::max)(0.0001f, transform_gizmo.SnapStep());
+        snap_values = snap;
     }
-
-    static const ImU32 colors[3] = {
-        IM_COL32(235, 75, 75, 255), IM_COL32(80, 220, 105, 255), IM_COL32(75, 135, 245, 255)
-    };
-    ImDrawList* draw_list = ImGui::GetForegroundDrawList();
-    draw_list->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
+    const XMFLOAT4X4 before = world;
+    ImGuizmo::SetHostHovered(scene_view_hovered || object_gizmo_dragging ? 1 : 0);
+    ImGuizmo::SetID(gizmo_id_object);
+    scene_window->DrawList->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
         ImVec2(scene_view_max_x, scene_view_max_y), true);
-    for (int axis = 0; axis < 3; ++axis)
+    ImGuizmo::Manipulate(&view._11, &projection._11, operation,
+        gizmo_local_space ? ImGuizmo::LOCAL : ImGuizmo::WORLD, &world._11, nullptr, snap_values);
+    scene_window->DrawList->PopClipRect();
+    const bool using_now = ImGuizmo::IsUsingID(gizmo_id_object);
+
+    if (using_now && !object_gizmo_dragging)
     {
-        const bool highlighted = (object_gizmo_dragging && object_gizmo_axis == axis) ||
-            (!object_gizmo_dragging && hovered_axis == axis);
-        const ImU32 color = highlighted ? IM_COL32(255, 220, 80, 255) : colors[axis];
-
-        if (rotate_mode)
-        {
-            // 回転は円。円周のどこを掴んでも、その軸まわりに回る。
-            const float thickness = highlighted ? 4.0f : 2.5f;
-            for (int step = 0; step < ring_sample_count; ++step)
-            {
-                if (!ring_point_valid[axis][step] || !ring_point_valid[axis][step + 1]) continue;
-                draw_list->AddLine(ring_points[axis][step], ring_points[axis][step + 1],
-                    color, thickness);
-            }
-            continue;
-        }
-
-        if (!endpoint_valid[axis]) continue;
-        draw_list->AddLine(center_screen, endpoints[axis], color, highlighted ? 5.0f : 3.0f);
-        if (operation == ReplayEngine::Editor::GizmoOperation::Scale)
-        {
-            // 拡縮は先端を四角にする。線の形は移動と同じなので、
-            // 先端の形だけで «今どちらのモードか» が分かるようにする。
-            const float half = highlighted ? 6.0f : 4.5f;
-            draw_list->AddRectFilled(
-                ImVec2(endpoints[axis].x - half, endpoints[axis].y - half),
-                ImVec2(endpoints[axis].x + half, endpoints[axis].y + half), color);
-        }
-        else
-        {
-            draw_list->AddCircleFilled(endpoints[axis], highlighted ? 6.0f : 4.0f, color);
-        }
-    }
-    draw_list->AddCircleFilled(center_screen, 4.0f, IM_COL32(235, 235, 240, 255));
-    draw_list->PopClipRect();
-
-    if (!object_gizmo_dragging && scene_view_hovered && hovered_axis >= 0 &&
-        ImGui::IsMouseClicked(ImGuiMouseButton_Left) && object_editor_context.CanEdit())
-    {
+        if (!object_editor_context.CanEdit()) return true;
         object_gizmo_dragging = true;
-        object_gizmo_axis = hovered_axis;
-        object_gizmo_start_mouse_x = mouse.x;
-        object_gizmo_start_mouse_y = mouse.y;
-        object_gizmo_world_axis = axes[hovered_axis];
-        if (rotate_mode && hovered_ring_step >= 0)
-        {
-            // 円に沿って引いたぶんだけ回るよう、掴んだ点の接線を基準にする。
-            // 軸方向のままにすると、円を描いて見せているのに横へ引く操作になり、
-            // 見た目と手の動きが噛み合わない。
-            const ImVec2& from = ring_points[hovered_axis][hovered_ring_step];
-            const ImVec2& to = ring_points[hovered_axis][hovered_ring_step + 1];
-            const float tangent_x = to.x - from.x;
-            const float tangent_y = to.y - from.y;
-            const float tangent_length =
-                (std::max)(std::sqrt(tangent_x * tangent_x + tangent_y * tangent_y), 0.0001f);
-            object_gizmo_screen_axis_x = tangent_x / tangent_length;
-            object_gizmo_screen_axis_y = tangent_y / tangent_length;
-            // 回転は screen_delta をそのまま角度へ使うのでこの値は参照されない。
-            object_gizmo_world_per_pixel = 1.0f;
-        }
-        else
-        {
-            const float pixel_length = (std::max)(pixel_lengths[hovered_axis], 1.0f);
-            object_gizmo_screen_axis_x = (endpoints[hovered_axis].x - center_screen.x) / pixel_length;
-            object_gizmo_screen_axis_y = (endpoints[hovered_axis].y - center_screen.y) / pixel_length;
-            object_gizmo_world_per_pixel = handle_length / pixel_length;
-        }
+        object_gizmo_start_matrix = before;
         object_gizmo_states.clear();
         for (const ReplayEngine::Core::ObjectID id : object_editor_context.Selection().All())
         {
@@ -322,16 +203,15 @@ bool framework::draw_object_transform_gizmo()
             state.local_rotation = object->GetTransform().LocalRotationEuler();
             state.local_scale = object->GetTransform().LocalScale();
             state.pivot_world = resolve_object_pivot_world(*object, scene);
+            XMStoreFloat4x4(&state.world_matrix, object->GetTransform().WorldMatrix());
             object_gizmo_states.push_back(state);
         }
-        const char* label = transform_gizmo.Operation() == ReplayEngine::Editor::GizmoOperation::Translate
-            ? "Gizmoで移動" : transform_gizmo.Operation() == ReplayEngine::Editor::GizmoOperation::Rotate
-            ? "Gizmoで回転" : "Gizmoで拡縮";
-        object_editor_context.BeginEdit(label);
-        return true;
+        object_editor_context.BeginEdit(
+            current == ReplayEngine::Editor::GizmoOperation::Translate ? "Gizmoで移動"
+            : current == ReplayEngine::Editor::GizmoOperation::Rotate ? "Gizmoで回転" : "Gizmoで拡縮");
     }
 
-    if (!object_gizmo_dragging) return hovered_axis >= 0 && scene_view_hovered;
+    if (!object_gizmo_dragging) return ImGuizmo::IsOver();
 
     if (ImGui::IsKeyPressed(VK_ESCAPE))
     {
@@ -346,83 +226,28 @@ bool framework::draw_object_transform_gizmo()
         }
         object_editor_context.CancelEdit();
         object_gizmo_dragging = false;
-        object_gizmo_axis = -1;
+        // ImGuizmo 側の «掴んでいる» を落とす。放置すると次のクリックまで残る。
+        ImGuizmo::Enable(false);
+        ImGuizmo::Enable(true);
         object_editor_context.SetStatus("Gizmo操作を取り消しました");
         return true;
     }
 
-    const float screen_delta =
-        (mouse.x - object_gizmo_start_mouse_x) * object_gizmo_screen_axis_x +
-        (mouse.y - object_gizmo_start_mouse_y) * object_gizmo_screen_axis_y;
-    float delta = transform_gizmo.Operation() == ReplayEngine::Editor::GizmoOperation::Rotate
-        ? screen_delta * 0.5f : screen_delta * object_gizmo_world_per_pixel;
-    delta = SnapDelta(delta, transform_gizmo.SnapEnabled(), transform_gizmo.SnapStep());
-
+    object_gizmo_matrix = world;
+    // ギズモの座標系で見た移動量。開始行列の逆を挟むので Pivot が回転・拡縮の中心になる。
+    const XMMATRIX delta = XMMatrixInverse(nullptr,
+        XMLoadFloat4x4(&object_gizmo_start_matrix)) * XMLoadFloat4x4(&world);
     for (const ObjectGizmoState& state : object_gizmo_states)
     {
         ReplayEngine::Core::GameObject* object = scene.FindGameObjectByID(state.id);
         if (object == nullptr || object->PendingDestroy()) continue;
-        if (transform_gizmo.Operation() == ReplayEngine::Editor::GizmoOperation::Translate)
-        {
-            object->GetTransform().SetWorldPosition({
-                state.world_position.x + object_gizmo_world_axis.x * delta,
-                state.world_position.y + object_gizmo_world_axis.y * delta,
-                state.world_position.z + object_gizmo_world_axis.z * delta });
-        }
-        else if (transform_gizmo.Operation() == ReplayEngine::Editor::GizmoOperation::Rotate)
-        {
-            DirectX::XMFLOAT3 rotation = state.local_rotation;
-            const float radians = DirectX::XMConvertToRadians(delta);
-            if (object_gizmo_axis == 0) rotation.x += radians;
-            if (object_gizmo_axis == 1) rotation.y += radians;
-            if (object_gizmo_axis == 2) rotation.z += radians;
-            object->GetTransform().SetLocalRotationEuler(rotation);
-
-            // Orientation だけ変えると Custom/Target Pivot が見かけ上ずれる。
-            // 開始時の原点を同じワールド軸で Pivot の周囲へ回して、Pivot 自体を固定する。
-            const DirectX::XMVECTOR pivot = DirectX::XMLoadFloat3(&state.pivot_world);
-            const DirectX::XMVECTOR origin = DirectX::XMLoadFloat3(&state.world_position);
-            const DirectX::XMMATRIX rotation_matrix = DirectX::XMMatrixRotationAxis(
-                DirectX::XMLoadFloat3(&object_gizmo_world_axis), radians);
-            DirectX::XMFLOAT3 new_position;
-            DirectX::XMStoreFloat3(&new_position, DirectX::XMVectorAdd(pivot,
-                DirectX::XMVector3TransformNormal(DirectX::XMVectorSubtract(origin, pivot),
-                    rotation_matrix)));
-            object->GetTransform().SetWorldPosition(new_position);
-        }
-        else
-        {
-            DirectX::XMFLOAT3 scale = state.local_scale;
-            float* component = object_gizmo_axis == 0 ? &scale.x :
-                object_gizmo_axis == 1 ? &scale.y : &scale.z;
-            const float original_component = *component;
-            *component += delta;
-            if (std::abs(*component) < 0.001f) *component = *component < 0.0f ? -0.001f : 0.001f;
-            object->GetTransform().SetLocalScale(scale);
-
-            // 1 軸拡縮の原点も Pivot を中心に同じ比率だけ動かす。
-            // SelfOrigin なら relative=0 なので従来と同じ位置のままになる。
-            const float safe_original = std::abs(original_component) < 0.001f
-                ? (original_component < 0.0f ? -0.001f : 0.001f) : original_component;
-            const float ratio = *component / safe_original;
-            const DirectX::XMVECTOR axis = DirectX::XMLoadFloat3(&object_gizmo_world_axis);
-            const DirectX::XMVECTOR pivot = DirectX::XMLoadFloat3(&state.pivot_world);
-            const DirectX::XMVECTOR relative = DirectX::XMVectorSubtract(
-                DirectX::XMLoadFloat3(&state.world_position), pivot);
-            const float parallel_length = DirectX::XMVectorGetX(DirectX::XMVector3Dot(relative, axis));
-            const DirectX::XMVECTOR moved = DirectX::XMVectorAdd(relative, DirectX::XMVectorScale(
-                axis, parallel_length * (ratio - 1.0f)));
-            DirectX::XMFLOAT3 new_position;
-            DirectX::XMStoreFloat3(&new_position, DirectX::XMVectorAdd(pivot, moved));
-            object->GetTransform().SetWorldPosition(new_position);
-        }
+        object->GetTransform().SetFromWorldMatrix(XMLoadFloat4x4(&state.world_matrix) * delta);
     }
 
-    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+    if (!using_now)
     {
         object_editor_context.CommitEdit();
         object_gizmo_dragging = false;
-        object_gizmo_axis = -1;
         object_editor_context.SetStatus("Gizmo操作を確定しました");
     }
     return true;
@@ -496,69 +321,424 @@ bool framework::handle_normal_adjust_gizmo()
     draw_list->PopClipRect();
     const bool inside_scene = scene_view_hovered && mouse.x >= scene_view_min_x &&
         mouse.x <= scene_view_max_x && mouse.y >= scene_view_min_y && mouse.y <= scene_view_max_y;
+    // クリックはハンドルを選ぶだけ。動かすのは下のギズモに任せる。
     if (!normal_adjust_gizmo_dragging && hovered >= 0 && inside_scene &&
         ImGui::IsMouseClicked(ImGuiMouseButton_Left))
     {
-        NormalAdjustComponent* adjust = adjusts[static_cast<std::size_t>(hovered)];
         normal_adjust_gizmo_object = object->ID();
-        normal_adjust_gizmo_component = adjust->StableID();
-        normal_adjust_gizmo_start_center = adjust->center;
-        resolved_center(*adjust, normal_adjust_gizmo_start_world,
-            normal_adjust_gizmo_start_matrix);
-        DirectX::XMFLOAT3 eye = viewport_eye_position();
-        DirectX::XMVECTOR plane_normal = DirectX::XMVector3Normalize(DirectX::XMVectorSubtract(
-            DirectX::XMLoadFloat3(&normal_adjust_gizmo_start_world), DirectX::XMLoadFloat3(&eye)));
-        if (DirectX::XMVectorGetX(DirectX::XMVector3LengthSq(plane_normal)) <= 1.0e-6f)
-            plane_normal = DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f);
-        DirectX::XMStoreFloat3(&normal_adjust_gizmo_plane_normal, plane_normal);
-        normal_adjust_gizmo_dragging = true;
+        normal_adjust_gizmo_component = adjusts[static_cast<std::size_t>(hovered)]->StableID();
         viewport_drag_selecting = false;
-        object_editor_context.BeginEdit("Normal Adjust の中心を移動");
         return true;
     }
-    if (!normal_adjust_gizmo_dragging) return hovered >= 0 && inside_scene;
+    if (normal_adjust_gizmo_component == ReplayEngine::Core::invalid_component_stable_id) return hovered >= 0 && inside_scene;
+
     ReplayEngine::Core::GameObject* drag_object = scene.FindGameObjectByID(normal_adjust_gizmo_object);
     auto* adjust = drag_object != nullptr ? dynamic_cast<NormalAdjustComponent*>(
         drag_object->FindComponentByStableID(normal_adjust_gizmo_component)) : nullptr;
     if (adjust == nullptr)
     {
-        object_editor_context.CancelEdit();
+        if (normal_adjust_gizmo_dragging) object_editor_context.CancelEdit();
         normal_adjust_gizmo_dragging = false;
-        return true;
+        normal_adjust_gizmo_component = ReplayEngine::Core::invalid_component_stable_id;
+        return false;
     }
+
+    ImGuiWindow* scene_window = ImGui::FindWindowByName("Scene View");
+    if (scene_window == nullptr) return hovered >= 0 && inside_scene;
+    DirectX::XMFLOAT3 center_world{};
+    DirectX::XMFLOAT4X4 center_matrix{};
+    resolved_center(*adjust, center_world, center_matrix);
+    if (normal_adjust_gizmo_dragging)
+    {
+        // 掴んでいる間は解決済みの値を待たない。1 フレーム遅れると移動量が二重に効く。
+        DirectX::XMStoreFloat3(&center_world, DirectX::XMVector3TransformCoord(
+            DirectX::XMLoadFloat3(&adjust->center),
+            DirectX::XMLoadFloat4x4(&normal_adjust_gizmo_start_matrix)));
+    }
+
+    DirectX::XMFLOAT4X4 gizmo_view{}, gizmo_projection{}, gizmo_world{};
+    DirectX::XMStoreFloat4x4(&gizmo_view, view);
+    DirectX::XMStoreFloat4x4(&gizmo_projection, projection);
+    DirectX::XMStoreFloat4x4(&gizmo_world,
+        DirectX::XMMatrixTranslation(center_world.x, center_world.y, center_world.z));
+    const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+    ImGuizmo::SetDrawlist(scene_window->DrawList);
+    ImGuizmo::SetRect(main_viewport->Pos.x, main_viewport->Pos.y,
+        main_viewport->Size.x, main_viewport->Size.y);
+    ImGuizmo::SetHostHovered(scene_view_hovered || normal_adjust_gizmo_dragging ? 1 : 0);
+    ImGuizmo::SetID(gizmo_id_normal_adjust);
+    scene_window->DrawList->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
+        ImVec2(scene_view_max_x, scene_view_max_y), true);
+    ImGuizmo::Manipulate(&gizmo_view._11, &gizmo_projection._11,
+        ImGuizmo::TRANSLATE, ImGuizmo::WORLD, &gizmo_world._11);
+    scene_window->DrawList->PopClipRect();
+    const bool using_now = ImGuizmo::IsUsingID(gizmo_id_normal_adjust);
+
+    if (using_now && !normal_adjust_gizmo_dragging)
+    {
+        normal_adjust_gizmo_dragging = true;
+        normal_adjust_gizmo_start_center = adjust->center;
+        normal_adjust_gizmo_start_world = center_world;
+        normal_adjust_gizmo_start_matrix = center_matrix;
+        viewport_drag_selecting = false;
+        object_editor_context.BeginEdit("Normal Adjust の中心を移動");
+    }
+    if (!normal_adjust_gizmo_dragging) return ImGuizmo::IsOver() || (hovered >= 0 && inside_scene);
+
     if (ImGui::IsKeyPressed(VK_ESCAPE))
     {
         adjust->center = normal_adjust_gizmo_start_center;
         adjust->OnPropertyChanged("center");
         object_editor_context.CancelEdit();
         normal_adjust_gizmo_dragging = false;
+        ImGuizmo::Enable(false);
+        ImGuizmo::Enable(true);
         return true;
     }
-    if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+
+    // ギズモはワールドで返るので、開始時の行列で中心のローカルへ戻す。
+    DirectX::XMStoreFloat3(&adjust->center, DirectX::XMVector3TransformCoord(
+        DirectX::XMLoadFloat4x4(&gizmo_world).r[3], DirectX::XMMatrixInverse(nullptr,
+            DirectX::XMLoadFloat4x4(&normal_adjust_gizmo_start_matrix))));
+    adjust->OnPropertyChanged("center");
+
+    if (!using_now)
     {
-        const auto ray = viewport_picking_ray(mouse.x - scene_view_min_x,
-            mouse.y - scene_view_min_y);
-        const DirectX::XMVECTOR normal = DirectX::XMLoadFloat3(&normal_adjust_gizmo_plane_normal);
-        const DirectX::XMVECTOR origin = DirectX::XMLoadFloat3(&ray.origin);
-        const DirectX::XMVECTOR direction = DirectX::XMLoadFloat3(&ray.direction);
-        const float denominator = DirectX::XMVectorGetX(DirectX::XMVector3Dot(direction, normal));
-        if (std::abs(denominator) > 1.0e-6f)
-        {
-            const float distance = DirectX::XMVectorGetX(DirectX::XMVector3Dot(
-                DirectX::XMVectorSubtract(DirectX::XMLoadFloat3(&normal_adjust_gizmo_start_world),
-                    origin), normal)) / denominator;
-            DirectX::XMVECTOR point = DirectX::XMVectorAdd(origin,
-                DirectX::XMVectorScale(direction, distance));
-            const DirectX::XMMATRIX inverse = DirectX::XMMatrixInverse(nullptr,
-                DirectX::XMLoadFloat4x4(&normal_adjust_gizmo_start_matrix));
-            DirectX::XMStoreFloat3(&adjust->center,
-                DirectX::XMVector3TransformCoord(point, inverse));
-            adjust->OnPropertyChanged("center");
-        }
-        return true;
+        object_editor_context.CommitEdit();
+        normal_adjust_gizmo_dragging = false;
+        object_editor_context.SetStatus("Normal Adjust の中心を確定しました");
     }
-    object_editor_context.CommitEdit();
-    normal_adjust_gizmo_dragging = false;
-    object_editor_context.SetStatus("Normal Adjust の中心を確定しました");
     return true;
+}
+
+// 骨の階層のパス。名前だけだと同名の骨で衝突するので親から連ねる。
+static std::string RigBonePath(const std::vector<framework::rig_debug_bone>& bones,
+    std::size_t index)
+{
+    std::string path = bones[index].name;
+    for (int parent = bones[index].parent;
+        parent >= 0 && parent < static_cast<int>(bones.size());
+        parent = bones[static_cast<std::size_t>(parent)].parent)
+        path = bones[static_cast<std::size_t>(parent)].name + "/" + path;
+    return path;
+}
+
+// 骨構成の指紋。構成の違うモデルへ読み込ませないための照合に使う。
+static std::string RigSkeletonHash(const std::vector<framework::rig_debug_bone>& bones)
+{
+    std::uint64_t hash = 1469598103934665603ull;
+    for (const framework::rig_debug_bone& bone : bones)
+        for (const char character : bone.name)
+        {
+            hash ^= static_cast<std::uint8_t>(character);
+            hash *= 1099511628211ull;
+        }
+    char text[32]{};
+    std::snprintf(text, sizeof(text), "%016llx", static_cast<unsigned long long>(hash));
+    return text;
+}
+
+// いまのポーズを RigClip の time=0 の 1 キーとして書き出す。
+// キーを増やせばそのままアニメーションになる形にしておく（RIG_DESIGN.txt）。
+bool framework::save_rig_pose(const std::filesystem::path& path)
+{
+    using namespace DirectX;
+    const ReplayEngine::Core::GameObject* target =
+        active_object_scene().FindGameObjectByID(object_editor_context.Selection().Primary());
+    if (target == nullptr) return false;
+    const auto rig = object_rig_debug_bones.find(target->ID().Value());
+    if (rig == object_rig_debug_bones.end() || rig->second.empty()) return false;
+    const auto pose = object_rig_pose.find(target->ID().Value());
+
+    ReplayEngine::Motion::RigClip clip;
+    clip.name = path.stem().u8string();
+    clip.model_path = target->Name();
+    clip.skeleton_hash = RigSkeletonHash(rig->second);
+    clip.duration = 0.0f;
+    if (pose != object_rig_pose.end())
+    {
+        for (std::size_t index = 0; index < rig->second.size(); ++index)
+        {
+            const auto entry = pose->second.find(rig->second[index].name);
+            if (entry == pose->second.end()) continue;
+            const rig_pose_override& value = entry->second;
+            ReplayEngine::Motion::RigTrack track;
+            track.bone_path = RigBonePath(rig->second, index);
+            ReplayEngine::Motion::RigKey key;
+            key.time = 0.0f;
+            key.transform.scale = value.scale;
+            key.transform.translation = value.translation;
+            XMStoreFloat4(&key.transform.rotation, XMQuaternionRotationRollPitchYaw(
+                XMConvertToRadians(value.rotation.x), XMConvertToRadians(value.rotation.y),
+                XMConvertToRadians(value.rotation.z)));
+            track.keys.push_back(key);
+            clip.tracks.push_back(std::move(track));
+        }
+    }
+
+    std::string error;
+    if (!ReplayEngine::Motion::RigClip::SaveToFile(path, clip, error))
+    {
+        object_editor_context.SetStatus(error);
+        return false;
+    }
+    object_editor_context.SetStatus(u8"ポーズを保存しました: " + path.filename().u8string());
+    return true;
+}
+
+// 読み込み。骨は名前で引くので、パスの末尾だけを見る。
+bool framework::load_rig_pose(const std::filesystem::path& path)
+{
+    using namespace DirectX;
+    const ReplayEngine::Core::GameObject* target =
+        active_object_scene().FindGameObjectByID(object_editor_context.Selection().Primary());
+    if (target == nullptr) return false;
+    const std::uint64_t owner = target->ID().Value();
+    const auto rig = object_rig_debug_bones.find(owner);
+    if (rig == object_rig_debug_bones.end() || rig->second.empty()) return false;
+
+    ReplayEngine::Motion::RigClip clip;
+    std::string error;
+    if (!ReplayEngine::Motion::RigClip::LoadFromFile(path, clip, error))
+    {
+        object_editor_context.SetStatus(error);
+        return false;
+    }
+    if (!clip.skeleton_hash.empty() && clip.skeleton_hash != RigSkeletonHash(rig->second))
+    {
+        object_editor_context.SetStatus(u8"骨の構成が違うので読み込めません: " +
+            path.filename().u8string());
+        return false;
+    }
+
+    begin_rig_pose_edit(owner, u8"ポーズを読み込む");
+    auto& pose = object_rig_pose[owner];
+    pose.clear();
+    for (const ReplayEngine::Motion::RigTrack& track : clip.tracks)
+    {
+        if (track.keys.empty()) continue;
+        const std::size_t separator = track.bone_path.find_last_of('/');
+        const std::string name = separator == std::string::npos
+            ? track.bone_path : track.bone_path.substr(separator + 1);
+        const ReplayEngine::Motion::RigTransform& transform = track.keys.front().transform;
+        rig_pose_override entry;
+        entry.translation = transform.translation;
+        entry.scale = transform.scale;
+        entry.rotation = BoneEulerDegrees(
+            XMMatrixRotationQuaternion(XMLoadFloat4(&transform.rotation)));
+        pose[name] = entry;
+    }
+    commit_rig_pose_edit();
+    object_editor_context.SetStatus(u8"ポーズを読み込みました: " + path.filename().u8string());
+    return true;
+}
+
+// ポーズの Undo/Redo。マップ 1 つぶんなので丸ごと控える方式で足りる。
+void framework::begin_rig_pose_edit(std::uint64_t owner, std::string label)
+{
+    if (rig_pose_history_transaction) return;
+    rig_pose_history_transaction = true;
+    rig_pose_history_owner = owner;
+    rig_pose_history_before = object_rig_pose[owner];
+    rig_pose_history_label = std::move(label);
+}
+
+void framework::commit_rig_pose_edit()
+{
+    if (!rig_pose_history_transaction) return;
+    rig_pose_history_transaction = false;
+    auto& after = object_rig_pose[rig_pose_history_owner];
+    // 触っていないなら積まない。空の Undo が並ぶと戻す回数が合わなくなる。
+    if (after == rig_pose_history_before) return;
+    rig_pose_history.resize(rig_pose_history_cursor);
+    rig_pose_history.push_back({ rig_pose_history_owner, rig_pose_history_before,
+        after, rig_pose_history_label });
+    constexpr std::size_t maximum_entries = 64;
+    if (rig_pose_history.size() > maximum_entries)
+        rig_pose_history.erase(rig_pose_history.begin());
+    rig_pose_history_cursor = rig_pose_history.size();
+}
+
+bool framework::undo_rig_pose_edit()
+{
+    if (rig_pose_history_cursor == 0) return false;
+    const auto& entry = rig_pose_history[--rig_pose_history_cursor];
+    object_rig_pose[entry.owner] = entry.before;
+    object_editor_context.SetStatus(entry.label + u8" を戻しました");
+    return true;
+}
+
+bool framework::redo_rig_pose_edit()
+{
+    if (rig_pose_history_cursor >= rig_pose_history.size()) return false;
+    const auto& entry = rig_pose_history[rig_pose_history_cursor++];
+    object_rig_pose[entry.owner] = entry.after;
+    object_editor_context.SetStatus(entry.label + u8" をやり直しました");
+    return true;
+}
+
+// 骨の選択。additive なら足し引き、そうでなければ 1 本だけにする。
+void framework::select_rig_bone(const std::string& name, bool additive)
+{
+    if (name.empty()) return;
+    const auto found = std::find(rig_selected_bones.begin(), rig_selected_bones.end(), name);
+    if (!additive)
+    {
+        rig_selected_bones.assign(1, name);
+        rig_selected_bone = name;
+        return;
+    }
+    if (found != rig_selected_bones.end())
+    {
+        rig_selected_bones.erase(found);
+        if (rig_selected_bone == name)
+            rig_selected_bone = rig_selected_bones.empty() ? std::string{} : rig_selected_bones.back();
+        return;
+    }
+    rig_selected_bones.push_back(name);
+    rig_selected_bone = name;
+}
+
+// 選択中の骨のギズモ。ImGuizmo へワールド行列を渡し、返った行列から差分だけを取る。
+// 掴んでいる間は true を返して選択へ渡さない。
+bool framework::draw_bone_transform_gizmo()
+{
+    if (rig_selected_bone.empty()) return false;
+    if (!show_rig_debug_draw && !show_motion_rig_panel) return false;
+
+    const ReplayEngine::Core::GameObject* target =
+        active_object_scene().FindGameObjectByID(object_editor_context.Selection().Primary());
+    if (target == nullptr) return false;
+    const std::uint64_t owner = target->ID().Value();
+    const auto rig = object_rig_debug_bones.find(owner);
+    if (rig == object_rig_debug_bones.end()) return false;
+    const rig_debug_bone* bone = nullptr;
+    for (const rig_debug_bone& candidate : rig->second)
+        if (candidate.name == rig_selected_bone) { bone = &candidate; break; }
+    if (bone == nullptr) return false;
+
+    using namespace DirectX;
+    XMFLOAT4X4 view{}, projection{};
+    XMStoreFloat4x4(&view, viewport_view_matrix());
+    XMStoreFloat4x4(&projection, viewport_projection_matrix());
+    // 骨の行列は前フレームの描画提出で作ったもので、いまのポーズと対になっている。
+    XMFLOAT4X4 world = bone->world_matrix;
+
+    // ImGuizmo は描画リストの持ち主の窓が Hover されている間だけ操作を通す。
+    // 背景リストを渡すと持ち主が引けず、Scene View の上で一切反応しなくなる。
+    ImGuiWindow* scene_window = ImGui::FindWindowByName("Scene View");
+    if (scene_window == nullptr) return false;
+    const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+    ImGuizmo::SetDrawlist(scene_window->DrawList);
+    ImGuizmo::SetRect(main_viewport->Pos.x, main_viewport->Pos.y,
+        main_viewport->Size.x, main_viewport->Size.y);
+
+    const ReplayEngine::Editor::GizmoOperation current = transform_gizmo.Operation();
+    const ImGuizmo::OPERATION operation =
+        current == ReplayEngine::Editor::GizmoOperation::Translate ? ImGuizmo::TRANSLATE
+        : current == ReplayEngine::Editor::GizmoOperation::Rotate ? ImGuizmo::ROTATE
+        : ImGuizmo::SCALE;
+    ImGuizmo::SetHostHovered(scene_view_hovered || ImGuizmo::IsUsingID(gizmo_id_bone) ? 1 : 0);
+    ImGuizmo::SetID(gizmo_id_bone);
+    scene_window->DrawList->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
+        ImVec2(scene_view_max_x, scene_view_max_y), true);
+    ImGuizmo::Manipulate(&view._11, &projection._11, operation,
+        rig_gizmo_use_local && gizmo_local_space ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
+        &world._11);
+    scene_window->DrawList->PopClipRect();
+    if (!ImGuizmo::IsUsingID(gizmo_id_bone))
+    {
+        if (rig_gizmo_dragging) { rig_gizmo_dragging = false; commit_rig_pose_edit(); }
+        return false;
+    }
+
+    auto& pose = object_rig_pose[owner];
+    // ジェスチャの頭で全選択骨を控える。主の «開始からの変化量» を他へ配るため。
+    if (!rig_gizmo_dragging)
+    {
+        rig_gizmo_dragging = true;
+        begin_rig_pose_edit(owner, u8"骨のポーズ");
+        rig_gizmo_start_pose.clear();
+        for (const std::string& name : rig_selected_bones) rig_gizmo_start_pose[name] = pose[name];
+        rig_gizmo_start_pose[rig_selected_bone] = pose[rig_selected_bone];
+    }
+
+    rig_pose_override& entry = pose[rig_selected_bone];
+    const rig_pose_override primary_start = rig_gizmo_start_pose[rig_selected_bone];
+    // 骨のローカルと親は動いていないので、ワールドの差分がそのままポーズの差分になる。
+    const XMMATRIX edited = XMLoadFloat4x4(&world) *
+        XMMatrixInverse(nullptr, XMLoadFloat4x4(&bone->world_matrix)) *
+        BonePoseAdjust(entry.translation, entry.rotation, entry.scale);
+    XMVECTOR scale{}, rotation{}, translation{};
+    if (XMMatrixDecompose(&scale, &rotation, &translation, edited))
+    {
+        // 行列ごと返るので分解が他の成分へ滲む。掴んでいる種類だけ書き戻す。
+        if (operation == ImGuizmo::TRANSLATE) XMStoreFloat3(&entry.translation, translation);
+        else if (operation == ImGuizmo::SCALE) XMStoreFloat3(&entry.scale, scale);
+        else entry.rotation = BoneEulerDegrees(XMMatrixRotationQuaternion(rotation));
+    }
+    apply_rig_pose_to_selection(owner, rig->second, primary_start, entry, operation);
+    // IsOver() では骨が密集した場所でギズモに隠れた骨を選び直せなくなる。
+    return true;
+}
+
+// 主の骨の «開始からの変化量» を、選択中の他の骨へ同じローカル量で配る。
+// 祖先が選択済みの骨は、その動きで既に運ばれるので触らない。
+void framework::apply_rig_pose_to_selection(std::uint64_t owner,
+    const std::vector<rig_debug_bone>& bones, const rig_pose_override& primary_start,
+    const rig_pose_override& primary_now, int operation)
+{
+    if (rig_selected_bones.size() <= 1) return;
+    using namespace DirectX;
+    const auto index_of = [&bones](const std::string& name) -> int
+    {
+        for (std::size_t i = 0; i < bones.size(); ++i)
+            if (bones[i].name == name) return static_cast<int>(i);
+        return -1;
+    };
+    const auto euler_quat = [](const XMFLOAT3& degrees)
+    {
+        return XMQuaternionRotationRollPitchYaw(XMConvertToRadians(degrees.x),
+            XMConvertToRadians(degrees.y), XMConvertToRadians(degrees.z));
+    };
+    const XMVECTOR rotation_delta = XMQuaternionMultiply(
+        XMQuaternionInverse(euler_quat(primary_start.rotation)), euler_quat(primary_now.rotation));
+    const XMFLOAT3 move_delta{
+        primary_now.translation.x - primary_start.translation.x,
+        primary_now.translation.y - primary_start.translation.y,
+        primary_now.translation.z - primary_start.translation.z };
+    const XMFLOAT3 scale_ratio{
+        primary_start.scale.x != 0.0f ? primary_now.scale.x / primary_start.scale.x : 1.0f,
+        primary_start.scale.y != 0.0f ? primary_now.scale.y / primary_start.scale.y : 1.0f,
+        primary_start.scale.z != 0.0f ? primary_now.scale.z / primary_start.scale.z : 1.0f };
+
+    auto& pose = object_rig_pose[owner];
+    for (const std::string& name : rig_selected_bones)
+    {
+        if (name == rig_selected_bone) continue;
+        bool ancestor_selected = false;
+        for (int parent = index_of(name) >= 0 ? bones[static_cast<std::size_t>(index_of(name))].parent : -1;
+            parent >= 0 && parent < static_cast<int>(bones.size());
+            parent = bones[static_cast<std::size_t>(parent)].parent)
+        {
+            if (std::find(rig_selected_bones.begin(), rig_selected_bones.end(),
+                bones[static_cast<std::size_t>(parent)].name) != rig_selected_bones.end())
+            { ancestor_selected = true; break; }
+        }
+        if (ancestor_selected) continue;
+        const auto start = rig_gizmo_start_pose.find(name);
+        if (start == rig_gizmo_start_pose.end()) continue;
+        rig_pose_override& other = pose[name];
+        if (operation == ImGuizmo::TRANSLATE)
+            other.translation = { start->second.translation.x + move_delta.x,
+                start->second.translation.y + move_delta.y,
+                start->second.translation.z + move_delta.z };
+        else if (operation == ImGuizmo::SCALE)
+            other.scale = { start->second.scale.x * scale_ratio.x,
+                start->second.scale.y * scale_ratio.y,
+                start->second.scale.z * scale_ratio.z };
+        else
+            other.rotation = BoneEulerDegrees(XMMatrixRotationQuaternion(
+                XMQuaternionMultiply(euler_quat(start->second.rotation), rotation_delta)));
+    }
 }

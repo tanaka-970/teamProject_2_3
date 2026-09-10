@@ -27,6 +27,7 @@
 #pragma property color   BaseColor        "基本色"          = (1, 1, 1, 1) category "Surface"
 #pragma property texture BaseMap          "基本色マップ"     default white category "Surface"
 #pragma property texture NormalMap        "法線マップ"       default bump category "Surface"
+#pragma property range   NormalStrength   "法線の強さ" 0..2  = 1.0 category "Surface"
 #pragma property range   Metallic         "金属度"    0..1  = 0.0 category "Surface"
 #pragma property texture MetallicMap      "金属度マップ"     default white category "Surface"
 #pragma property range   Roughness        "粗さ"      0..1  = 0.55 category "Surface"

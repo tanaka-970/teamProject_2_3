@@ -978,6 +978,9 @@
     <ClCompile Include="RePlayEngine\Motion\MotionAsset.cpp">
       <Filter>RePlayEngine\Motion</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Motion\RigClip.cpp">
+      <Filter>RePlayEngine\Motion</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Motion\MotionAssetLoad.cpp">
       <Filter>RePlayEngine\Motion</Filter>
     </ClCompile>

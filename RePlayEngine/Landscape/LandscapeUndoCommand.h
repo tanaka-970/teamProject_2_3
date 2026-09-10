@@ -30,6 +30,7 @@ namespace ReplayEngine::Landscape
 
         void Undo(LandscapeData& data) const;
         void Redo(LandscapeData& data) const;
+        void Seal();
         bool Empty() const noexcept { return samples_.empty(); }
         std::size_t ChangedSampleCount() const noexcept { return samples_.size(); }
 

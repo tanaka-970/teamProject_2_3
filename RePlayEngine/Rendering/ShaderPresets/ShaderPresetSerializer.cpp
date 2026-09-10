@@ -1,4 +1,5 @@
 ﻿#include "ShaderPresetSerializer.h"
+#include "../RenderStats.h"
 
 #include <fstream>
 #include <iomanip>
@@ -98,6 +99,7 @@ namespace ReplayEngine::Rendering
     bool ShaderPresetSerializer::Load(ShaderPreset& preset,
         const std::filesystem::path& path, std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/ShaderPreset");
         std::error_code filesystem_error;
         const auto file_size = std::filesystem::file_size(path, filesystem_error);
         if (!filesystem_error && file_size > 1024 * 1024)

@@ -1,4 +1,5 @@
 ﻿#include "LocalizationTable.h"
+#include "../Rendering/RenderStats.h"
 
 #include <algorithm>
 #include <fstream>
@@ -28,6 +29,7 @@ namespace ReplayEngine::Localization
     bool LocalizationTable::LoadFromFile(const std::filesystem::path& path,
         std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/Localization");
         std::ifstream file(path, std::ios::binary);
         if (!file)
         {

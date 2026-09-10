@@ -434,10 +434,16 @@ namespace ReplayEngine::Scene
             return;
         }
 
+        // 1 tick で自分の大きさ以上動いた物は、離散判定だと相手を飛び越して抜ける。
+        const float travel_squared =
+            LengthSquared(Subtract(end_shape.center, start_shape.center));
+        const bool moved_far = travel_squared > cast_radius * cast_radius;
+
         // 通常は Primitive を下の接触 Solver に任せ、CCD 時だけ最初の掃引面として採用する。
         for (const Core::ObjectID excluded : excluded_objects)
         {
-            if (!body.rigidbody->use_ccd && excluded == hit.source.object) return;
+            if (!body.rigidbody->use_ccd && !moved_far &&
+                excluded == hit.source.object) return;
         }
 
         RecordQueryContact(body, hit);

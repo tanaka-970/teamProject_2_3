@@ -39,8 +39,8 @@ namespace ReplayEngine::Components
 
         // 回転を含めた AABB。
         // 回転行列の各成分の絶対値を半辺長へ掛けると、軸並行の外接箱が求まる。
-        const XMFLOAT3 euler = owner->GetTransform().LocalRotationEuler();
-        const XMMATRIX rotation = XMMatrixRotationRollPitchYaw(euler.x, euler.y, euler.z);
+        const XMFLOAT4 quaternion = owner->GetTransform().WorldRotationQuaternion();
+        const XMMATRIX rotation = XMMatrixRotationQuaternion(XMLoadFloat4(&quaternion));
 
         XMFLOAT4X4 matrix{};
         XMStoreFloat4x4(&matrix, rotation);

@@ -224,11 +224,13 @@ namespace ReplayEngine::Editor::Detail
             else if (current != nullptr && database != nullptr && database->IsMissing(guid))
             {
                 ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
-                    u8"  ファイルが見つかりません: %s", current->source_path.generic_string().c_str());
+                    u8"  ファイルが見つかりません: %s",
+                    current->source_path.generic_u8string().c_str());
             }
             else if (current != nullptr)
             {
-                ImGui::TextDisabled("  %s", current->source_path.generic_string().c_str());
+                // generic_string() は ACP へ落とせない名前で例外を投げる。ImGui は UTF-8。
+                ImGui::TextDisabled("  %s", current->source_path.generic_u8string().c_str());
             }
             else
             {

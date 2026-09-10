@@ -47,21 +47,7 @@ namespace ReplayEngine::Components
         const PropertyDesc* FindProperty(const Component& component,
             const std::string& name) noexcept
         {
-            if (const PropertyDesc* found =
-                Reflection::PropertyRegistry::Find(component.TypeID(), name))
-            {
-                return found;
-            }
-
-            const std::vector<PropertyDesc>* dynamic = component.DynamicProperties();
-            if (dynamic != nullptr)
-            {
-                for (const PropertyDesc& desc : *dynamic)
-                {
-                    if (desc.name == name) return &desc;
-                }
-            }
-            return nullptr;
+            return Reflection::PropertyRegistry::FindForComponent(component, name);
         }
 
         Component* ResolveComponent(Scene::Scene& scene,

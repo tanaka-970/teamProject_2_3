@@ -1,5 +1,7 @@
 #include "SceneEditHistory.h"
 
+#include "../../Components/Landscape/LandscapeComponent.h"
+#include "../../Object/GameObject/GameObject.h"
 #include "../../Scene/Runtime/Scene.h"
 
 namespace ReplayEngine::Editor
@@ -52,6 +54,23 @@ namespace ReplayEngine::Editor
         cursor_ = entries_.size();
     }
 
+    void SceneEditHistory::CommitLandscape(Core::ObjectID object,
+        std::unique_ptr<Landscape::LandscapeUndoCommand> command, std::string label)
+    {
+        if (command == nullptr || command->Empty() || !object.Valid()) return;
+        Cancel();
+        if (cursor_ < entries_.size()) entries_.erase(
+            entries_.begin() + static_cast<std::ptrdiff_t>(cursor_), entries_.end());
+
+        Entry entry;
+        entry.label = std::move(label);
+        entry.landscape_object = object;
+        entry.landscape_command = std::move(command);
+        entries_.push_back(std::move(entry));
+        if (entries_.size() > maximum_entries) entries_.erase(entries_.begin());
+        cursor_ = entries_.size();
+    }
+
     void SceneEditHistory::Cancel() noexcept
     {
         in_transaction_ = false;
@@ -101,6 +120,18 @@ namespace ReplayEngine::Editor
         }
     }
 
+    bool SceneEditHistory::ApplyLandscape(const Entry& entry, Scene::Scene& scene, bool redo)
+    {
+        Core::GameObject* object = scene.FindGameObjectByID(entry.landscape_object);
+        if (object == nullptr || object->PendingDestroy() || entry.landscape_command == nullptr)
+            return false;
+        auto* landscape = object->GetComponent<Components::LandscapeComponent>();
+        if (landscape == nullptr) return false;
+        if (redo) entry.landscape_command->Redo(landscape->Data());
+        else entry.landscape_command->Undo(landscape->Data());
+        return true;
+    }
+
     bool SceneEditHistory::Undo(Scene::Scene& scene, std::string& label)
     {
         if (!CanUndo()) return false;
@@ -108,9 +139,13 @@ namespace ReplayEngine::Editor
         // 進行中の編集があれば捨てる。中途半端な状態を履歴へ持ち込まない。
         Cancel();
 
+        const Entry& entry = entries_[cursor_ - 1];
+        if (entry.landscape_command != nullptr)
+        {
+            if (!ApplyLandscape(entry, scene, false)) return false;
+        }
+        else ApplySnapshot(entry.before, scene);
         --cursor_;
-        const Entry& entry = entries_[cursor_];
-        ApplySnapshot(entry.before, scene);
         label = entry.label;
         return true;
     }
@@ -122,7 +157,11 @@ namespace ReplayEngine::Editor
         Cancel();
 
         const Entry& entry = entries_[cursor_];
-        ApplySnapshot(entry.after, scene);
+        if (entry.landscape_command != nullptr)
+        {
+            if (!ApplyLandscape(entry, scene, true)) return false;
+        }
+        else ApplySnapshot(entry.after, scene);
         label = entry.label;
         ++cursor_;
         return true;

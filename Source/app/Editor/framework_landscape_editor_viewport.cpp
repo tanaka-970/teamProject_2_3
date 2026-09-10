@@ -18,7 +18,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <limits>
+#include <memory>
 #include <string>
+#include <utility>
 
 #include "framework_landscape_editorInternal.h"
 
@@ -27,10 +29,13 @@ using namespace framework_landscape_editor_detail;
 bool framework::handle_landscape_viewport_edit()
 {
 #ifdef USE_IMGUI
+    REPLAY_PROFILE_SCOPE("Landscape/Viewport");
     // Stroke の終了だけは Viewport の外へ出ても受け取る。
-    if (landscape_editor_tool.StrokeActive() && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    if (landscape_stroke_transaction && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
     {
-        const auto command = landscape_editor_tool.EndStroke();
+        const bool subdivide_stroke = !landscape_editor_tool.StrokeActive();
+        std::unique_ptr<ReplayEngine::Landscape::LandscapeUndoCommand> command;
+        if (!subdivide_stroke) command = landscape_editor_tool.EndStroke();
 
         // ドラッグ中に止めていた Collision Cook を解除する。
         // Scene 内の一時フラグを全件解除しておけば、選択が途中で変わっても残らない。
@@ -44,12 +49,19 @@ bool framework::handle_landscape_viewport_edit()
                 release_collider->EndInteractiveEdit();
         }
 
-        if (landscape_stroke_transaction)
+        if (subdivide_stroke)
         {
-            if (command != nullptr) object_editor_context.CommitEdit();
+            if (landscape_subdivide_stroke_changed) object_editor_context.CommitEdit();
             else object_editor_context.CancelEdit();
-            landscape_stroke_transaction = false;
         }
+        else
+        {
+            if (command != nullptr) object_editor_context.CommitLandscapeEdit(
+                landscape_stroke_object, std::move(command));
+        }
+        landscape_stroke_transaction = false;
+        landscape_subdivide_stroke_changed = false;
+        landscape_stroke_object = ReplayEngine::Core::ObjectID::Invalid();
         return true;
     }
 
@@ -71,7 +83,7 @@ bool framework::handle_landscape_viewport_edit()
         object_editor_context.SetStatus("Landscape 編集を終了しました");
         return true;
     }
-    if (!landscape_editor_tool.StrokeActive() &&
+    if (!landscape_stroke_transaction &&
         (ImGui::GetIO().KeyCtrl || ImGui::GetIO().KeyAlt)) return false;
     if (!scene_view_hovered || editor_camera_consumed_input) return false;
 
@@ -125,9 +137,14 @@ bool framework::handle_landscape_viewport_edit()
         {
             if (landscape_edit_mode == 0)
             {
+                REPLAY_PROFILE_SCOPE("Landscape/Preview");
                 const auto& transform = object->GetTransform();
                 const int preview_mode = (std::max)(0,
                     (std::min)(landscape_brush_preview_mode, 4));
+                static TerrainRingCache terrain_ring_cache;
+                terrain_ring_cache.Prepare(data, hit.position,
+                    landscape_brush.radius, preview_mode);
+                std::size_t ring_cache_index = 0;
 
                 if (preview_mode != 0)
                 {
@@ -148,28 +165,33 @@ bool framework::handle_landscape_viewport_edit()
                     DrawTerrainRing(draw, data, transform, view, projection,
                         width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius * 0.25f,
-                        IM_COL32(255, 230, 130, 95), 1.0f);
+                        IM_COL32(255, 230, 130, 95), 1.0f,
+                        terrain_ring_cache, ring_cache_index++);
                     DrawTerrainRing(draw, data, transform, view, projection,
                         width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius * 0.5f,
-                        IM_COL32(255, 220, 100, 140), 1.0f);
+                        IM_COL32(255, 220, 100, 140), 1.0f,
+                        terrain_ring_cache, ring_cache_index++);
                     DrawTerrainRing(draw, data, transform, view, projection,
                         width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius * 0.75f,
-                        IM_COL32(255, 205, 75, 175), 1.0f);
+                        IM_COL32(255, 205, 75, 175), 1.0f,
+                        terrain_ring_cache, ring_cache_index++);
                 }
                 else if (preview_mode == 1)
                 {
                     DrawTerrainRing(draw, data, transform, view, projection,
                         width, height, projection_min_x, projection_min_y,
                         hit.position, landscape_brush.radius * 0.5f,
-                        IM_COL32(255, 230, 135, 135), 1.0f);
+                        IM_COL32(255, 230, 135, 135), 1.0f,
+                        terrain_ring_cache, ring_cache_index++);
                 }
 
                 DrawTerrainRing(draw, data, transform, view, projection,
                     width, height, projection_min_x, projection_min_y,
                     hit.position, landscape_brush.radius,
-                    IM_COL32(255, 190, 55, 245), 2.0f);
+                    IM_COL32(255, 190, 55, 245), 2.0f,
+                    terrain_ring_cache, ring_cache_index++);
 
                 // 穴/崖/洞窟では XZ terrain ring が途切れても、ブラシ自体は消さない。
                 // hit center と同じ投影で screen-space fallback を重ねる。
@@ -323,35 +345,57 @@ bool framework::handle_landscape_viewport_edit()
         return false;
     }
 
-    // Sculpt はクリック開始からリリースまで 1 Undo transaction にまとめる。
+    // ブラシ操作はクリック開始からリリースまで一つの取り消し履歴にまとめる。
     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && has_hit &&
-        !landscape_editor_tool.StrokeActive())
+        !landscape_stroke_transaction)
     {
-        landscape_brush_mode = (std::max)(0, (std::min)(landscape_brush_mode, 4));
-        object_editor_context.BeginEdit("Landscape Sculpt");
-        landscape_stroke_transaction = landscape_editor_tool.BeginStroke(
-            landscape->Data(),
-            static_cast<ReplayEngine::Landscape::LandscapeBrushMode>(landscape_brush_mode),
-            landscape_brush);
+        landscape_brush_mode = (std::max)(0, (std::min)(landscape_brush_mode, 5));
+        const auto brush_mode = static_cast<ReplayEngine::Landscape::LandscapeBrushMode>(
+            landscape_brush_mode);
+        if (brush_mode == ReplayEngine::Landscape::LandscapeBrushMode::Subdivide)
+        {
+            object_editor_context.BeginEdit(u8"地形をブラシで細かくする");
+            landscape_stroke_transaction = true;
+            landscape_subdivide_stroke_changed = false;
+        }
+        else
+        {
+            landscape_stroke_transaction = landscape_editor_tool.BeginStroke(
+                landscape->Data(), brush_mode, landscape_brush);
+        }
         if (!landscape_stroke_transaction)
         {
-            object_editor_context.CancelEdit();
+            landscape_stroke_object = ReplayEngine::Core::ObjectID::Invalid();
         }
-        else if (auto* collider = object->GetComponent<
-            ReplayEngine::Components::LandscapeColliderComponent>())
+        else
         {
-            // Sculpt 中は古い collision を維持し、release 後に 1 回だけ recook。
-            collider->BeginInteractiveEdit();
+            landscape_stroke_object = object->ID();
+            if (auto* collider = object->GetComponent<
+                ReplayEngine::Components::LandscapeColliderComponent>())
+            {
+                // ブラシ中は古い衝突形状を維持し、リリース後に一度だけ再構築する。
+                collider->BeginInteractiveEdit();
+            }
         }
     }
 
-    if (landscape_editor_tool.StrokeActive() && ImGui::IsMouseDown(ImGuiMouseButton_Left))
+    if (landscape_stroke_transaction && ImGui::IsMouseDown(ImGuiMouseButton_Left))
     {
         if (has_hit)
         {
-            const float dt = (std::max)(1.0f / 240.0f,
-                (std::min)(ImGui::GetIO().DeltaTime, 1.0f / 15.0f));
-            landscape_editor_tool.ApplySample(hit.position, dt);
+            {
+                REPLAY_PROFILE_SCOPE("Landscape/Brush");
+                if (landscape_editor_tool.StrokeActive())
+                {
+                    const float dt = (std::max)(1.0f / 240.0f,
+                        (std::min)(ImGui::GetIO().DeltaTime, 1.0f / 15.0f));
+                    landscape_editor_tool.ApplySample(hit.position, dt);
+                }
+                else landscape_subdivide_stroke_changed =
+                    ReplayEngine::Landscape::LandscapeEditorTool::ApplySubdivideSample(
+                        landscape->Data(), hit.position, hit.face_index, landscape_brush) ||
+                    landscape_subdivide_stroke_changed;
+            }
         }
         return true;
     }

@@ -19,6 +19,8 @@ namespace ReplayEngine::Physics
         float radius = 0.5f;
         float minimum_normal_y = -1.0f;
         float maximum_normal_y = 1.0f;
+        const DirectX::XMFLOAT4X4* normal_transform = nullptr;
+        bool flip_normal = false;
     };
 
     struct SphereCastHit

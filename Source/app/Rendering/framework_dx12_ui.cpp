@@ -2849,8 +2849,7 @@ bool framework::build_dx12_scene_effects(
                 stack.isolate_from_scene = model->depth_mode !=
                     Components::ModelEffectStackComponent::PreserveDepth || has_blended_surface ||
                     model->extract_mode == Components::ModelEffectStackComponent::Isolate ||
-                    (model->extract_mode != Components::ModelEffectStackComponent::InPlace &&
-                        automatic_isolation);
+                    automatic_isolation;
                 std::uint64_t model_history_key = stack.owner_id ^
                     (static_cast<std::uint64_t>(model->StableID()) * 0x9E3779B185EBCA87ull);
                 if (model_history_key == 0) model_history_key = stack.owner_id;
@@ -2902,8 +2901,13 @@ bool framework::build_dx12_scene_effects(
                         stack.scissor.top == 0 &&
                         stack.scissor.right == static_cast<LONG>(dx12_device_context.Width()) &&
                         stack.scissor.bottom == static_cast<LONG>(dx12_device_context.Height());
+                    // ポーズ中はメッシュが元の境界を超える。矩形で切ると
+                    // はみ出した部分だけ合成されず白く残る。
+                    const auto rig_pose_entry = object_rig_pose.find(stack.owner_id);
+                    const bool rig_posing = rig_pose_entry != object_rig_pose.end() &&
+                        !rig_pose_entry->second.empty();
                     stack.scissor_enabled = model_rect_found &&
-                        !RectIsEmpty(stack.scissor) && !full_screen;
+                        !RectIsEmpty(stack.scissor) && !full_screen && !rig_posing;
                     const std::uint64_t profile_capture_end =
                         static_cast<std::uint64_t>(profile_benchmark_warmup_frames) +
                         static_cast<std::uint64_t>(profile_benchmark_frames);

@@ -42,6 +42,8 @@ namespace ReplayEngine::UI
         case UIEffectKind::Outline:
         case UIEffectKind::Kuwahara:
         case UIEffectKind::LightStreaks:
+        case UIEffectKind::Bokeh:
+        case UIEffectKind::TiltShift:
             // HLSL の最遠サンプルは radius。丸め余裕を片側 2px 足す。
             return uniform(safe_radius + margin);
         case UIEffectKind::EdgeDetect:
@@ -162,6 +164,10 @@ namespace ReplayEngine::UI
         case UIEffectKind::ShapeWipe:
         case UIEffectKind::Blinds:
         case UIEffectKind::Checkerboard:
+        case UIEffectKind::Petals:
+        case UIEffectKind::GodRays:
+        case UIEffectKind::LensFlare:
+        case UIEffectKind::FilmScratch:
         case UIEffectKind::Dissolve:
         case UIEffectKind::Halftone:
         case UIEffectKind::Vignette:

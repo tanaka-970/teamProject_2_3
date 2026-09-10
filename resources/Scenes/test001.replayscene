@@ -1,0 +1,1900 @@
+REPLAY_SCENE 11
+SCENE "新しいシーン"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 15
+OBJECT
+  ID 4
+  NAME "MIKU-V6"
+  ENABLED 0
+  PARENT 0
+  TRANSFORM -0.14249999821186066 -11.20050048828125 -0.84976530075073242 0 3.1415927410125732 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 44
+    PROPERTY "mesh_asset" asset "8e547552c509008115944a791d38b886"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 10
+    PROPERTY "material_override" bool 1
+    PROPERTY "tint" color 0.90688258409500122 0.90687352418899536 0.90687352418899536 1
+    PROPERTY "shading_model" enum 2
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 1
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 0
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+    PROPERTY "material_slots[0].name" string "MIKU-V6_face_Albedo"
+    PROPERTY "material_slots[0].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[1].name" string "MIKU-V6_eyeEX_Albedo"
+    PROPERTY "material_slots[1].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[2].name" string "MIKU-V6_brow_Albedo"
+    PROPERTY "material_slots[2].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[3].name" string "none"
+    PROPERTY "material_slots[3].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[4].name" string "MIKU-V6_cloth_Albedo"
+    PROPERTY "material_slots[4].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[5].name" string "MIKU-V6_cloth2_Albedo"
+    PROPERTY "material_slots[5].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[6].name" string "MIKU-V6_sign_Albedo"
+    PROPERTY "material_slots[6].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[7].name" string "MIKU-V6_body3_Albedo"
+    PROPERTY "material_slots[7].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[8].name" string "MIKU-V6_hair_Albedo"
+    PROPERTY "material_slots[8].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[9].name" string "MIKU-V6_fronthair_Albedo"
+    PROPERTY "material_slots[9].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 100 100
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "ModelEffectStackComponent" 1
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 193
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 4
+    PROPERTY "target_slot_mode" enum 0
+    PROPERTY "depth_mode" enum 0
+    PROPERTY "extract_mode" enum 0
+    PROPERTY "max_bleed_pixels" float 128
+    PROPERTY "target_slot_index" enum 0
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effects[0].enabled" bool 0
+    PROPERTY "effects[0].region_enabled" bool 1
+    PROPERTY "effects[0].type" enum 27
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 1
+    PROPERTY "effects[0].brush_pattern_weight_1" float 1
+    PROPERTY "effects[0].brush_pattern_weight_2" float 1
+    PROPERTY "effects[0].brush_pattern_weight_3" float 1
+    PROPERTY "effects[0].brush_pattern_weight_4" float 1
+    PROPERTY "effects[0].brush_pattern_weight_5" float 1
+    PROPERTY "effects[0].brush_pattern_weight_6" float 1
+    PROPERTY "effects[0].brush_pattern_weight_7" float 1
+    PROPERTY "effects[0].brush_pattern_weight_8" float 1
+    PROPERTY "effects[0].brush_pattern_weight_9" float 1
+    PROPERTY "effects[0].brush_pattern_weight_10" float 1
+    PROPERTY "effects[0].brush_pattern_weight_11" float 1
+    PROPERTY "effects[0].brush_pattern_weight_12" float 1
+    PROPERTY "effects[0].brush_pattern_weight_13" float 1
+    PROPERTY "effects[0].brush_pattern_weight_14" float 1
+    PROPERTY "effects[0].brush_pattern_weight_15" float 1
+    PROPERTY "effects[0].progress" float 32
+    PROPERTY "effects[0].softness" float 0.34999999403953552
+    PROPERTY "effects[0].angle" float 0.75
+    PROPERTY "effects[0].radius" float 8
+    PROPERTY "effects[0].amount" float 3
+    PROPERTY "effects[0].threshold" float 0.10000000149011612
+    PROPERTY "effects[0].intensity" float 0.80000001192092896
+    PROPERTY "effects[0].seed" float 0
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effects[1].enabled" bool 1
+    PROPERTY "effects[1].region_enabled" bool 1
+    PROPERTY "effects[1].type" enum 3
+    PROPERTY "effects[1].mask" assetref ""
+    PROPERTY "effects[1].radius" float 32
+    PROPERTY "effects[1].angle" float 0
+    PROPERTY "effects[1].intensity" float 0.079999998211860657
+    PROPERTY "effects[1].amount" float 2
+    PROPERTY "effects[1].speed" float 1
+    PROPERTY "effects[1].seed" float 0
+    PROPERTY "effects[1].color" color 1 1 1 1
+    PROPERTY "effects[1].custom_shader" assetref ""
+    PROPERTY "effects[2].enabled" bool 1
+    PROPERTY "effects[2].region_enabled" bool 1
+    PROPERTY "effects[2].type" enum 24
+    PROPERTY "effects[2].radius" float 4.9000000953674316
+    PROPERTY "effects[2].intensity" float 1
+    PROPERTY "effects[2].color" color 0 0 0 1
+    PROPERTY "effects[2].custom_shader" assetref ""
+    PROPERTY "effects[3].enabled" bool 1
+    PROPERTY "effects[3].region_enabled" bool 0
+    PROPERTY "effects[3].type" enum 15
+    PROPERTY "effects[3].radius" float 0.5339999794960022
+    PROPERTY "effects[3].softness" float 0.45399999618530273
+    PROPERTY "effects[3].intensity" float 1
+    PROPERTY "effects[3].color" color 0 0 0 1
+    PROPERTY "effects[3].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
+    PROPERTY "effects[0].speed" float 1
+    PROPERTY "effects[0].direction" vec2 1 -1
+    PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].waveform" enum 0
+    PROPERTY "effects[1].threshold" float 12
+    PROPERTY "effects[1].progress" float 0.25
+    PROPERTY "effects[1].softness" float 0.60000002384185791
+    PROPERTY "effects[1].direction" vec2 0 1
+    PROPERTY "effects[1].color_2" color 1 1 1 1
+    PROPERTY "effects[1].color_3" color 1 1 1 1
+    PROPERTY "effects[1].color_4" color 1 1 1 1
+    PROPERTY "effects[1].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[1].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[1].color_stop_4" float 1
+    PROPERTY "effects[1].brush_atlas_enabled" bool 0
+    PROPERTY "effects[1].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[1].brush_pattern_mode" enum 0
+    PROPERTY "effects[1].brush_pattern_index" enum 0
+    PROPERTY "effects[1].brush_pattern_weight_0" float 1
+    PROPERTY "effects[1].brush_pattern_weight_1" float 1
+    PROPERTY "effects[1].brush_pattern_weight_2" float 1
+    PROPERTY "effects[1].brush_pattern_weight_3" float 1
+    PROPERTY "effects[1].brush_pattern_weight_4" float 1
+    PROPERTY "effects[1].brush_pattern_weight_5" float 1
+    PROPERTY "effects[1].brush_pattern_weight_6" float 1
+    PROPERTY "effects[1].brush_pattern_weight_7" float 1
+    PROPERTY "effects[1].brush_pattern_weight_8" float 1
+    PROPERTY "effects[1].brush_pattern_weight_9" float 1
+    PROPERTY "effects[1].brush_pattern_weight_10" float 1
+    PROPERTY "effects[1].brush_pattern_weight_11" float 1
+    PROPERTY "effects[1].brush_pattern_weight_12" float 1
+    PROPERTY "effects[1].brush_pattern_weight_13" float 1
+    PROPERTY "effects[1].brush_pattern_weight_14" float 1
+    PROPERTY "effects[1].brush_pattern_weight_15" float 1
+    PROPERTY "effects[1].waveform" enum 0
+    PROPERTY "effects[2].threshold" float 0.064999997615814209
+    PROPERTY "effects[2].amount" float 0.94999998807907104
+    PROPERTY "effects[2].angle" float 500
+    PROPERTY "effects[2].progress" float 0.34999999403953552
+    PROPERTY "effects[2].softness" float 0.039999999105930328
+    PROPERTY "effects[2].speed" float 1
+    PROPERTY "effects[2].seed" float 0
+    PROPERTY "effects[2].direction" vec2 0 1
+    PROPERTY "effects[2].color_2" color 0.11999999731779099 0.18000000715255737 0.55000001192092896 1
+    PROPERTY "effects[2].color_3" color 0.94999998807907104 0.31999999284744263 0.11999999731779099 1
+    PROPERTY "effects[2].color_4" color 1 0.94999998807907104 0.55000001192092896 1
+    PROPERTY "effects[2].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[2].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[2].color_stop_4" float 1
+    PROPERTY "effects[2].mask" assetref ""
+    PROPERTY "effects[2].brush_atlas_enabled" bool 0
+    PROPERTY "effects[2].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[2].brush_pattern_mode" enum 0
+    PROPERTY "effects[2].brush_pattern_index" enum 0
+    PROPERTY "effects[2].brush_pattern_weight_0" float 0
+    PROPERTY "effects[2].brush_pattern_weight_1" float 0
+    PROPERTY "effects[2].brush_pattern_weight_2" float 0
+    PROPERTY "effects[2].brush_pattern_weight_3" float 0
+    PROPERTY "effects[2].brush_pattern_weight_4" float 0
+    PROPERTY "effects[2].brush_pattern_weight_5" float 0
+    PROPERTY "effects[2].brush_pattern_weight_6" float 0
+    PROPERTY "effects[2].brush_pattern_weight_7" float 0
+    PROPERTY "effects[2].brush_pattern_weight_8" float 0
+    PROPERTY "effects[2].brush_pattern_weight_9" float 0
+    PROPERTY "effects[2].brush_pattern_weight_10" float 0
+    PROPERTY "effects[2].brush_pattern_weight_11" float 0
+    PROPERTY "effects[2].brush_pattern_weight_12" float 0
+    PROPERTY "effects[2].brush_pattern_weight_13" float 0
+    PROPERTY "effects[2].brush_pattern_weight_14" float 0
+    PROPERTY "effects[2].brush_pattern_weight_15" float 0
+    PROPERTY "effects[2].waveform" enum 0
+    PROPERTY "effects[3].threshold" float 13.220000267028809
+    PROPERTY "effects[3].amount" float 47.900001525878906
+    PROPERTY "effects[3].angle" float 0
+    PROPERTY "effects[3].progress" float 0.34999999403953552
+    PROPERTY "effects[3].speed" float 1
+    PROPERTY "effects[3].seed" float 0.12999999523162842
+    PROPERTY "effects[3].direction" vec2 0.039999999105930328 0.5
+    PROPERTY "effects[3].color_2" color 0.69926458597183228 0.726165771484375 0.8919752836227417 1
+    PROPERTY "effects[3].color_3" color 0.46108147501945496 0.87962961196899414 0.26877573132514954 1
+    PROPERTY "effects[3].color_4" color 0.54938268661499023 0.52131038904190063 0.29673448204994202 1
+    PROPERTY "effects[3].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[3].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[3].color_stop_4" float 1
+    PROPERTY "effects[3].mask" assetref "7409d900b68b4b27d48438c355b173dc"
+    PROPERTY "effects[3].brush_atlas_enabled" bool 0
+    PROPERTY "effects[3].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[3].brush_pattern_mode" enum 0
+    PROPERTY "effects[3].brush_pattern_index" enum 0
+    PROPERTY "effects[3].brush_pattern_weight_0" float 1
+    PROPERTY "effects[3].brush_pattern_weight_1" float 1
+    PROPERTY "effects[3].brush_pattern_weight_2" float 1
+    PROPERTY "effects[3].brush_pattern_weight_3" float 1
+    PROPERTY "effects[3].brush_pattern_weight_4" float 1
+    PROPERTY "effects[3].brush_pattern_weight_5" float 1
+    PROPERTY "effects[3].brush_pattern_weight_6" float 1
+    PROPERTY "effects[3].brush_pattern_weight_7" float 1
+    PROPERTY "effects[3].brush_pattern_weight_8" float 1
+    PROPERTY "effects[3].brush_pattern_weight_9" float 1
+    PROPERTY "effects[3].brush_pattern_weight_10" float 1
+    PROPERTY "effects[3].brush_pattern_weight_11" float 1
+    PROPERTY "effects[3].brush_pattern_weight_12" float 1
+    PROPERTY "effects[3].brush_pattern_weight_13" float 1
+    PROPERTY "effects[3].brush_pattern_weight_14" float 1
+    PROPERTY "effects[3].brush_pattern_weight_15" float 1
+    PROPERTY "effects[3].waveform" enum 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 5
+  NAME "GameObject"
+  ENABLED 0
+  PARENT 0
+  TRANSFORM 11.399999618530273 -1.3500000238418579 -2.3499999046325684 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "PointLightComponent" 0
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 8
+    PROPERTY "color" color 1 0.89999997615814209 0.75 1
+    PROPERTY "intensity" float 400
+    PROPERTY "range" float 42.799999237060547
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 0.46000000834465027
+    PROPERTY "shadow_depth_bias" float 0.21899999678134918
+    PROPERTY "shadow_normal_bias" float 5.25
+    PROPERTY "shadow_near_plane" float 2.4600000381469727
+  END_COMPONENT
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "intensity" float 50.900001525878906
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0.019999999552965164
+    PROPERTY "shadow_normal_bias" float 1.3999999761581421
+    PROPERTY "shadow_distance" float 120
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 7
+  NAME "GameObject (1)"
+  ENABLED 0
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "intensity" float 25
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 0.94999998807907104
+    PROPERTY "shadow_depth_bias" float 0.5
+    PROPERTY "shadow_normal_bias" float 3.7000000476837158
+    PROPERTY "shadow_distance" float 26
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 8
+  NAME "Cube"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -8.6999998092651367 4.8767385482788086 1.4625718593597412 -0.061463654041290283 0.62831854820251465 -1.4642019271850586 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "PrimitiveMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 22
+    PROPERTY "primitive_type" enum 1
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 1
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 0.99998998641967773 0.99998998641967773 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+    PROPERTY "material_slots[0].name" string ""
+    PROPERTY "material_slots[0].asset" asset "8c79019a77ccdf4e86ee19f2337f683f"
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 9
+  NAME "arknights_endfield_-yvonne-"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM -15.964176177978516 -11.149999618530273 -10.697061538696289 -0 -3.481919527053833 -0 20 20 20
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "MeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 39
+    PROPERTY "mesh_asset" asset "2f53b1670e8a8b53d9c7b836b02c8190"
+    PROPERTY "material_asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slot_count" int 8
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 0.99998998641967773 0.99998998641967773 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_rotation_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+    PROPERTY "material_slots[0].name" string "mat_0"
+    PROPERTY "material_slots[0].asset" asset "7793d161d0f3240d4879e94ba7ee1a9c"
+    PROPERTY "material_slots[1].name" string "mat_1"
+    PROPERTY "material_slots[1].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[2].name" string "mat_2"
+    PROPERTY "material_slots[2].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[3].name" string "mat_3"
+    PROPERTY "material_slots[3].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[4].name" string "mat_4"
+    PROPERTY "material_slots[4].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[5].name" string "mat_5"
+    PROPERTY "material_slots[5].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[6].name" string "mat_6"
+    PROPERTY "material_slots[6].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[7].name" string "mat_7"
+    PROPERTY "material_slots[7].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+  END_COMPONENT
+  COMPONENT "ModelEffectStackComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 107
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 2
+    PROPERTY "target_slot_mode" enum 0
+    PROPERTY "depth_mode" enum 0
+    PROPERTY "extract_mode" enum 1
+    PROPERTY "max_bleed_pixels" float 128
+    PROPERTY "target_slot_index" enum 0
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].region_enabled" bool 1
+    PROPERTY "effects[0].type" enum 2
+    PROPERTY "effects[0].radius" float 3.2400000095367432
+    PROPERTY "effects[0].intensity" float 1.7999999523162842
+    PROPERTY "effects[0].amount" float 0.23999999463558197
+    PROPERTY "effects[0].angle" float 0
+    PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effects[1].enabled" bool 0
+    PROPERTY "effects[1].region_enabled" bool 1
+    PROPERTY "effects[1].type" enum 2
+    PROPERTY "effects[1].radius" float 1.940000057220459
+    PROPERTY "effects[1].intensity" float 1
+    PROPERTY "effects[1].amount" float 0
+    PROPERTY "effects[1].angle" float 0
+    PROPERTY "effects[1].color" color 1 1 1 1
+    PROPERTY "effects[1].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
+    PROPERTY "effects[0].threshold" float 0
+    PROPERTY "effects[0].progress" float 0
+    PROPERTY "effects[0].softness" float 0
+    PROPERTY "effects[0].speed" float 0
+    PROPERTY "effects[0].seed" float 0
+    PROPERTY "effects[0].direction" vec2 1 -1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 0
+    PROPERTY "effects[0].brush_pattern_weight_1" float 0
+    PROPERTY "effects[0].brush_pattern_weight_2" float 0
+    PROPERTY "effects[0].brush_pattern_weight_3" float 0
+    PROPERTY "effects[0].brush_pattern_weight_4" float 0
+    PROPERTY "effects[0].brush_pattern_weight_5" float 0
+    PROPERTY "effects[0].brush_pattern_weight_6" float 0
+    PROPERTY "effects[0].brush_pattern_weight_7" float 0
+    PROPERTY "effects[0].brush_pattern_weight_8" float 0
+    PROPERTY "effects[0].brush_pattern_weight_9" float 0
+    PROPERTY "effects[0].brush_pattern_weight_10" float 0
+    PROPERTY "effects[0].brush_pattern_weight_11" float 0
+    PROPERTY "effects[0].brush_pattern_weight_12" float 0
+    PROPERTY "effects[0].brush_pattern_weight_13" float 0
+    PROPERTY "effects[0].brush_pattern_weight_14" float 0
+    PROPERTY "effects[0].brush_pattern_weight_15" float 0
+    PROPERTY "effects[0].waveform" enum 0
+    PROPERTY "effects[1].threshold" float 0
+    PROPERTY "effects[1].progress" float 0
+    PROPERTY "effects[1].softness" float 0.60000002384185791
+    PROPERTY "effects[1].speed" float 1
+    PROPERTY "effects[1].seed" float 0
+    PROPERTY "effects[1].direction" vec2 1 -1
+    PROPERTY "effects[1].color_2" color 1 1 1 1
+    PROPERTY "effects[1].color_3" color 1 1 1 1
+    PROPERTY "effects[1].color_4" color 1 1 1 1
+    PROPERTY "effects[1].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[1].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[1].color_stop_4" float 1
+    PROPERTY "effects[1].mask" assetref ""
+    PROPERTY "effects[1].brush_atlas_enabled" bool 0
+    PROPERTY "effects[1].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[1].brush_pattern_mode" enum 0
+    PROPERTY "effects[1].brush_pattern_index" enum 0
+    PROPERTY "effects[1].brush_pattern_weight_0" float 0
+    PROPERTY "effects[1].brush_pattern_weight_1" float 0
+    PROPERTY "effects[1].brush_pattern_weight_2" float 0
+    PROPERTY "effects[1].brush_pattern_weight_3" float 0
+    PROPERTY "effects[1].brush_pattern_weight_4" float 0
+    PROPERTY "effects[1].brush_pattern_weight_5" float 0
+    PROPERTY "effects[1].brush_pattern_weight_6" float 0
+    PROPERTY "effects[1].brush_pattern_weight_7" float 0
+    PROPERTY "effects[1].brush_pattern_weight_8" float 0
+    PROPERTY "effects[1].brush_pattern_weight_9" float 0
+    PROPERTY "effects[1].brush_pattern_weight_10" float 0
+    PROPERTY "effects[1].brush_pattern_weight_11" float 0
+    PROPERTY "effects[1].brush_pattern_weight_12" float 0
+    PROPERTY "effects[1].brush_pattern_weight_13" float 0
+    PROPERTY "effects[1].brush_pattern_weight_14" float 0
+    PROPERTY "effects[1].brush_pattern_weight_15" float 0
+    PROPERTY "effects[1].waveform" enum 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 10
+  NAME "woman_seated_v13"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 8.1059856414794922 10.124624252319336 -41.545635223388672 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "MeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 23
+    PROPERTY "mesh_asset" asset "e0f718122996c5302b6f7ddaf2cb4461"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 0
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_rotation_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 11
+  NAME "YYBMiku_Base2"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 6.2506608963012695 4.8589000701904297 -41.762702941894531 -0 -3.4470183849334717 -0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 62
+    PROPERTY "mesh_asset" asset "933510ca5825e37064cf4d37ef755d47"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 19
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 0
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+    PROPERTY "material_slots[0].name" string "Body"
+    PROPERTY "material_slots[0].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[1].name" string "Glove"
+    PROPERTY "material_slots[1].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[2].name" string "7"
+    PROPERTY "material_slots[2].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[3].name" string "Hair"
+    PROPERTY "material_slots[3].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[4].name" string "lika_dress_b"
+    PROPERTY "material_slots[4].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[5].name" string "lika_dress1"
+    PROPERTY "material_slots[5].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[6].name" string "lace_b"
+    PROPERTY "material_slots[6].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[7].name" string "bara"
+    PROPERTY "material_slots[7].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[8].name" string "belt"
+    PROPERTY "material_slots[8].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[9].name" string "bow"
+    PROPERTY "material_slots[9].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[10].name" string "mcbn"
+    PROPERTY "material_slots[10].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[11].name" string "underskirt00"
+    PROPERTY "material_slots[11].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[12].name" string "s1"
+    PROPERTY "material_slots[12].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[13].name" string "s2"
+    PROPERTY "material_slots[13].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[14].name" string "白"
+    PROPERTY "material_slots[14].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[15].name" string "金1"
+    PROPERTY "material_slots[15].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[16].name" string "none"
+    PROPERTY "material_slots[16].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[17].name" string "hair2"
+    PROPERTY "material_slots[17].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[18].name" string "Hair2"
+    PROPERTY "material_slots[18].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+  END_COMPONENT
+  COMPONENT "ModelEffectStackComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 107
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 2
+    PROPERTY "target_slot_mode" enum 0
+    PROPERTY "depth_mode" enum 0
+    PROPERTY "extract_mode" enum 0
+    PROPERTY "max_bleed_pixels" float 128
+    PROPERTY "target_slot_index" enum 0
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].region_enabled" bool 1
+    PROPERTY "effects[0].type" enum 2
+    PROPERTY "effects[0].radius" float 2.5099999904632568
+    PROPERTY "effects[0].intensity" float 1.0499999523162842
+    PROPERTY "effects[0].amount" float 0.029999999329447746
+    PROPERTY "effects[0].angle" float -7.9000000953674316
+    PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effects[1].enabled" bool 1
+    PROPERTY "effects[1].region_enabled" bool 1
+    PROPERTY "effects[1].type" enum 18
+    PROPERTY "effects[1].amount" float 6
+    PROPERTY "effects[1].intensity" float 1
+    PROPERTY "effects[1].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
+    PROPERTY "effects[0].threshold" float 0
+    PROPERTY "effects[0].progress" float 0
+    PROPERTY "effects[0].softness" float 0
+    PROPERTY "effects[0].speed" float 0
+    PROPERTY "effects[0].seed" float 0
+    PROPERTY "effects[0].direction" vec2 1 -1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 0
+    PROPERTY "effects[0].brush_pattern_weight_1" float 0
+    PROPERTY "effects[0].brush_pattern_weight_2" float 0
+    PROPERTY "effects[0].brush_pattern_weight_3" float 0
+    PROPERTY "effects[0].brush_pattern_weight_4" float 0
+    PROPERTY "effects[0].brush_pattern_weight_5" float 0
+    PROPERTY "effects[0].brush_pattern_weight_6" float 0
+    PROPERTY "effects[0].brush_pattern_weight_7" float 0
+    PROPERTY "effects[0].brush_pattern_weight_8" float 0
+    PROPERTY "effects[0].brush_pattern_weight_9" float 0
+    PROPERTY "effects[0].brush_pattern_weight_10" float 0
+    PROPERTY "effects[0].brush_pattern_weight_11" float 0
+    PROPERTY "effects[0].brush_pattern_weight_12" float 0
+    PROPERTY "effects[0].brush_pattern_weight_13" float 0
+    PROPERTY "effects[0].brush_pattern_weight_14" float 0
+    PROPERTY "effects[0].brush_pattern_weight_15" float 0
+    PROPERTY "effects[0].waveform" enum 0
+    PROPERTY "effects[1].radius" float 8
+    PROPERTY "effects[1].threshold" float 0
+    PROPERTY "effects[1].angle" float 0
+    PROPERTY "effects[1].progress" float 0
+    PROPERTY "effects[1].softness" float 0
+    PROPERTY "effects[1].speed" float 0
+    PROPERTY "effects[1].seed" float 0
+    PROPERTY "effects[1].direction" vec2 1 -1
+    PROPERTY "effects[1].color" color 1 1 1 1
+    PROPERTY "effects[1].color_2" color 1 1 1 1
+    PROPERTY "effects[1].color_3" color 1 1 1 1
+    PROPERTY "effects[1].color_4" color 1 1 1 1
+    PROPERTY "effects[1].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[1].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[1].color_stop_4" float 1
+    PROPERTY "effects[1].mask" assetref ""
+    PROPERTY "effects[1].brush_atlas_enabled" bool 0
+    PROPERTY "effects[1].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[1].brush_pattern_mode" enum 0
+    PROPERTY "effects[1].brush_pattern_index" enum 0
+    PROPERTY "effects[1].brush_pattern_weight_0" float 0
+    PROPERTY "effects[1].brush_pattern_weight_1" float 0
+    PROPERTY "effects[1].brush_pattern_weight_2" float 0
+    PROPERTY "effects[1].brush_pattern_weight_3" float 0
+    PROPERTY "effects[1].brush_pattern_weight_4" float 0
+    PROPERTY "effects[1].brush_pattern_weight_5" float 0
+    PROPERTY "effects[1].brush_pattern_weight_6" float 0
+    PROPERTY "effects[1].brush_pattern_weight_7" float 0
+    PROPERTY "effects[1].brush_pattern_weight_8" float 0
+    PROPERTY "effects[1].brush_pattern_weight_9" float 0
+    PROPERTY "effects[1].brush_pattern_weight_10" float 0
+    PROPERTY "effects[1].brush_pattern_weight_11" float 0
+    PROPERTY "effects[1].brush_pattern_weight_12" float 0
+    PROPERTY "effects[1].brush_pattern_weight_13" float 0
+    PROPERTY "effects[1].brush_pattern_weight_14" float 0
+    PROPERTY "effects[1].brush_pattern_weight_15" float 0
+    PROPERTY "effects[1].waveform" enum 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 6
+  NAME "SkyMapTest"
+  ENABLED 1
+  PARENT 11
+  TRANSFORM -7.9197864532470703 -5.064089298248291 -41.292274475097656 -0 -2.8361670970916748 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "ScreenEffectStackComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 105
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 1
+    PROPERTY "apply_stage" enum 1
+    PROPERTY "target_mode" enum 1
+    PROPERTY "target_rendering_layer" int 0
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].region_enabled" bool 1
+    PROPERTY "effects[0].type" enum 2
+    PROPERTY "effects[0].radius" float 5.2600002288818359
+    PROPERTY "effects[0].intensity" float 0.51999998092651367
+    PROPERTY "effects[0].amount" float -0.74000000953674316
+    PROPERTY "effects[0].angle" float 4.6999998092651367
+    PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
+    PROPERTY "effects[0].threshold" float 0.44999998807907104
+    PROPERTY "effects[0].progress" float 1
+    PROPERTY "effects[0].softness" float 0.079999998211860657
+    PROPERTY "effects[0].speed" float 2
+    PROPERTY "effects[0].seed" float 0
+    PROPERTY "effects[0].direction" vec2 0.5 0.5
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 0
+    PROPERTY "effects[0].brush_pattern_weight_1" float 0
+    PROPERTY "effects[0].brush_pattern_weight_2" float 0
+    PROPERTY "effects[0].brush_pattern_weight_3" float 0
+    PROPERTY "effects[0].brush_pattern_weight_4" float 0
+    PROPERTY "effects[0].brush_pattern_weight_5" float 0
+    PROPERTY "effects[0].brush_pattern_weight_6" float 0
+    PROPERTY "effects[0].brush_pattern_weight_7" float 0
+    PROPERTY "effects[0].brush_pattern_weight_8" float 0
+    PROPERTY "effects[0].brush_pattern_weight_9" float 0
+    PROPERTY "effects[0].brush_pattern_weight_10" float 0
+    PROPERTY "effects[0].brush_pattern_weight_11" float 0
+    PROPERTY "effects[0].brush_pattern_weight_12" float 0
+    PROPERTY "effects[0].brush_pattern_weight_13" float 0
+    PROPERTY "effects[0].brush_pattern_weight_14" float 0
+    PROPERTY "effects[0].brush_pattern_weight_15" float 0
+    PROPERTY "effects[0].waveform" enum 0
+    PROPERTY "effects[1].enabled" bool 1
+    PROPERTY "effects[1].region_enabled" bool 1
+    PROPERTY "effects[1].type" enum 17
+    PROPERTY "effects[1].direction" vec2 0.5 0.5
+    PROPERTY "effects[1].amount" float 0.20000000298023224
+    PROPERTY "effects[1].intensity" float 1
+    PROPERTY "effects[1].custom_shader" assetref ""
+    PROPERTY "effects[1].radius" float 3
+    PROPERTY "effects[1].threshold" float 0.05000000074505806
+    PROPERTY "effects[1].angle" float 0.15000000596046448
+    PROPERTY "effects[1].progress" float 0.25
+    PROPERTY "effects[1].softness" float 0.039999999105930328
+    PROPERTY "effects[1].speed" float 1.5
+    PROPERTY "effects[1].seed" float 1
+    PROPERTY "effects[1].color" color 0.071044832468032837 0.071047723293304443 0.10185188055038452 1
+    PROPERTY "effects[1].color_2" color 0.16975307464599609 0.28580164909362793 1 1
+    PROPERTY "effects[1].color_3" color 0.95061731338500977 0.93280118703842163 0.92714530229568481 1
+    PROPERTY "effects[1].color_4" color 0.080323100090026855 0.58644503355026245 0.83950614929199219 1
+    PROPERTY "effects[1].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[1].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[1].color_stop_4" float 1
+    PROPERTY "effects[1].mask" assetref ""
+    PROPERTY "effects[1].brush_atlas_enabled" bool 0
+    PROPERTY "effects[1].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[1].brush_pattern_mode" enum 0
+    PROPERTY "effects[1].brush_pattern_index" enum 0
+    PROPERTY "effects[1].brush_pattern_weight_0" float 1
+    PROPERTY "effects[1].brush_pattern_weight_1" float 1
+    PROPERTY "effects[1].brush_pattern_weight_2" float 1
+    PROPERTY "effects[1].brush_pattern_weight_3" float 1
+    PROPERTY "effects[1].brush_pattern_weight_4" float 1
+    PROPERTY "effects[1].brush_pattern_weight_5" float 1
+    PROPERTY "effects[1].brush_pattern_weight_6" float 1
+    PROPERTY "effects[1].brush_pattern_weight_7" float 1
+    PROPERTY "effects[1].brush_pattern_weight_8" float 1
+    PROPERTY "effects[1].brush_pattern_weight_9" float 1
+    PROPERTY "effects[1].brush_pattern_weight_10" float 1
+    PROPERTY "effects[1].brush_pattern_weight_11" float 1
+    PROPERTY "effects[1].brush_pattern_weight_12" float 1
+    PROPERTY "effects[1].brush_pattern_weight_13" float 1
+    PROPERTY "effects[1].brush_pattern_weight_14" float 1
+    PROPERTY "effects[1].brush_pattern_weight_15" float 1
+    PROPERTY "effects[1].waveform" enum 0
+  END_COMPONENT
+  COMPONENT "SkyboxComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 27
+    PROPERTY "cubemap" assetref "649ebac27e889a3a66d83cf9b4901a2d"
+    PROPERTY "keyframes" array assetref 0
+    PROPERTY "priority" int 67
+    PROPERTY "sky_enabled" bool 1
+    PROPERTY "rotation_degrees" float 6.5
+    PROPERTY "intensity" float 0.64999997615814209
+    PROPERTY "toon_environment" float 0
+    PROPERTY "time" float 0.20631572604179382
+    PROPERTY "time_speed" float 10
+    PROPERTY "clouds_enabled" bool 1
+    PROPERTY "cloud_layer1_speed" vec2 -0.017000000923871994 0
+    PROPERTY "cloud_layer1_scale" float 6.3000001907348633
+    PROPERTY "cloud_layer1_density" float 0.64999997615814209
+    PROPERTY "cloud_layer1_color" color 0.69295704364776611 0.44692122936248779 0.97839504480361938 0.75
+    PROPERTY "cloud_layer2_speed" vec2 -0.001500000013038516 0.0010000000474974513
+    PROPERTY "cloud_layer2_scale" float 4.5
+    PROPERTY "cloud_layer2_density" float 0.97000002861022949
+    PROPERTY "cloud_layer2_color" color 0.071683056652545929 0.09203251451253891 0.13271605968475342 0.55000001192092896
+    PROPERTY "stars_enabled" bool 1
+    PROPERTY "star_density" float 1
+    PROPERTY "star_intensity" float 0.4699999988079071
+    PROPERTY "star_color" color 1 0.8399999737739563 0.68000000715255737 1
+    PROPERTY "moon_enabled" bool 1
+    PROPERTY "moon_direction" vec3 0.6600000262260437 0.79000002145767212 0.89999997615814209
+    PROPERTY "moon_size" float 0.0010000000474974513
+    PROPERTY "moon_intensity" float 4.3499999046325684
+    PROPERTY "moon_color" color 1 0.87999999523162842 0.69999998807907104 1
+  END_COMPONENT
+  COMPONENT "DirectionalLightComponent" 0
+    STABLE_ID 5
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "intensity" float 3.25
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0.019999999552965164
+    PROPERTY "shadow_normal_bias" float 1.3999999761581421
+    PROPERTY "shadow_distance" float 120
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 66
+  NAME "YYBMiku_Base2 コピー"
+  ENABLED 1
+  PARENT 11
+  TRANSFORM 6.2506608963012695 4.8589000701904297 -41.762702941894531 -0 -3.4470183849334717 -0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 62
+    PROPERTY "mesh_asset" asset "933510ca5825e37064cf4d37ef755d47"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 19
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 0
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+    PROPERTY "material_slots[0].name" string "Body"
+    PROPERTY "material_slots[0].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[1].name" string "Glove"
+    PROPERTY "material_slots[1].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[2].name" string "7"
+    PROPERTY "material_slots[2].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[3].name" string "Hair"
+    PROPERTY "material_slots[3].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[4].name" string "lika_dress_b"
+    PROPERTY "material_slots[4].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[5].name" string "lika_dress1"
+    PROPERTY "material_slots[5].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[6].name" string "lace_b"
+    PROPERTY "material_slots[6].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[7].name" string "bara"
+    PROPERTY "material_slots[7].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[8].name" string "belt"
+    PROPERTY "material_slots[8].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[9].name" string "bow"
+    PROPERTY "material_slots[9].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[10].name" string "mcbn"
+    PROPERTY "material_slots[10].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[11].name" string "underskirt00"
+    PROPERTY "material_slots[11].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[12].name" string "s1"
+    PROPERTY "material_slots[12].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[13].name" string "s2"
+    PROPERTY "material_slots[13].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[14].name" string "白"
+    PROPERTY "material_slots[14].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[15].name" string "金1"
+    PROPERTY "material_slots[15].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[16].name" string "none"
+    PROPERTY "material_slots[16].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[17].name" string "hair2"
+    PROPERTY "material_slots[17].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[18].name" string "Hair2"
+    PROPERTY "material_slots[18].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+  END_COMPONENT
+  COMPONENT "ModelEffectStackComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 107
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 2
+    PROPERTY "target_slot_mode" enum 0
+    PROPERTY "depth_mode" enum 0
+    PROPERTY "extract_mode" enum 0
+    PROPERTY "max_bleed_pixels" float 128
+    PROPERTY "target_slot_index" enum 0
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].region_enabled" bool 1
+    PROPERTY "effects[0].type" enum 2
+    PROPERTY "effects[0].radius" float 2.5099999904632568
+    PROPERTY "effects[0].intensity" float 1.0499999523162842
+    PROPERTY "effects[0].amount" float 0.029999999329447746
+    PROPERTY "effects[0].angle" float -7.9000000953674316
+    PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effects[1].enabled" bool 1
+    PROPERTY "effects[1].region_enabled" bool 1
+    PROPERTY "effects[1].type" enum 18
+    PROPERTY "effects[1].amount" float 6
+    PROPERTY "effects[1].intensity" float 1
+    PROPERTY "effects[1].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
+    PROPERTY "effects[0].threshold" float 0
+    PROPERTY "effects[0].progress" float 0
+    PROPERTY "effects[0].softness" float 0
+    PROPERTY "effects[0].speed" float 0
+    PROPERTY "effects[0].seed" float 0
+    PROPERTY "effects[0].direction" vec2 1 -1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 0
+    PROPERTY "effects[0].brush_pattern_weight_1" float 0
+    PROPERTY "effects[0].brush_pattern_weight_2" float 0
+    PROPERTY "effects[0].brush_pattern_weight_3" float 0
+    PROPERTY "effects[0].brush_pattern_weight_4" float 0
+    PROPERTY "effects[0].brush_pattern_weight_5" float 0
+    PROPERTY "effects[0].brush_pattern_weight_6" float 0
+    PROPERTY "effects[0].brush_pattern_weight_7" float 0
+    PROPERTY "effects[0].brush_pattern_weight_8" float 0
+    PROPERTY "effects[0].brush_pattern_weight_9" float 0
+    PROPERTY "effects[0].brush_pattern_weight_10" float 0
+    PROPERTY "effects[0].brush_pattern_weight_11" float 0
+    PROPERTY "effects[0].brush_pattern_weight_12" float 0
+    PROPERTY "effects[0].brush_pattern_weight_13" float 0
+    PROPERTY "effects[0].brush_pattern_weight_14" float 0
+    PROPERTY "effects[0].brush_pattern_weight_15" float 0
+    PROPERTY "effects[0].waveform" enum 0
+    PROPERTY "effects[1].radius" float 8
+    PROPERTY "effects[1].threshold" float 0
+    PROPERTY "effects[1].angle" float 0
+    PROPERTY "effects[1].progress" float 0
+    PROPERTY "effects[1].softness" float 0
+    PROPERTY "effects[1].speed" float 0
+    PROPERTY "effects[1].seed" float 0
+    PROPERTY "effects[1].direction" vec2 1 -1
+    PROPERTY "effects[1].color" color 1 1 1 1
+    PROPERTY "effects[1].color_2" color 1 1 1 1
+    PROPERTY "effects[1].color_3" color 1 1 1 1
+    PROPERTY "effects[1].color_4" color 1 1 1 1
+    PROPERTY "effects[1].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[1].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[1].color_stop_4" float 1
+    PROPERTY "effects[1].mask" assetref ""
+    PROPERTY "effects[1].brush_atlas_enabled" bool 0
+    PROPERTY "effects[1].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[1].brush_pattern_mode" enum 0
+    PROPERTY "effects[1].brush_pattern_index" enum 0
+    PROPERTY "effects[1].brush_pattern_weight_0" float 0
+    PROPERTY "effects[1].brush_pattern_weight_1" float 0
+    PROPERTY "effects[1].brush_pattern_weight_2" float 0
+    PROPERTY "effects[1].brush_pattern_weight_3" float 0
+    PROPERTY "effects[1].brush_pattern_weight_4" float 0
+    PROPERTY "effects[1].brush_pattern_weight_5" float 0
+    PROPERTY "effects[1].brush_pattern_weight_6" float 0
+    PROPERTY "effects[1].brush_pattern_weight_7" float 0
+    PROPERTY "effects[1].brush_pattern_weight_8" float 0
+    PROPERTY "effects[1].brush_pattern_weight_9" float 0
+    PROPERTY "effects[1].brush_pattern_weight_10" float 0
+    PROPERTY "effects[1].brush_pattern_weight_11" float 0
+    PROPERTY "effects[1].brush_pattern_weight_12" float 0
+    PROPERTY "effects[1].brush_pattern_weight_13" float 0
+    PROPERTY "effects[1].brush_pattern_weight_14" float 0
+    PROPERTY "effects[1].brush_pattern_weight_15" float 0
+    PROPERTY "effects[1].waveform" enum 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 68
+  NAME "YYBMiku_Base2 コピー"
+  ENABLED 1
+  PARENT 66
+  TRANSFORM 6.2506608963012695 4.8589000701904297 -41.762702941894531 -0 -3.4470183849334717 -0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 62
+    PROPERTY "mesh_asset" asset "933510ca5825e37064cf4d37ef755d47"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 19
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 0
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+    PROPERTY "material_slots[0].name" string "Body"
+    PROPERTY "material_slots[0].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[1].name" string "Glove"
+    PROPERTY "material_slots[1].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[2].name" string "7"
+    PROPERTY "material_slots[2].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[3].name" string "Hair"
+    PROPERTY "material_slots[3].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[4].name" string "lika_dress_b"
+    PROPERTY "material_slots[4].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[5].name" string "lika_dress1"
+    PROPERTY "material_slots[5].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[6].name" string "lace_b"
+    PROPERTY "material_slots[6].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[7].name" string "bara"
+    PROPERTY "material_slots[7].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[8].name" string "belt"
+    PROPERTY "material_slots[8].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[9].name" string "bow"
+    PROPERTY "material_slots[9].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[10].name" string "mcbn"
+    PROPERTY "material_slots[10].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[11].name" string "underskirt00"
+    PROPERTY "material_slots[11].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[12].name" string "s1"
+    PROPERTY "material_slots[12].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[13].name" string "s2"
+    PROPERTY "material_slots[13].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[14].name" string "白"
+    PROPERTY "material_slots[14].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[15].name" string "金1"
+    PROPERTY "material_slots[15].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[16].name" string "none"
+    PROPERTY "material_slots[16].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[17].name" string "hair2"
+    PROPERTY "material_slots[17].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[18].name" string "Hair2"
+    PROPERTY "material_slots[18].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+  END_COMPONENT
+  COMPONENT "ModelEffectStackComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 107
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 2
+    PROPERTY "target_slot_mode" enum 0
+    PROPERTY "depth_mode" enum 0
+    PROPERTY "extract_mode" enum 0
+    PROPERTY "max_bleed_pixels" float 128
+    PROPERTY "target_slot_index" enum 0
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].region_enabled" bool 1
+    PROPERTY "effects[0].type" enum 2
+    PROPERTY "effects[0].radius" float 2.5099999904632568
+    PROPERTY "effects[0].intensity" float 1.0499999523162842
+    PROPERTY "effects[0].amount" float 0.029999999329447746
+    PROPERTY "effects[0].angle" float -7.9000000953674316
+    PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effects[1].enabled" bool 1
+    PROPERTY "effects[1].region_enabled" bool 1
+    PROPERTY "effects[1].type" enum 18
+    PROPERTY "effects[1].amount" float 6
+    PROPERTY "effects[1].intensity" float 1
+    PROPERTY "effects[1].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
+    PROPERTY "effects[0].threshold" float 0
+    PROPERTY "effects[0].progress" float 0
+    PROPERTY "effects[0].softness" float 0
+    PROPERTY "effects[0].speed" float 0
+    PROPERTY "effects[0].seed" float 0
+    PROPERTY "effects[0].direction" vec2 1 -1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 0
+    PROPERTY "effects[0].brush_pattern_weight_1" float 0
+    PROPERTY "effects[0].brush_pattern_weight_2" float 0
+    PROPERTY "effects[0].brush_pattern_weight_3" float 0
+    PROPERTY "effects[0].brush_pattern_weight_4" float 0
+    PROPERTY "effects[0].brush_pattern_weight_5" float 0
+    PROPERTY "effects[0].brush_pattern_weight_6" float 0
+    PROPERTY "effects[0].brush_pattern_weight_7" float 0
+    PROPERTY "effects[0].brush_pattern_weight_8" float 0
+    PROPERTY "effects[0].brush_pattern_weight_9" float 0
+    PROPERTY "effects[0].brush_pattern_weight_10" float 0
+    PROPERTY "effects[0].brush_pattern_weight_11" float 0
+    PROPERTY "effects[0].brush_pattern_weight_12" float 0
+    PROPERTY "effects[0].brush_pattern_weight_13" float 0
+    PROPERTY "effects[0].brush_pattern_weight_14" float 0
+    PROPERTY "effects[0].brush_pattern_weight_15" float 0
+    PROPERTY "effects[0].waveform" enum 0
+    PROPERTY "effects[1].radius" float 8
+    PROPERTY "effects[1].threshold" float 0
+    PROPERTY "effects[1].angle" float 0
+    PROPERTY "effects[1].progress" float 0
+    PROPERTY "effects[1].softness" float 0
+    PROPERTY "effects[1].speed" float 0
+    PROPERTY "effects[1].seed" float 0
+    PROPERTY "effects[1].direction" vec2 1 -1
+    PROPERTY "effects[1].color" color 1 1 1 1
+    PROPERTY "effects[1].color_2" color 1 1 1 1
+    PROPERTY "effects[1].color_3" color 1 1 1 1
+    PROPERTY "effects[1].color_4" color 1 1 1 1
+    PROPERTY "effects[1].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[1].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[1].color_stop_4" float 1
+    PROPERTY "effects[1].mask" assetref ""
+    PROPERTY "effects[1].brush_atlas_enabled" bool 0
+    PROPERTY "effects[1].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[1].brush_pattern_mode" enum 0
+    PROPERTY "effects[1].brush_pattern_index" enum 0
+    PROPERTY "effects[1].brush_pattern_weight_0" float 0
+    PROPERTY "effects[1].brush_pattern_weight_1" float 0
+    PROPERTY "effects[1].brush_pattern_weight_2" float 0
+    PROPERTY "effects[1].brush_pattern_weight_3" float 0
+    PROPERTY "effects[1].brush_pattern_weight_4" float 0
+    PROPERTY "effects[1].brush_pattern_weight_5" float 0
+    PROPERTY "effects[1].brush_pattern_weight_6" float 0
+    PROPERTY "effects[1].brush_pattern_weight_7" float 0
+    PROPERTY "effects[1].brush_pattern_weight_8" float 0
+    PROPERTY "effects[1].brush_pattern_weight_9" float 0
+    PROPERTY "effects[1].brush_pattern_weight_10" float 0
+    PROPERTY "effects[1].brush_pattern_weight_11" float 0
+    PROPERTY "effects[1].brush_pattern_weight_12" float 0
+    PROPERTY "effects[1].brush_pattern_weight_13" float 0
+    PROPERTY "effects[1].brush_pattern_weight_14" float 0
+    PROPERTY "effects[1].brush_pattern_weight_15" float 0
+    PROPERTY "effects[1].waveform" enum 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 70
+  NAME "YYBMiku_Base2 コピー"
+  ENABLED 1
+  PARENT 68
+  TRANSFORM 6.2506608963012695 4.8589000701904297 -41.762702941894531 -0 -3.4470183849334717 -0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 62
+    PROPERTY "mesh_asset" asset "933510ca5825e37064cf4d37ef755d47"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 19
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 0
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+    PROPERTY "material_slots[0].name" string "Body"
+    PROPERTY "material_slots[0].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[1].name" string "Glove"
+    PROPERTY "material_slots[1].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[2].name" string "7"
+    PROPERTY "material_slots[2].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[3].name" string "Hair"
+    PROPERTY "material_slots[3].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[4].name" string "lika_dress_b"
+    PROPERTY "material_slots[4].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[5].name" string "lika_dress1"
+    PROPERTY "material_slots[5].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[6].name" string "lace_b"
+    PROPERTY "material_slots[6].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[7].name" string "bara"
+    PROPERTY "material_slots[7].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[8].name" string "belt"
+    PROPERTY "material_slots[8].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[9].name" string "bow"
+    PROPERTY "material_slots[9].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[10].name" string "mcbn"
+    PROPERTY "material_slots[10].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[11].name" string "underskirt00"
+    PROPERTY "material_slots[11].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[12].name" string "s1"
+    PROPERTY "material_slots[12].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[13].name" string "s2"
+    PROPERTY "material_slots[13].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[14].name" string "白"
+    PROPERTY "material_slots[14].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[15].name" string "金1"
+    PROPERTY "material_slots[15].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[16].name" string "none"
+    PROPERTY "material_slots[16].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[17].name" string "hair2"
+    PROPERTY "material_slots[17].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[18].name" string "Hair2"
+    PROPERTY "material_slots[18].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+  END_COMPONENT
+  COMPONENT "ModelEffectStackComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 107
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 2
+    PROPERTY "target_slot_mode" enum 0
+    PROPERTY "depth_mode" enum 0
+    PROPERTY "extract_mode" enum 0
+    PROPERTY "max_bleed_pixels" float 128
+    PROPERTY "target_slot_index" enum 0
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].region_enabled" bool 1
+    PROPERTY "effects[0].type" enum 2
+    PROPERTY "effects[0].radius" float 2.5099999904632568
+    PROPERTY "effects[0].intensity" float 1.0499999523162842
+    PROPERTY "effects[0].amount" float 0.029999999329447746
+    PROPERTY "effects[0].angle" float -7.9000000953674316
+    PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effects[1].enabled" bool 1
+    PROPERTY "effects[1].region_enabled" bool 1
+    PROPERTY "effects[1].type" enum 18
+    PROPERTY "effects[1].amount" float 6
+    PROPERTY "effects[1].intensity" float 1
+    PROPERTY "effects[1].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
+    PROPERTY "effects[0].threshold" float 0
+    PROPERTY "effects[0].progress" float 0
+    PROPERTY "effects[0].softness" float 0
+    PROPERTY "effects[0].speed" float 0
+    PROPERTY "effects[0].seed" float 0
+    PROPERTY "effects[0].direction" vec2 1 -1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 0
+    PROPERTY "effects[0].brush_pattern_weight_1" float 0
+    PROPERTY "effects[0].brush_pattern_weight_2" float 0
+    PROPERTY "effects[0].brush_pattern_weight_3" float 0
+    PROPERTY "effects[0].brush_pattern_weight_4" float 0
+    PROPERTY "effects[0].brush_pattern_weight_5" float 0
+    PROPERTY "effects[0].brush_pattern_weight_6" float 0
+    PROPERTY "effects[0].brush_pattern_weight_7" float 0
+    PROPERTY "effects[0].brush_pattern_weight_8" float 0
+    PROPERTY "effects[0].brush_pattern_weight_9" float 0
+    PROPERTY "effects[0].brush_pattern_weight_10" float 0
+    PROPERTY "effects[0].brush_pattern_weight_11" float 0
+    PROPERTY "effects[0].brush_pattern_weight_12" float 0
+    PROPERTY "effects[0].brush_pattern_weight_13" float 0
+    PROPERTY "effects[0].brush_pattern_weight_14" float 0
+    PROPERTY "effects[0].brush_pattern_weight_15" float 0
+    PROPERTY "effects[0].waveform" enum 0
+    PROPERTY "effects[1].radius" float 8
+    PROPERTY "effects[1].threshold" float 0
+    PROPERTY "effects[1].angle" float 0
+    PROPERTY "effects[1].progress" float 0
+    PROPERTY "effects[1].softness" float 0
+    PROPERTY "effects[1].speed" float 0
+    PROPERTY "effects[1].seed" float 0
+    PROPERTY "effects[1].direction" vec2 1 -1
+    PROPERTY "effects[1].color" color 1 1 1 1
+    PROPERTY "effects[1].color_2" color 1 1 1 1
+    PROPERTY "effects[1].color_3" color 1 1 1 1
+    PROPERTY "effects[1].color_4" color 1 1 1 1
+    PROPERTY "effects[1].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[1].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[1].color_stop_4" float 1
+    PROPERTY "effects[1].mask" assetref ""
+    PROPERTY "effects[1].brush_atlas_enabled" bool 0
+    PROPERTY "effects[1].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[1].brush_pattern_mode" enum 0
+    PROPERTY "effects[1].brush_pattern_index" enum 0
+    PROPERTY "effects[1].brush_pattern_weight_0" float 0
+    PROPERTY "effects[1].brush_pattern_weight_1" float 0
+    PROPERTY "effects[1].brush_pattern_weight_2" float 0
+    PROPERTY "effects[1].brush_pattern_weight_3" float 0
+    PROPERTY "effects[1].brush_pattern_weight_4" float 0
+    PROPERTY "effects[1].brush_pattern_weight_5" float 0
+    PROPERTY "effects[1].brush_pattern_weight_6" float 0
+    PROPERTY "effects[1].brush_pattern_weight_7" float 0
+    PROPERTY "effects[1].brush_pattern_weight_8" float 0
+    PROPERTY "effects[1].brush_pattern_weight_9" float 0
+    PROPERTY "effects[1].brush_pattern_weight_10" float 0
+    PROPERTY "effects[1].brush_pattern_weight_11" float 0
+    PROPERTY "effects[1].brush_pattern_weight_12" float 0
+    PROPERTY "effects[1].brush_pattern_weight_13" float 0
+    PROPERTY "effects[1].brush_pattern_weight_14" float 0
+    PROPERTY "effects[1].brush_pattern_weight_15" float 0
+    PROPERTY "effects[1].waveform" enum 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 72
+  NAME "YYBMiku_Base2 コピー"
+  ENABLED 1
+  PARENT 70
+  TRANSFORM 6.2506608963012695 4.8589000701904297 -41.762702941894531 -0 -3.4470183849334717 -0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 62
+    PROPERTY "mesh_asset" asset "933510ca5825e37064cf4d37ef755d47"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 19
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 0
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+    PROPERTY "material_slots[0].name" string "Body"
+    PROPERTY "material_slots[0].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[1].name" string "Glove"
+    PROPERTY "material_slots[1].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[2].name" string "7"
+    PROPERTY "material_slots[2].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[3].name" string "Hair"
+    PROPERTY "material_slots[3].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[4].name" string "lika_dress_b"
+    PROPERTY "material_slots[4].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[5].name" string "lika_dress1"
+    PROPERTY "material_slots[5].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[6].name" string "lace_b"
+    PROPERTY "material_slots[6].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[7].name" string "bara"
+    PROPERTY "material_slots[7].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[8].name" string "belt"
+    PROPERTY "material_slots[8].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[9].name" string "bow"
+    PROPERTY "material_slots[9].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[10].name" string "mcbn"
+    PROPERTY "material_slots[10].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[11].name" string "underskirt00"
+    PROPERTY "material_slots[11].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[12].name" string "s1"
+    PROPERTY "material_slots[12].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[13].name" string "s2"
+    PROPERTY "material_slots[13].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[14].name" string "白"
+    PROPERTY "material_slots[14].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[15].name" string "金1"
+    PROPERTY "material_slots[15].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[16].name" string "none"
+    PROPERTY "material_slots[16].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[17].name" string "hair2"
+    PROPERTY "material_slots[17].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[18].name" string "Hair2"
+    PROPERTY "material_slots[18].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+  END_COMPONENT
+  COMPONENT "ModelEffectStackComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 107
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 2
+    PROPERTY "target_slot_mode" enum 0
+    PROPERTY "depth_mode" enum 0
+    PROPERTY "extract_mode" enum 0
+    PROPERTY "max_bleed_pixels" float 128
+    PROPERTY "target_slot_index" enum 0
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effects[0].enabled" bool 1
+    PROPERTY "effects[0].region_enabled" bool 1
+    PROPERTY "effects[0].type" enum 2
+    PROPERTY "effects[0].radius" float 2.5099999904632568
+    PROPERTY "effects[0].intensity" float 1.0499999523162842
+    PROPERTY "effects[0].amount" float 0.029999999329447746
+    PROPERTY "effects[0].angle" float -7.9000000953674316
+    PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effects[1].enabled" bool 1
+    PROPERTY "effects[1].region_enabled" bool 1
+    PROPERTY "effects[1].type" enum 18
+    PROPERTY "effects[1].amount" float 6
+    PROPERTY "effects[1].intensity" float 1
+    PROPERTY "effects[1].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
+    PROPERTY "effects[0].threshold" float 0
+    PROPERTY "effects[0].progress" float 0
+    PROPERTY "effects[0].softness" float 0
+    PROPERTY "effects[0].speed" float 0
+    PROPERTY "effects[0].seed" float 0
+    PROPERTY "effects[0].direction" vec2 1 -1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 0
+    PROPERTY "effects[0].brush_pattern_weight_1" float 0
+    PROPERTY "effects[0].brush_pattern_weight_2" float 0
+    PROPERTY "effects[0].brush_pattern_weight_3" float 0
+    PROPERTY "effects[0].brush_pattern_weight_4" float 0
+    PROPERTY "effects[0].brush_pattern_weight_5" float 0
+    PROPERTY "effects[0].brush_pattern_weight_6" float 0
+    PROPERTY "effects[0].brush_pattern_weight_7" float 0
+    PROPERTY "effects[0].brush_pattern_weight_8" float 0
+    PROPERTY "effects[0].brush_pattern_weight_9" float 0
+    PROPERTY "effects[0].brush_pattern_weight_10" float 0
+    PROPERTY "effects[0].brush_pattern_weight_11" float 0
+    PROPERTY "effects[0].brush_pattern_weight_12" float 0
+    PROPERTY "effects[0].brush_pattern_weight_13" float 0
+    PROPERTY "effects[0].brush_pattern_weight_14" float 0
+    PROPERTY "effects[0].brush_pattern_weight_15" float 0
+    PROPERTY "effects[0].waveform" enum 0
+    PROPERTY "effects[1].radius" float 8
+    PROPERTY "effects[1].threshold" float 0
+    PROPERTY "effects[1].angle" float 0
+    PROPERTY "effects[1].progress" float 0
+    PROPERTY "effects[1].softness" float 0
+    PROPERTY "effects[1].speed" float 0
+    PROPERTY "effects[1].seed" float 0
+    PROPERTY "effects[1].direction" vec2 1 -1
+    PROPERTY "effects[1].color" color 1 1 1 1
+    PROPERTY "effects[1].color_2" color 1 1 1 1
+    PROPERTY "effects[1].color_3" color 1 1 1 1
+    PROPERTY "effects[1].color_4" color 1 1 1 1
+    PROPERTY "effects[1].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[1].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[1].color_stop_4" float 1
+    PROPERTY "effects[1].mask" assetref ""
+    PROPERTY "effects[1].brush_atlas_enabled" bool 0
+    PROPERTY "effects[1].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[1].brush_pattern_mode" enum 0
+    PROPERTY "effects[1].brush_pattern_index" enum 0
+    PROPERTY "effects[1].brush_pattern_weight_0" float 0
+    PROPERTY "effects[1].brush_pattern_weight_1" float 0
+    PROPERTY "effects[1].brush_pattern_weight_2" float 0
+    PROPERTY "effects[1].brush_pattern_weight_3" float 0
+    PROPERTY "effects[1].brush_pattern_weight_4" float 0
+    PROPERTY "effects[1].brush_pattern_weight_5" float 0
+    PROPERTY "effects[1].brush_pattern_weight_6" float 0
+    PROPERTY "effects[1].brush_pattern_weight_7" float 0
+    PROPERTY "effects[1].brush_pattern_weight_8" float 0
+    PROPERTY "effects[1].brush_pattern_weight_9" float 0
+    PROPERTY "effects[1].brush_pattern_weight_10" float 0
+    PROPERTY "effects[1].brush_pattern_weight_11" float 0
+    PROPERTY "effects[1].brush_pattern_weight_12" float 0
+    PROPERTY "effects[1].brush_pattern_weight_13" float 0
+    PROPERTY "effects[1].brush_pattern_weight_14" float 0
+    PROPERTY "effects[1].brush_pattern_weight_15" float 0
+    PROPERTY "effects[1].waveform" enum 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 12
+  NAME "GameObject (2)"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 0.67592597007751465 0.10848195850849152 0.10848195850849152 1
+    PROPERTY "intensity" float 18.200000762939453
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 20
+    PROPERTY "shadow_depth_bias" float 0.30500000715255737
+    PROPERTY "shadow_normal_bias" float 1.3999999761581421
+    PROPERTY "shadow_distance" float 152
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 14
+  NAME "satonaka_tie"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 -9.5 0 0 -3.9531638622283936 0 10 10 10
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 34
+    PROPERTY "mesh_asset" asset "2b0cefc53d0ef76e853dab5555225f4f"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 5
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 0 0 0
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 0
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+    PROPERTY "material_slots[0].name" string "pc003_01_bottom"
+    PROPERTY "material_slots[0].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[1].name" string "pc003_01_body"
+    PROPERTY "material_slots[1].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[2].name" string "pc003_23_hair00"
+    PROPERTY "material_slots[2].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[3].name" string "pc003_01_top"
+    PROPERTY "material_slots[3].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[4].name" string "pc003_face1"
+    PROPERTY "material_slots[4].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+  END_COMPONENT
+  COMPONENT "ModelEffectStackComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 64
+    PROPERTY "enabled" bool 1
+    PROPERTY "use_preset" bool 0
+    PROPERTY "effect_preset" assetref ""
+    PROPERTY "effect_count" int 1
+    PROPERTY "target_slot_mode" enum 0
+    PROPERTY "depth_mode" enum 0
+    PROPERTY "extract_mode" enum 0
+    PROPERTY "max_bleed_pixels" float 128
+    PROPERTY "target_slot_index" enum 0
+    PROPERTY "effect_region_enabled" bool 0
+    PROPERTY "effect_region_shape" enum 0
+    PROPERTY "effect_region_scope" enum 0
+    PROPERTY "effect_region_invert" bool 0
+    PROPERTY "effect_region_center" vec2 0.5 0.5
+    PROPERTY "effect_region_size" vec2 0.5 0.5
+    PROPERTY "effect_region_rotation" float 0
+    PROPERTY "effect_region_feather" float 0
+    PROPERTY "effect_region_strength" float 1
+    PROPERTY "effect_region_mask" assetref ""
+    PROPERTY "effect_region_additional_count" int 0
+    PROPERTY "effects[0].enabled" bool 0
+    PROPERTY "effects[0].region_enabled" bool 0
+    PROPERTY "effects[0].type" enum 2
+    PROPERTY "effects[0].radius" float 1.4800000190734863
+    PROPERTY "effects[0].intensity" float 1
+    PROPERTY "effects[0].amount" float 0.019999999552965164
+    PROPERTY "effects[0].angle" float 9.1000003814697266
+    PROPERTY "effects[0].color" color 1 1 1 1
+    PROPERTY "effects[0].custom_shader" assetref ""
+    PROPERTY "effect_region_path_count" int 0
+    PROPERTY "effects[0].threshold" float 0
+    PROPERTY "effects[0].progress" float 0
+    PROPERTY "effects[0].softness" float 0
+    PROPERTY "effects[0].speed" float 0
+    PROPERTY "effects[0].seed" float 0
+    PROPERTY "effects[0].direction" vec2 1 -1
+    PROPERTY "effects[0].color_2" color 1 1 1 1
+    PROPERTY "effects[0].color_3" color 1 1 1 1
+    PROPERTY "effects[0].color_4" color 1 1 1 1
+    PROPERTY "effects[0].color_stop_2" float 0.33333298563957214
+    PROPERTY "effects[0].color_stop_3" float 0.66666698455810547
+    PROPERTY "effects[0].color_stop_4" float 1
+    PROPERTY "effects[0].mask" assetref ""
+    PROPERTY "effects[0].brush_atlas_enabled" bool 0
+    PROPERTY "effects[0].brush_instanced_renderer_enabled" bool 0
+    PROPERTY "effects[0].brush_pattern_mode" enum 0
+    PROPERTY "effects[0].brush_pattern_index" enum 0
+    PROPERTY "effects[0].brush_pattern_weight_0" float 0
+    PROPERTY "effects[0].brush_pattern_weight_1" float 0
+    PROPERTY "effects[0].brush_pattern_weight_2" float 0
+    PROPERTY "effects[0].brush_pattern_weight_3" float 0
+    PROPERTY "effects[0].brush_pattern_weight_4" float 0
+    PROPERTY "effects[0].brush_pattern_weight_5" float 0
+    PROPERTY "effects[0].brush_pattern_weight_6" float 0
+    PROPERTY "effects[0].brush_pattern_weight_7" float 0
+    PROPERTY "effects[0].brush_pattern_weight_8" float 0
+    PROPERTY "effects[0].brush_pattern_weight_9" float 0
+    PROPERTY "effects[0].brush_pattern_weight_10" float 0
+    PROPERTY "effects[0].brush_pattern_weight_11" float 0
+    PROPERTY "effects[0].brush_pattern_weight_12" float 0
+    PROPERTY "effects[0].brush_pattern_weight_13" float 0
+    PROPERTY "effects[0].brush_pattern_weight_14" float 0
+    PROPERTY "effects[0].brush_pattern_weight_15" float 0
+    PROPERTY "effects[0].waveform" enum 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 75
+  NAME "GameObject (3)"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 24
+    PROPERTY "mesh_asset" asset ""
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 0
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 1
+    PROPERTY "outline" bool 0
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 0
+    PROPERTY "shadow_alpha_cutoff" float 0.5
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 90 188.5 180
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 1
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 0
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+  END_COMPONENT
+END_OBJECT

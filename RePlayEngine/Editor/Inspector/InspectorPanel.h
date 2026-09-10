@@ -5,6 +5,7 @@
 #include "../../Object/Component/MissingComponent.h"
 
 #include <cstddef>
+#include <functional>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -40,6 +41,13 @@ namespace ReplayEngine::Editor
         // Checkbox で値が変わったときだけ true を返す。永続化は呼び出し側の責務。
         bool DrawContents(EditorContext& context, bool& show_game_template_components);
 
+        // 型ごとの追加 UI を Component の中へ差し込む。ここは型を知らない。
+        using ComponentExtraDrawer = std::function<void(EditorContext&, Core::Component&)>;
+        void SetComponentExtraDrawer(ComponentExtraDrawer drawer)
+        {
+            component_extra_drawer_ = std::move(drawer);
+        }
+
     private:
         void DrawGameObjectHeader(EditorContext& context, Core::GameObject& object);
         void DrawPrefabHeader(EditorContext& context, Core::GameObject& object);
@@ -62,6 +70,7 @@ namespace ReplayEngine::Editor
         static void DrawMissingComponentDetails(const Core::MissingComponent& missing);
 
         AddComponentPanel add_component_panel_;
+        ComponentExtraDrawer component_extra_drawer_;
 
         // 削除ボタンが押された Component。
         //

@@ -28,6 +28,7 @@ using namespace framework_motion_workspace::Detail;
 
 void framework::draw_motion_layers()
 {
+    REPLAY_PROFILE_SCOPE("Editor/MotionLayers");
     if (!show_motion_layers_panel) return;
     ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
     if (!ImGui::Begin(u8"Motion レイヤー", &show_motion_layers_panel))
@@ -559,5 +560,182 @@ void framework::draw_motion_layers()
         ImGui::TextDisabled(u8"プロジェクトブラウザーで .replaymotion を開くか、新規作成してください。");
     }
 
+    ImGui::End();
+}
+
+// ポーズの保存先/読み込み元を選ぶ。Scene と同じ Win32 ダイアログを使う。
+static std::filesystem::path browse_rig_pose_file(bool save)
+{
+    wchar_t filename[32768]{};
+    OPENFILENAMEW dialog{};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.lpstrFile = filename;
+    dialog.nMaxFile = static_cast<DWORD>(_countof(filename));
+    dialog.lpstrFilter = L"RePlay Rig Pose (*.replayrig)\0*.replayrig\0";
+    dialog.lpstrDefExt = L"replayrig";
+    dialog.lpstrTitle = save ? L"ポーズを保存" : L"ポーズを読み込む";
+    dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST |
+        (save ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+    const BOOL accepted = save ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog);
+    return accepted ? std::filesystem::path(filename) : std::filesystem::path{};
+}
+
+// Motion リグ。骨を選んでポーズを付ける。ポーズは .replayrig へ保存できる。
+void framework::draw_motion_rig()
+{
+    REPLAY_PROFILE_SCOPE("Editor/MotionRig");
+    if (!show_motion_rig_panel) return;
+    ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Motion");
+    if (!ImGui::Begin(u8"Motion リグ", &show_motion_rig_panel))
+    {
+        ImGui::End();
+        return;
+    }
+
+    motion_rig_panel_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows);
+    ImGui::Checkbox(u8"シーンビューへ描く", &show_rig_debug_draw);
+    ReplayEngine::Editor::EditorHelp::Item("rig.draw",
+        u8"骨を持つモデルのリグを Scene View へ重ねて描きます。");
+
+    if (ImGui::CollapsingHeader(u8"見た目"))
+    {
+        ImGui::SliderFloat(u8"線の太さ", &rig_bone_thickness, 0.5f, 6.0f, "%.1f");
+        ImGui::SliderFloat(u8"関節の大きさ", &rig_joint_radius, 0.5f, 10.0f, "%.1f");
+        ImGui::SliderFloat(u8"選択中の倍率", &rig_picked_scale, 1.0f, 4.0f, "x%.1f");
+        ImGui::SliderInt(u8"表示する深さ", &rig_max_depth, 0, 32);
+        ImGui::SameLine();
+        ImGui::TextDisabled(u8"0 で制限なし");
+        ImGui::Checkbox(u8"名前を出す", &rig_show_names);
+        ImGui::Checkbox(u8"ギズモをローカル軸で出す", &rig_gizmo_use_local);
+        ImGui::ColorEdit4(u8"骨の色", &rig_bone_tint.x,
+            ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs);
+        ImGui::ColorEdit4(u8"選択中の色", &rig_picked_tint.x,
+            ImGuiColorEditFlags_AlphaBar | ImGuiColorEditFlags_NoInputs);
+    }
+
+    ImGui::Separator();
+    const ReplayEngine::Core::GameObject* target =
+        active_object_scene().FindGameObjectByID(object_editor_context.Selection().Primary());
+    if (target == nullptr || target->PendingDestroy())
+    {
+        ImGui::TextDisabled(u8"骨を持つ GameObject を階層で選んでください。");
+        ImGui::End();
+        return;
+    }
+    std::uint64_t owner = target->ID().Value();
+    auto found = object_rig_debug_bones.find(owner);
+    if (found == object_rig_debug_bones.end() || found->second.empty())
+    {
+        // 階層で選び直さなくてよいよう、骨を持つものをここから選べるようにする。
+        ImGui::TextDisabled(u8"選択中の GameObject に骨がありません。");
+        bool any = false;
+        for (const auto& candidate : object_rig_debug_bones)
+        {
+            if (candidate.second.empty()) continue;
+            const ReplayEngine::Core::GameObject* object =
+                active_object_scene().FindGameObjectByID(
+                    ReplayEngine::Core::ObjectID{ candidate.first });
+            const std::string label = (object != nullptr ? object->Name() : std::string("?")) +
+                "  (" + std::to_string(candidate.second.size()) + u8" 本)";
+            if (ImGui::Button(label.c_str()))
+                object_editor_context.Selection().Select(
+                    ReplayEngine::Core::ObjectID{ candidate.first });
+            any = true;
+        }
+        if (!any)
+            ImGui::TextDisabled(u8"骨のあるモデルが見つかりません。");
+        ImGui::End();
+        return;
+    }
+    const std::vector<rig_debug_bone>& bones = found->second;
+    auto& pose = object_rig_pose[owner];
+    ImGui::Text(u8"%s  骨 %zu 本 / ポーズ %zu 本",
+        target->Name().c_str(), bones.size(), pose.size());
+
+    static std::array<char, 64> rig_filter{};
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::InputTextWithHint("##MotionRigSearch", u8"骨を検索...",
+        rig_filter.data(), rig_filter.size());
+    if (ImGui::Button(u8"すべて戻す"))
+    {
+        begin_rig_pose_edit(owner, u8"ポーズをすべて戻す");
+        pose.clear();
+        commit_rig_pose_edit();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(u8"ポーズを保存..."))
+    {
+        const std::filesystem::path chosen = browse_rig_pose_file(true);
+        if (!chosen.empty()) save_rig_pose(chosen);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(u8"読み込む..."))
+    {
+        const std::filesystem::path chosen = browse_rig_pose_file(false);
+        if (!chosen.empty()) load_rig_pose(chosen);
+    }
+    ReplayEngine::Editor::EditorHelp::Item("button.rig.reset_all",
+        u8"この GameObject に付けたポーズをすべて捨てます。");
+
+    if (ImGui::BeginChild("MotionRigBones", ImVec2(0.0f, 200.0f), true))
+    {
+        for (const rig_debug_bone& bone : bones)
+        {
+            if (rig_filter[0] != '\0' &&
+                bone.name.find(rig_filter.data()) == std::string::npos)
+                continue;
+            std::string label = bone.name;
+            if (pose.find(bone.name) != pose.end()) label += u8"  ●";
+            const bool picked = std::find(rig_selected_bones.begin(),
+                rig_selected_bones.end(), bone.name) != rig_selected_bones.end();
+            if (ImGui::Selectable(label.c_str(), picked))
+                select_rig_bone(bone.name, ImGui::GetIO().KeyCtrl);
+        }
+    }
+    ImGui::EndChild();
+
+    if (rig_selected_bone.empty())
+    {
+        ImGui::TextDisabled(u8"骨を選ぶと Move / Rotate / Scale を編集できます。");
+        ImGui::End();
+        return;
+    }
+    ImGui::Separator();
+    ImGui::Text(u8"選択中: %s", rig_selected_bone.c_str());
+    if (rig_selected_bones.size() > 1)
+    {
+        ImGui::SameLine();
+        ImGui::TextDisabled(u8"ほか %zu 本", rig_selected_bones.size() - 1);
+    }
+    // 上のツールバーは遠いので、いまの操作をここにも出す。Shift+W/E/R で変わる。
+    const ReplayEngine::Editor::GizmoOperation rig_op = transform_gizmo.Operation();
+    ImGui::TextDisabled(u8"ギズモ: %s   Ctrl+クリックで複数選択",
+        rig_op == ReplayEngine::Editor::GizmoOperation::Translate ? u8"移動"
+        : rig_op == ReplayEngine::Editor::GizmoOperation::Rotate ? u8"回転" : u8"拡縮");
+
+    rig_pose_override& entry = pose[rig_selected_bone];
+    // 数字での編集も履歴へ積む。掴み始めで控え、離したところで確定する。
+    const bool was_active = ImGui::IsAnyItemActive();
+    ImGui::DragFloat3(u8"移動", &entry.translation.x, 0.01f);
+    ImGui::DragFloat3(u8"回転", &entry.rotation.x, 0.5f, -360.0f, 360.0f, "%.1f");
+    ImGui::DragFloat3(u8"拡縮", &entry.scale.x, 0.01f, 0.01f, 10.0f);
+    if (ImGui::IsItemActivated() || (!was_active && ImGui::IsAnyItemActive()))
+        begin_rig_pose_edit(owner, u8"骨のポーズ");
+    if (ImGui::IsItemDeactivatedAfterEdit() || (was_active && !ImGui::IsAnyItemActive()))
+        commit_rig_pose_edit();
+
+    if (ImGui::Button(u8"この骨を戻す"))
+    {
+        begin_rig_pose_edit(owner, u8"骨のポーズを戻す");
+        for (const std::string& name : rig_selected_bones) pose.erase(name);
+        pose.erase(rig_selected_bone);
+        commit_rig_pose_edit();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(u8"戻す")) undo_rig_pose_edit();
+    ImGui::SameLine();
+    if (ImGui::Button(u8"やり直す")) redo_rig_pose_edit();
+    ImGui::SameLine();
+    ImGui::TextDisabled(u8"履歴 %zu/%zu", rig_pose_history_cursor, rig_pose_history.size());
     ImGui::End();
 }

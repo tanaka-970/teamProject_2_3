@@ -39,7 +39,7 @@ namespace ReplayEngine::Components
     //   この 2 つは独立している。片方の変更でもう片方をやり直さない。
     //
     // 【今回の範囲外】
-    //   動く MeshCollider / 変形する MeshCollider / SkinnedMesh 衝突 /
+    //   Dynamic Rigidbody の MeshCollider / 変形する MeshCollider / SkinnedMesh 衝突 /
     //   毎フレーム Cook / 剛体シミュレーション / Convex Decomposition。
     class MeshColliderComponent final : public ColliderComponent
     {
@@ -63,8 +63,8 @@ namespace ReplayEngine::Components
         bool ComputeWorldBounds(DirectX::XMFLOAT3& minimum,
             DirectX::XMFLOAT3& maximum) const override;
 
-        // 静的地形用。Character Motor の移動用 Collider には選べない。
-        bool UsableAsCharacterShape() const noexcept override { return false; }
+        // Character Motor ではワールド AABB の外接球へ安全側に近似する。
+        bool UsableAsCharacterShape() const noexcept override { return true; }
 
         std::string StatusMessage() const override { return status_; }
 
@@ -137,7 +137,8 @@ namespace ReplayEngine::Components
         // Cook 時の XZ グリッドのセルサイズ（ローカル空間）。
         float cook_cell_size = 4.0f;
 
-        // 裏面にも当たるか。
+        // 判定は常に両面で行う。片面にすると裏から入った瞬間にすり抜けるため。
+        // 値は Cook の識別にだけ使っており、false にしても当たり方は変わらない。
         bool double_sided = true;
 
         // 既定表示は Bounds のみ。必要なときだけ三角形を出す。
@@ -158,10 +159,7 @@ namespace ReplayEngine::Components
         DirectX::XMFLOAT3 world_bounds_min_{ 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT3 world_bounds_max_{ 0.0f, 0.0f, 0.0f };
 
-        // 最後に Transform を反映したときの値。変化検出に使う。
-        DirectX::XMFLOAT3 cached_position_{ 0.0f, 0.0f, 0.0f };
-        DirectX::XMFLOAT3 cached_rotation_{ 0.0f, 0.0f, 0.0f };
-        DirectX::XMFLOAT3 cached_scale_{ 1.0f, 1.0f, 1.0f };
+        DirectX::XMFLOAT4X4 cached_world_{};
         bool transform_valid_ = false;
 
         bool uniform_scale_ = true;

@@ -1,4 +1,4 @@
-#include "ShaderRenderValidation.h"
+﻿#include "ShaderRenderValidation.h"
 #include "BuiltInShaders.h"
 #include "ShaderLibrary.h"
 #include "../Materials/MaterialBinding.h"
@@ -109,7 +109,7 @@ namespace ReplayEngine::Rendering::Validation
             "Skinned変種を選ぶ");
 
         MaterialAsset missing = material;
-        missing.shader_guid = "ffffffffffffffffffffffffffffffff";
+        missing.shader_guid = "ffffffffffffffffffffffffffffffff";//適当
         missing.properties.Set("prop.UnknownFutureValue",
             Reflection::PropertyValue::MakeString("keep"));
         ResolvedMaterialBinding fallback;

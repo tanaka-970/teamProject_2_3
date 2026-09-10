@@ -45,6 +45,9 @@
 namespace
 {
     namespace SceneSerialization = ReplayEngine::Scene::Serialization;
+
+    // Editor の F5 で Loading Screen を見せる最短時間。0 にすれば従来どおり。
+    constexpr float editor_play_loading_minimum_seconds = 0.5f;
 }
 
 void framework::enter_object_play_mode(bool show_loading_screen)
@@ -116,6 +119,8 @@ void framework::enter_object_play_mode(bool show_loading_screen)
     {
         auto loading_gate = std::make_shared<editor_play_loading_gate>();
         auto loading_scene = std::make_unique<ReplayEngine::Scene::LoadingScene>();
+        // 作業が 2 フレームで終わるため、指定が無いと別画面が点滅して見える。
+        loading_scene->SetMinimumDisplayTime(editor_play_loading_minimum_seconds);
         loading_scene->AddTask("Build Editor Play Scene", [loading_gate]()
         {
             return loading_gate->WaitFor(1);

@@ -61,4 +61,10 @@ namespace ReplayEngine::Landscape
         }
         data.FinalizeGeometryEdit();
     }
+
+    void LandscapeUndoCommand::Seal()
+    {
+        lookup_.clear();
+        lookup_.rehash(0);
+    }
 }

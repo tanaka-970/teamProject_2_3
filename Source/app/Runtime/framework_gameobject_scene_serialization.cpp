@@ -231,6 +231,11 @@ bool framework::load_object_scene_from_path(const std::filesystem::path& source)
     // 新しい Scene の Backend Mode と移行済み集合でつなぎ直す。
     attach_collision_world(object_scene);
 
+    // 読み込んだ Scene の ScriptComponent を Catalog へ引き直す。
+    // Catalog の更新時にはまだこの Scene が居ないので、ここで通さないと
+    // Script が Unresolved のまま残る。
+    resolve_editor_script_schemas();
+
     std::string status = "読み込みました: " + object_scene_path.filename().string();
     if (!report.Clean())
     {

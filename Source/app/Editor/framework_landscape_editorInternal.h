@@ -18,6 +18,7 @@
 #include <cstdio>
 #include <limits>
 #include <string>
+#include <vector>
 
 namespace framework_landscape_editor_detail
 {
@@ -216,29 +217,87 @@ namespace framework_landscape_editor_detail
         return true;
     }
 
+    struct TerrainRingCache
+    {
+        struct Ring
+        {
+            float radius = -1.0f;
+            std::vector<DirectX::XMFLOAT3> points;
+            std::vector<std::uint8_t> valid;
+        };
+
+        bool Matches(const ReplayEngine::Landscape::LandscapeData& value,
+            const DirectX::XMFLOAT3& value_center, float value_radius,
+            int value_preview_mode) const noexcept
+        {
+            return data == &value && revision == value.Revision() &&
+                center.x == value_center.x && center.y == value_center.y &&
+                center.z == value_center.z && radius == value_radius &&
+                preview_mode == value_preview_mode;
+        }
+
+        void Prepare(const ReplayEngine::Landscape::LandscapeData& value,
+            const DirectX::XMFLOAT3& value_center, float value_radius,
+            int value_preview_mode)
+        {
+            if (Matches(value, value_center, value_radius, value_preview_mode)) return;
+            data = &value;
+            revision = value.Revision();
+            center = value_center;
+            radius = value_radius;
+            preview_mode = value_preview_mode;
+            for (Ring& ring : rings)
+            {
+                ring.radius = -1.0f;
+                ring.points.clear();
+                ring.valid.clear();
+            }
+        }
+
+        const ReplayEngine::Landscape::LandscapeData* data = nullptr;
+        std::uint64_t revision = 0;
+        DirectX::XMFLOAT3 center{};
+        float radius = 0.0f;
+        int preview_mode = -1;
+        Ring rings[4];
+    };
+
     inline void DrawTerrainRing(ImDrawList* draw,
         const ReplayEngine::Landscape::LandscapeData& data,
         const ReplayEngine::Core::Transform& transform,
         const DirectX::XMMATRIX& view, const DirectX::XMMATRIX& projection,
         float width, float height, float min_x, float min_y,
         const DirectX::XMFLOAT3& center, float radius,
-        ImU32 color, float thickness)
+        ImU32 color, float thickness, TerrainRingCache& cache,
+        std::size_t cache_index)
     {
-        if (radius <= 0.0f) return;
+        if (radius <= 0.0f || cache_index >= 4u) return;
 
         const int segments = data.FaceCount() > 10000 ? 36 : 64;
+        TerrainRingCache::Ring& ring = cache.rings[cache_index];
+        if (ring.radius != radius || ring.points.size() != static_cast<std::size_t>(segments + 1))
+        {
+            ring.radius = radius;
+            ring.points.resize(static_cast<std::size_t>(segments + 1));
+            ring.valid.resize(ring.points.size());
+            for (int index = 0; index <= segments; ++index)
+            {
+                const float angle = DirectX::XM_2PI *
+                    static_cast<float>(index) / static_cast<float>(segments);
+                ring.valid[static_cast<std::size_t>(index)] = SampleLandscapeSurfaceAtXZ(data,
+                    center.x + std::cos(angle) * radius,
+                    center.z + std::sin(angle) * radius,
+                    center.y, ring.points[static_cast<std::size_t>(index)]) ? 1u : 0u;
+                ring.points[static_cast<std::size_t>(index)].y += 0.04f;
+            }
+        }
+
         DirectX::XMFLOAT3 previous{};
         bool previous_valid = false;
         for (int index = 0; index <= segments; ++index)
         {
-            const float angle = DirectX::XM_2PI *
-                static_cast<float>(index) / static_cast<float>(segments);
-            DirectX::XMFLOAT3 point{};
-            const bool valid = SampleLandscapeSurfaceAtXZ(data,
-                center.x + std::cos(angle) * radius,
-                center.z + std::sin(angle) * radius,
-                center.y, point);
-            point.y += 0.04f;
+            const DirectX::XMFLOAT3& point = ring.points[static_cast<std::size_t>(index)];
+            const bool valid = ring.valid[static_cast<std::size_t>(index)] != 0;
 
             if (index > 0 && previous_valid && valid)
             {

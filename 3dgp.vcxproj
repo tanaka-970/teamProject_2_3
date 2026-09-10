@@ -280,6 +280,7 @@
     <ClCompile Include="imgui\imgui_impl_win32.cpp" />
     <ClCompile Include="imgui\imgui_ja_gryph_ranges.cpp" />
     <ClCompile Include="imgui\imgui_widgets.cpp" />
+    <ClCompile Include="imgui\ImGuizmo.cpp" />
     <ClCompile Include="Source\app\Runtime\main.cpp" />
     <ClCompile Include="Source\app\Runtime\mainValidation.cpp" />
     <ClCompile Include="Source\app\Runtime\mainValidationScene.cpp" />
@@ -489,6 +490,7 @@
     <ClCompile Include="RePlayEngine\Motion\EasingCurveAsset.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEasing.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Motion\RigClip.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionAssetLoad.cpp" />
     <ClCompile Include="RePlayEngine\Motion\CompositionAsset.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEvaluator.cpp" />
@@ -671,6 +673,7 @@
     <ClInclude Include="Source\core\high_resolution_timer.h" />
     <ClInclude Include="imgui\imconfig.h" />
     <ClInclude Include="imgui\imgui.h" />
+    <ClInclude Include="imgui\ImGuizmo.h" />
     <ClInclude Include="imgui\imgui_impl_win32.h" />
     <ClInclude Include="imgui\imgui_internal.h" />
     <ClInclude Include="imgui\imstb_rectpack.h" />

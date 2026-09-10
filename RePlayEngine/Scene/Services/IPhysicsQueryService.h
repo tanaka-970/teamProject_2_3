@@ -44,9 +44,11 @@ namespace ReplayEngine::Scene
     struct SphereSweepHit
     {
         DirectX::XMFLOAT3 center{ 0.0f, 0.0f, 0.0f };     // 衝突時の球中心（ワールド）
+        DirectX::XMFLOAT3 position{ 0.0f, 0.0f, 0.0f };   // 対象表面上の接触点（ワールド）
         DirectX::XMFLOAT3 normal{ 0.0f, 1.0f, 0.0f };
         float fraction = 1.0f;
         CollisionSourceInfo source;
+        bool started_overlapping = false;
         bool valid = false;
     };
 

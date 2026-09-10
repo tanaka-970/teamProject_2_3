@@ -67,6 +67,8 @@ namespace ReplayEngine::Components
         int material_slot_count = 0;
         std::vector<MeshMaterialSlot> material_slots;
         mutable std::array<const std::string*, max_mesh_material_slots> material_slot_asset_view{};
+        // vector の data() を直接渡すと、スロット数の変更で無効になる。固定長で借用する。
+        mutable std::array<const MeshMaterialSlot*, max_mesh_material_slots> material_slot_view{};
         bool material_override = false;
 
         // Motion の Material Track 用一時値。Scene/Prefab の正本にはしない。

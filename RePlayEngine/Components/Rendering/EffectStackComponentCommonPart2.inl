@@ -407,6 +407,58 @@
                 effect.intensity = 1.0f;
                 effect.direction = { 0.5f, 0.5f };
                 break;
+            case UI::UIEffectKind::Petals:
+                effect.radius = 6.0f;
+                effect.amount = 0.03f;
+                effect.progress = 0.35f;
+                effect.speed = 1.0f;
+                effect.angle = 1.0f;
+                effect.softness = 0.35f;
+                effect.intensity = 1.0f;
+                effect.seed = 1.0f;
+                effect.color = { 1.0f, 0.85f, 0.9f, 1.0f };
+                break;
+            case UI::UIEffectKind::GodRays:
+                effect.intensity = 1.2f;
+                effect.threshold = 0.45f;
+                effect.amount = 0.94f;
+                effect.softness = 0.55f;
+                effect.direction = { 0.5f, 0.25f };
+                effect.color = { 1.0f, 0.95f, 0.8f, 1.0f };
+                break;
+            case UI::UIEffectKind::LensFlare:
+                effect.radius = 4.0f;
+                effect.intensity = 0.8f;
+                effect.threshold = 0.6f;
+                effect.amount = 0.35f;
+                effect.softness = 0.08f;
+                effect.direction = { 0.3f, 0.3f };
+                effect.color = { 1.0f, 0.8f, 0.6f, 1.0f };
+                break;
+            case UI::UIEffectKind::Bokeh:
+                effect.radius = 18.0f;
+                effect.intensity = 0.85f;
+                effect.threshold = 0.55f;
+                effect.amount = 6.0f;
+                break;
+            case UI::UIEffectKind::TiltShift:
+                effect.radius = 14.0f;
+                effect.intensity = 1.0f;
+                effect.amount = 0.12f;
+                effect.softness = 0.18f;
+                effect.angle = 0.0f;
+                effect.direction = { 0.5f, 0.5f };
+                break;
+            case UI::UIEffectKind::FilmScratch:
+                effect.radius = 3.0f;
+                effect.intensity = 0.7f;
+                effect.threshold = 0.5f;
+                effect.amount = 0.0015f;
+                effect.softness = 0.5f;
+                effect.speed = 1.0f;
+                effect.seed = 1.0f;
+                effect.color = { 0.95f, 0.95f, 0.92f, 1.0f };
+                break;
             default:
                 break;
             }

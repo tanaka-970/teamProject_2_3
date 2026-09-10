@@ -182,14 +182,14 @@ namespace ReplayEngine::Editor
                     {
                         Add(issues, ValidationSeverity::Error, "MOTOR_PRIMARY_MISSING",
                             object->Name() + ": Character Motorの移動用Colliderが無効です。",
-                            "Trigger OFFのSphereまたはCapsule Colliderを指定してください。",
+                            "Trigger OFFのSphere/Capsule/Box/Mesh Colliderを指定してください。",
                             object->ID());
                     }
                     else if (primary->is_trigger || !primary->UsableAsCharacterShape())
                     {
                         Add(issues, ValidationSeverity::Error, "MOTOR_PRIMARY_INVALID",
-                            object->Name() + ": 移動用ColliderにTriggerまたは静的Meshが指定されています。",
-                            "SphereまたはCapsule Colliderへ変更してください。", object->ID());
+                            object->Name() + ": 移動用ColliderにTriggerまたは非対応形状が指定されています。",
+                            "Sphere/Capsule/Box/Mesh Colliderへ変更してください。", object->ID());
                     }
                 }
 

@@ -1,4 +1,5 @@
 ﻿#include "ShaderComposerAsset.h"
+#include "../RenderStats.h"
 
 #include "../Shaders/ShaderSource.h"
 
@@ -414,6 +415,7 @@ namespace ReplayEngine::Rendering
     bool ShaderComposerAsset::Load(const std::filesystem::path& path,
         ShaderComposerAsset& asset, std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/ShaderComposer");
         error.clear();
         std::ifstream stream(path, std::ios::binary);
         if (!stream) { error = "Shader Composer Asset を開けません"; return false; }

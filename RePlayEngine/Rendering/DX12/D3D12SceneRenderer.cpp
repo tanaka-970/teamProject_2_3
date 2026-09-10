@@ -20,6 +20,9 @@ namespace ReplayEngine::Rendering::DX12
 {
     namespace
     {
+        // GBuffer 4 番はモーションベクター。分離したモデルの補完で参照する。
+        constexpr std::uint32_t kScene3DMotionVectorIndex = 4;
+
         constexpr DXGI_FORMAT kScene3DGBufferFormats[kScene3DGBufferCount] =
         {
             DXGI_FORMAT_R16G16B16A16_FLOAT, // BaseColorとシェーディングモデル
@@ -672,7 +675,7 @@ namespace ReplayEngine::Rendering::DX12
 
         const auto create_geometry_pso = [this](bool skinned, bool transparent,
             bool double_sided, const D3D12_INPUT_ELEMENT_DESC* input, UINT input_count,
-            ID3D12PipelineState** output) -> bool
+            ID3D12PipelineState** output, bool motion_only = false) -> bool
         {
             D3D12_GRAPHICS_PIPELINE_STATE_DESC desc{};
             desc.pRootSignature = scene3d_geometry_root_signature_.Get();
@@ -703,6 +706,18 @@ namespace ReplayEngine::Rendering::DX12
             }
             desc.DSVFormat = kScene3DDepthDsvFormat;
             desc.SampleDesc.Count = 1;
+            if (motion_only)
+            {
+                // モーションベクター以外へは 1 bit も書かない。色は変わらない。
+                desc.BlendState.IndependentBlendEnable = TRUE;
+                for (UINT i = 0; i < kScene3DGBufferCount; ++i)
+                    desc.BlendState.RenderTarget[i].RenderTargetWriteMask =
+                        i == kScene3DMotionVectorIndex
+                            ? D3D12_COLOR_WRITE_ENABLE_ALL : 0u;
+                // 深度プリパスに居ないので EQUAL では落ちる。深度へも書かない。
+                desc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+                desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+            }
             return SUCCEEDED(device_->CreateGraphicsPipelineState(&desc,
                 IID_PPV_ARGS(output)));
         };
@@ -854,6 +869,14 @@ namespace ReplayEngine::Rendering::DX12
                     static_cast<UINT>(std::size(skinned_input)),
                     scene3d_skinned_gbuffer_pipelines_[index].ReleaseAndGetAddressOf()))
                     return fail("Scene3D.PSO.SkinnedGBuffer");
+                if (!create_geometry_pso(false, false, sided != 0, static_input,
+                    static_cast<UINT>(std::size(static_input)),
+                    scene3d_static_motion_pipelines_[index].ReleaseAndGetAddressOf(), true))
+                    return fail("Scene3D.PSO.StaticMotionOnly");
+                if (!create_geometry_pso(true, false, sided != 0, skinned_input,
+                    static_cast<UINT>(std::size(skinned_input)),
+                    scene3d_skinned_motion_pipelines_[index].ReleaseAndGetAddressOf(), true))
+                    return fail("Scene3D.PSO.SkinnedMotionOnly");
             }
                 if (!create_geometry_pso(false, true, sided != 0, static_input,
                     static_cast<UINT>(std::size(static_input)),
@@ -1994,7 +2017,12 @@ namespace ReplayEngine::Rendering::DX12
             if (source.replace_existing && allow_static_mesh_cache_replacement)
             {
                 const auto existing = static_mesh_cache_.find(source.key);
-                if (existing != static_mesh_cache_.end()) static_mesh_cache_.erase(existing);
+                if (existing != static_mesh_cache_.end())
+                {
+                    // 直前のフレームがまだ GPU で読んでいる。Fence を越えてから解放する。
+                    RetireStaticMesh(std::move(existing->second));
+                    static_mesh_cache_.erase(existing);
+                }
             }
             if (static_mesh_cache_.find(source.key) == static_mesh_cache_.end() &&
                 !EnsureStaticMesh(source))
@@ -2063,6 +2091,14 @@ namespace ReplayEngine::Rendering::DX12
         D3D12Scene3DDrawOptions options) noexcept
     {
         last_model_effect_stack_count_ = 0;
+        last_scene_draw_call_count_ = 0;
+        last_scene_triangle_count_ = 0;
+        last_visible_draw_call_count_ = 0;
+        last_visible_triangle_count_ = 0;
+        last_visible_vertex_count_ = 0;
+        counting_visible_ = false;
+        visible_frustum_.BuildFromViewProjection(current_frame_constants_.view_projection);
+        last_scene_vertex_count_ = 0;
         last_screen_effect_stack_count_ = 0;
         last_shadow_coverage_draw_count_ = 0;
         // どの前提で落ちたかを stderr から特定できるようにする。
@@ -2104,7 +2140,11 @@ namespace ReplayEngine::Rendering::DX12
             {
                 const auto existing = static_mesh_cache_.find(source.key);
                 if (existing != static_mesh_cache_.end())
+                {
+                    // 直前のフレームがまだ GPU で読んでいる。Fence を越えてから解放する。
+                    RetireStaticMesh(std::move(existing->second));
                     static_mesh_cache_.erase(existing);
+                }
             }
             if (static_mesh_cache_.find(source.key) == static_mesh_cache_.end() &&
                 !EnsureStaticMesh(source))
@@ -2176,7 +2216,8 @@ namespace ReplayEngine::Rendering::DX12
 
         const DirectX::XMFLOAT4X4 identity{
             1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 };
-        const std::vector<DirectX::XMFLOAT4X4> identity_palette{ identity };
+        const auto identity_palette = std::make_shared<const std::vector<DirectX::XMFLOAT4X4>>(
+            1, identity);
         D3D12_GPU_VIRTUAL_ADDRESS identity_bone_gpu = 0;
         if (!allocate_bytes(&identity, sizeof(identity), 16, identity_bone_gpu)) return scene3d_fail("identity bone upload");
 
@@ -2396,19 +2437,40 @@ namespace ReplayEngine::Rendering::DX12
             D3D12_GPU_VIRTUAL_ADDRESS current_bones = 0;
             D3D12_GPU_VIRTUAL_ADDRESS previous_bones = 0;
             DirectX::XMFLOAT4X4 previous_world{};
-            const std::vector<DirectX::XMFLOAT4X4>* current_palette = nullptr;
+            std::shared_ptr<const std::vector<DirectX::XMFLOAT4X4>> current_palette;
             std::string history_key;
+        };
+        std::unordered_map<const std::vector<DirectX::XMFLOAT4X4>*,
+            D3D12_GPU_VIRTUAL_ADDRESS> uploaded_bone_palettes;
+        uploaded_bone_palettes.emplace(identity_palette.get(), identity_bone_gpu);
+        const auto upload_bone_palette = [&allocate_bytes, &uploaded_bone_palettes](
+            const std::shared_ptr<const std::vector<DirectX::XMFLOAT4X4>>& palette,
+            D3D12_GPU_VIRTUAL_ADDRESS& gpu) -> bool
+        {
+            const auto uploaded = uploaded_bone_palettes.find(palette.get());
+            if (uploaded != uploaded_bone_palettes.end())
+            {
+                gpu = uploaded->second;
+                return true;
+            }
+            if (!allocate_bytes(palette->data(),
+                palette->size() * sizeof(DirectX::XMFLOAT4X4), 16, gpu))
+                return false;
+            uploaded_bone_palettes.emplace(palette.get(), gpu);
+            return true;
         };
         std::vector<PreparedSkinnedDraw> prepared_skinned(submission.skinned_draws.size());
         for (std::size_t i = 0; i < submission.skinned_draws.size(); ++i)
         {
             const D3D12SkinnedDrawItem& draw = submission.skinned_draws[i];
             PreparedSkinnedDraw& prepared = prepared_skinned[i];
-            prepared.current_palette = draw.bone_palette.empty() ? &identity_palette : &draw.bone_palette;
+            prepared.current_palette = draw.bone_palette != nullptr && !draw.bone_palette->empty()
+                ? draw.bone_palette : identity_palette;
             const std::string& history_key = !draw.motion_key.empty()
                 ? draw.motion_key : draw.surface.motion_key;
             prepared.history_key = history_key;
-            const std::vector<DirectX::XMFLOAT4X4>* previous_palette = prepared.current_palette;
+            std::shared_ptr<const std::vector<DirectX::XMFLOAT4X4>> previous_palette =
+                prepared.current_palette;
             prepared.previous_world = draw.surface.world;
             if (options.read_motion_history && !history_key.empty())
             {
@@ -2417,17 +2479,14 @@ namespace ReplayEngine::Rendering::DX12
                 {
                     // スケルトンまたはAssetの変更で前回Paletteが短くなった場合は、
                     // 現在の頂点が参照する範囲を満たす現在Paletteへ戻す。
-                    if (history.bones.size() >= prepared.current_palette->size())
-                        previous_palette = &history.bones;
+                    if (history.bones != nullptr &&
+                        history.bones->size() >= prepared.current_palette->size())
+                        previous_palette = history.bones;
                     prepared.previous_world = history.world;
                 }
             }
-            if (!allocate_bytes(prepared.current_palette->data(),
-                    prepared.current_palette->size() * sizeof(DirectX::XMFLOAT4X4), 16,
-                    prepared.current_bones) ||
-                !allocate_bytes(previous_palette->data(),
-                    previous_palette->size() * sizeof(DirectX::XMFLOAT4X4), 16,
-                    prepared.previous_bones))
+            if (!upload_bone_palette(prepared.current_palette, prepared.current_bones) ||
+                !upload_bone_palette(previous_palette, prepared.previous_bones))
                 return false;
         }
 
@@ -2466,16 +2525,35 @@ namespace ReplayEngine::Rendering::DX12
         {
             const D3D12_VERTEX_BUFFER_VIEW vb = mesh.VertexView();
             const D3D12_INDEX_BUFFER_VIEW ib = mesh.IndexView();
-            command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-            command_list_->IASetVertexBuffers(0, 1, &vb);
-            command_list_->IASetIndexBuffer(&ib);
             const std::uint32_t available = mesh.IndexCount();
             const std::uint32_t start = (std::min)(draw.start_index, available);
             const std::uint32_t remaining = available - start;
             const std::uint32_t count = draw.index_count == 0
                 ? remaining : (std::min)(draw.index_count, remaining);
             if (count != 0)
+            {
+                const bool visible = !counting_visible_ || !visible_frustum_.Valid() ||
+                    !draw.material_bounds.valid ||
+                    visible_frustum_.IntersectsTransformedAabb(
+                        draw.material_bounds.minimum, draw.material_bounds.maximum, draw.world);
+                if (frustum_culling_enabled_ && !visible) return;
+                command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                command_list_->IASetVertexBuffers(0, 1, &vb);
+                command_list_->IASetIndexBuffer(&ib);
                 command_list_->DrawIndexedInstanced(count, 1, start, 0, 0);
+                ++last_scene_draw_call_count_;
+                last_scene_triangle_count_ += count / 3u;
+                const std::uint64_t vertex_count = vb.StrideInBytes != 0
+                    ? vb.SizeInBytes / vb.StrideInBytes : 0u;
+                last_scene_vertex_count_ += vertex_count;
+                // 視錐台に入るぶんを別に数える。境界が無い物は入っている扱いにする。
+                if (counting_visible_ && visible_frustum_.Valid() && visible)
+                {
+                    ++last_visible_draw_call_count_;
+                    last_visible_triangle_count_ += count / 3u;
+                    last_visible_vertex_count_ += vertex_count;
+                }
+            }
         };
         const auto bind_surface = [this, &allocate_cb, scene_gpu, light_gpu, identity_bone_gpu,
             directional_shadow_srv, local_shadow_srv, ibl_diffuse_srv, ibl_specular_srv,
@@ -2843,13 +2921,18 @@ namespace ReplayEngine::Rendering::DX12
 
         const auto render_shadow_casters = [this, &submission, &prepared_skinned,
             &bind_shadow_surface, &draw_mesh, &has_shadow_coverage, identity_bone_gpu](
-            D3D12_GPU_VIRTUAL_ADDRESS pass_gpu) noexcept -> bool
+            D3D12_GPU_VIRTUAL_ADDRESS pass_gpu, const Frustum* shadow_frustum) noexcept -> bool
         {
             command_list_->SetGraphicsRootSignature(scene3d_shadow_root_signature_.Get());
             command_list_->SetGraphicsRootConstantBufferView(1, pass_gpu);
             for (const D3D12StaticDrawItem& draw : submission.draws)
             {
                 if (!draw.cast_shadow) continue;
+                if (shadow_culling_enabled_ && shadow_frustum != nullptr &&
+                    draw.material_bounds.valid &&
+                    !shadow_frustum->IntersectsTransformedAabb(draw.material_bounds.minimum,
+                        draw.material_bounds.maximum, draw.world))
+                    continue;
                 const auto it = static_mesh_cache_.find(draw.mesh_key);
                 if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
                 const UINT alpha_clip = (draw.alpha_mode != D3D12StaticAlphaMode::Opaque ||
@@ -2901,9 +2984,11 @@ namespace ReplayEngine::Rendering::DX12
                     1.0f, 0, 0, nullptr);
                 Scene3DShadowPassConstants pass{};
                 pass.view_projection = submission.directional_shadow.view_projection[cascade];
+                Frustum shadow_frustum;
+                shadow_frustum.BuildFromViewProjection(pass.view_projection);
                 D3D12_GPU_VIRTUAL_ADDRESS pass_gpu = 0;
                 if (!allocate_cb(&pass, sizeof(pass), pass_gpu) ||
-                    !render_shadow_casters(pass_gpu))
+                    !render_shadow_casters(pass_gpu, &shadow_frustum))
                     return false;
             }
             if (!resource_state_tracker_.Transition(command_list_.Get(),
@@ -2938,7 +3023,7 @@ namespace ReplayEngine::Rendering::DX12
                 pass.view_projection = submission.local_shadows.slices[slice].view_projection;
                 D3D12_GPU_VIRTUAL_ADDRESS pass_gpu = 0;
                 if (!allocate_cb(&pass, sizeof(pass), pass_gpu) ||
-                    !render_shadow_casters(pass_gpu))
+                    !render_shadow_casters(pass_gpu, nullptr))
                     return false;
             }
             if (!resource_state_tracker_.Transition(command_list_.Get(),
@@ -3017,9 +3102,12 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->ClearRenderTargetView(target.rtv.cpu, clear, 0, nullptr);
         command_list_->SetGraphicsRootSignature(scene3d_geometry_root_signature_.Get());
 
+        // ここから GBuffer。カメラ内の量はこのパスの数だけを見る。
+        counting_visible_ = true;
         for (const D3D12StaticDrawItem& draw : submission.draws)
         {
-            if (model_effect_isolated_from_scene(draw)) continue;
+            // 分離したモデルは色を書かず、モーションベクターだけ書く。
+            const bool motion_only = model_effect_isolated_from_scene(draw);
             if (draw.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = static_mesh_cache_.find(draw.mesh_key);
             if (it == static_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
@@ -3032,7 +3120,9 @@ namespace ReplayEngine::Rendering::DX12
             }
             const UINT index = (draw.double_sided ? 3u : 0u) +
                 static_cast<UINT>(draw.alpha_mode);
-            command_list_->SetPipelineState(scene3d_static_gbuffer_pipelines_[index].Get());
+            command_list_->SetPipelineState(motion_only
+                ? scene3d_static_motion_pipelines_[index].Get()
+                : scene3d_static_gbuffer_pipelines_[index].Get());
             if (!bind_surface(draw, previous_world, identity_bone_gpu, identity_bone_gpu, 0.0f,
                 false))
                 return false;
@@ -3041,13 +3131,16 @@ namespace ReplayEngine::Rendering::DX12
         for (std::size_t i = 0; i < submission.skinned_draws.size(); ++i)
         {
             const D3D12SkinnedDrawItem& draw = submission.skinned_draws[i];
-            if (model_effect_isolated_from_scene(draw.surface)) continue;
+            // 分離したモデルは色を書かず、モーションベクターだけ書く。
+            const bool motion_only = model_effect_isolated_from_scene(draw.surface);
             if (draw.surface.alpha_mode == D3D12StaticAlphaMode::Blend) continue;
             const auto it = skinned_mesh_cache_.find(draw.surface.mesh_key);
             if (it == skinned_mesh_cache_.end() || !it->second || !it->second->IsValid()) continue;
             const UINT index = (draw.surface.double_sided ? 3u : 0u) +
                 static_cast<UINT>(draw.surface.alpha_mode);
-            command_list_->SetPipelineState(scene3d_skinned_gbuffer_pipelines_[index].Get());
+            command_list_->SetPipelineState(motion_only
+                ? scene3d_skinned_motion_pipelines_[index].Get()
+                : scene3d_skinned_gbuffer_pipelines_[index].Get());
             if (!bind_surface(draw.surface, prepared_skinned[i].previous_world,
                 prepared_skinned[i].current_bones, prepared_skinned[i].previous_bones,
                 draw.morph_weight, false))
@@ -3055,6 +3148,7 @@ namespace ReplayEngine::Rendering::DX12
             draw_mesh(*it->second, draw.surface);
         }
 
+        counting_visible_ = false;
         for (Scene3DTarget& target : scene3d_gbuffer_)
         {
             if (!resource_state_tracker_.Transition(command_list_.Get(), target.resource.Get(),
@@ -3851,7 +3945,7 @@ namespace ReplayEngine::Rendering::DX12
                 if (draw.motion_key.empty()) continue;
                 Scene3DMotionHistory& history = scene3d_motion_history_[draw.motion_key];
                 history.world = draw.world;
-                history.bones.clear();
+                history.bones.reset();
                 history.frame_serial = scene3d_frame_serial_;
                 history.valid = true;
             }
@@ -3861,7 +3955,7 @@ namespace ReplayEngine::Rendering::DX12
                 if (prepared.history_key.empty() || prepared.current_palette == nullptr) continue;
                 Scene3DMotionHistory& history = scene3d_motion_history_[prepared.history_key];
                 history.world = submission.skinned_draws[i].surface.world;
-                history.bones = *prepared.current_palette;
+                history.bones = prepared.current_palette;
                 history.frame_serial = scene3d_frame_serial_;
                 history.valid = true;
             }

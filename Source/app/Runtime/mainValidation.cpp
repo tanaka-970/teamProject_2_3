@@ -18,6 +18,9 @@
 #include <string>
 #include <vector>
 
+#include "../../../RePlayEngine/Object/Registry/ComponentRegistry.h"
+#include "../../../RePlayEngine/Reflection/Registry/PropertyRegistry.h"
+#include "../../../RePlayEngine/Reflection/Property/PropertyValue.h"
 #include "../../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
 #include "../../../RePlayEngine/Components/Camera/CameraComponent.h"
 #include "../../../RePlayEngine/Components/Rendering/LightComponents.h"
@@ -541,6 +544,47 @@ namespace ReplayEngine::Runtime::Detail
 
 namespace
 {
+
+    // PropertyRegistry の中身をそのまま書き出す。C# バインディングの生成元にする。
+    // 手で Components*.cs を書き足すと、C++ 側に増えた Component が取り残される。
+    int RunComponentPropertyDump()
+    {
+        const std::filesystem::path path =
+            std::filesystem::path("Saved") / "ComponentProperties.txt";
+        std::error_code directory_error;
+        std::filesystem::create_directories(path.parent_path(), directory_error);
+
+        std::ofstream stream(path, std::ios::binary);
+        if (!stream)
+        {
+            std::fprintf(stderr, "ComponentProperties を書き出せません\n");
+            return 1;
+        }
+        stream << "REPLAY_COMPONENT_PROPERTIES 1\n";
+
+        for (const auto& info : ReplayEngine::Core::ComponentRegistry::All())
+        {
+            const auto& properties =
+                ReplayEngine::Reflection::PropertyRegistry::PropertiesOf(info.type_id);
+            stream << "COMPONENT " << std::quoted(info.type_name) << ' '
+                << std::quoted(info.DisplayName()) << ' '
+                << std::quoted(info.category) << ' ' << properties.size() << '\n';
+            for (const ReplayEngine::Reflection::PropertyDesc& desc : properties)
+            {
+                stream << "PROPERTY " << std::quoted(desc.name) << ' '
+                    << ReplayEngine::Reflection::ToString(desc.type) << ' '
+                    << (desc.read_only ? 1 : 0) << ' '
+                    << (desc.serializable ? 1 : 0) << ' '
+                    << desc.enum_labels.size();
+                for (const std::string& label : desc.enum_labels)
+                    stream << ' ' << std::quoted(label);
+                stream << '\n';
+            }
+            stream << "END_COMPONENT\n";
+        }
+        std::fprintf(stderr, "ComponentProperties: %s\n", path.u8string().c_str());
+        return stream.good() ? 0 : 1;
+    }
     int RunHeadlessGltfImportValidation(const char* command_line)
     {
         std::istringstream arguments(command_line != nullptr ? command_line : "");
@@ -722,7 +766,7 @@ namespace ReplayEngine::Runtime::Detail
         const bool ok = GameInput::InputState::ValidateDeterministicQueries(error);
 
         std::vector<std::string> lines;
-        lines.push_back("CHECKS pressed held released idle");
+        lines.push_back("CHECKS pressed held released idle modifiers motion-defaults legacy-v1 v2-roundtrip");
         if (!error.empty()) lines.push_back("ERROR " + error);
         WriteValidationResultFile("InputState.txt",
             "REPLAY_INPUT_STATE_VALIDATION", ok, lines);
@@ -876,6 +920,13 @@ namespace ReplayEngine::Runtime::Detail
         {
             ReplayEngine::Core::RegisterBuiltInComponents();
             return Validation::RunComponentApiValidation();
+        }
+
+        // C# バインディングの生成元を書き出すだけ。検証はしない。
+        if (command == "--dump-component-properties")
+        {
+            ReplayEngine::Core::RegisterBuiltInComponents();
+            return RunComponentPropertyDump();
         }
 
         // Phase 6。Runtime Scene の読み込みと入れ替え。

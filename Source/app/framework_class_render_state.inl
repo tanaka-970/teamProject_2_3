@@ -242,6 +242,9 @@ public:
     };
     std::unordered_map<std::string, std::vector<material_subset_bounds_entry>>
         material_subset_bounds_cache;
+    // 静的メッシュの境界。視錐台カリングの判定に使う。メッシュごとに一度だけ求める。
+    std::unordered_map<std::string, ReplayEngine::Rendering::DX12::D3D12MeshLocalBounds>
+        static_mesh_bounds_cache;
 
     // プロジェクト設定。Default Controlled Character Prefab を持つ。
     // 参照は AssetGUID なので、Prefab の名前やパスを変えても壊れない。

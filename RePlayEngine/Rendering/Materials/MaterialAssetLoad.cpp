@@ -1,4 +1,5 @@
 ﻿#include "MaterialAsset.h"
+#include "../RenderStats.h"
 #include "MaterialAssetInternal.h"
 #include "../Shaders/BuiltInShaders.h"
 
@@ -107,6 +108,7 @@ namespace ReplayEngine::Rendering
     bool MaterialAsset::Load(const std::filesystem::path& path,
         MaterialAsset& material, std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/Material");
         error.clear();
         std::ifstream stream(path, std::ios::binary);
         if (!stream)

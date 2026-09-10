@@ -1,4 +1,5 @@
 ﻿#include "MotionAsset.h"
+#include "../Rendering/RenderStats.h"
 #include "MotionExpression.h"
 
 #include "../Object/Registry/ComponentRegistry.h"
@@ -247,6 +248,7 @@ namespace ReplayEngine::Motion
     bool MotionAsset::LoadFromFile(const std::filesystem::path& path,
         MotionAsset& out, std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/Motion");
         std::ifstream file(path);
         if (!file)
         {

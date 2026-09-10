@@ -453,7 +453,14 @@ namespace ReplayEngine::Editor
         if (Reflection::PropertyRegistry::HasProperties(component.TypeID()) || has_dynamic)
         {
             const bool had_transaction = context.History().InTransaction();
-            if (editable && !had_transaction) context.BeginEdit(title + " の設定を変更");
+            // BeginEdit の Snapshot は Scene 全体を写す。Inspector は毎フレーム
+            // ここを通るので、無条件に取ると選択しているだけで重くなる。
+            const ImGuiIO& edit_io = ImGui::GetIO();
+            const bool may_change_now = ImGui::IsAnyItemActive() ||
+                ImGui::IsAnyMouseDown() || edit_io.MouseWheel != 0.0f ||
+                edit_io.WantTextInput || edit_io.WantCaptureKeyboard;
+            if (editable && !had_transaction && may_change_now)
+                context.BeginEdit(title + " の設定を変更");
             if (!editable)
             {
                 ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
@@ -605,6 +612,7 @@ namespace ReplayEngine::Editor
         draw_effect_reorder(dynamic_cast<Components::UIEffectStackComponent*>(&component));
         draw_effect_reorder(dynamic_cast<Components::ModelEffectStackComponent*>(&component));
         draw_effect_reorder(dynamic_cast<Components::ScreenEffectStackComponent*>(&component));
+        if (component_extra_drawer_) component_extra_drawer_(context, component);
 
         draw_separator();
 

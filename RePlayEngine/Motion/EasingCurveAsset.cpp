@@ -1,4 +1,5 @@
 ﻿#include "EasingCurveAsset.h"
+#include "../Rendering/RenderStats.h"
 
 #include "../Assets/AssetDatabase.h"
 
@@ -378,6 +379,7 @@ namespace ReplayEngine::Motion
     bool EasingCurveAsset::LoadFromFile(const std::filesystem::path& path,
         std::string& error)
     {
+        REPLAY_PROFILE_SCOPE("Asset/EasingCurve");
         std::ifstream stream(path, std::ios::binary);
         if (!stream)
         {

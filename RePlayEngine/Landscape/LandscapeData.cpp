@@ -45,6 +45,36 @@ namespace ReplayEngine::Landscape
             distance = result;
             return true;
         }
+
+        bool RayBounds(const XMFLOAT3& origin, const XMFLOAT3& direction,
+            float max_distance, const XMFLOAT3& minimum,
+            const XMFLOAT3& maximum) noexcept
+        {
+            float near_distance = 0.0f;
+            float far_distance = max_distance;
+            const float origins[3] = { origin.x, origin.y, origin.z };
+            const float directions[3] = { direction.x, direction.y, direction.z };
+            const float minimums[3] = {
+                minimum.x - epsilon, minimum.y - epsilon, minimum.z - epsilon };
+            const float maximums[3] = {
+                maximum.x + epsilon, maximum.y + epsilon, maximum.z + epsilon };
+            for (int axis = 0; axis < 3; ++axis)
+            {
+                if (directions[axis] == 0.0f)
+                {
+                    if (origins[axis] < minimums[axis] || origins[axis] > maximums[axis])
+                        return false;
+                    continue;
+                }
+                float first = (minimums[axis] - origins[axis]) / directions[axis];
+                float second = (maximums[axis] - origins[axis]) / directions[axis];
+                if (first > second) std::swap(first, second);
+                near_distance = (std::max)(near_distance, first);
+                far_distance = (std::min)(far_distance, second);
+                if (near_distance > far_distance) return false;
+            }
+            return true;
+        }
     }
 
     bool LandscapeData::IsFinite(const LandscapeVertex& vertex) noexcept
@@ -193,6 +223,7 @@ namespace ReplayEngine::Landscape
             std::fabs(before.y - position.y) <= epsilon &&
             std::fabs(before.z - position.z) <= epsilon) return false;
         vertices_[index].position = position;
+        MarkVertexDirty(index);
         if (finalize) FinalizeGeometryEdit();
         return true;
     }
@@ -217,18 +248,141 @@ namespace ReplayEngine::Landscape
         return Mul(Add(Add(a, b), c), 1.0f / 3.0f);
     }
 
+    void LandscapeData::MarkVertexDirty(std::size_t index) noexcept
+    {
+        if (index < vertices_.size()) touched_vertices_.push_back(index);
+    }
+
     void LandscapeData::TouchGeometry() noexcept
     {
         ++revision_;
         if (revision_ == 0) revision_ = 1;
-        MarkAllDirty();
+
+        // どこを触ったか分からないときだけ全部を上げる。
+        if (touched_vertices_.empty() || chunks_.empty())
+        {
+            MarkAllDirty();
+            return;
+        }
+
+        // 触った頂点ごとに境界を作り直すと、同じチャンクを何度も舐めることになる。
+        // どれを上げるかを先に決めてから、1 チャンクにつき 1 回だけ計算する。
+        chunk_dirty_marks_.assign(chunks_.size(), 0);
+        const int divisions = chunk_divisions_;
+        const float span_x = (std::max)(0.0001f, bounds_max_.x - bounds_min_.x);
+        const float span_z = (std::max)(0.0001f, bounds_max_.z - bounds_min_.z);
+        for (const std::size_t index : touched_vertices_)
+        {
+            if (index >= vertices_.size() || index >= vertex_chunks_.size()) continue;
+            for (const std::uint32_t chunk_index : vertex_chunks_[index])
+                if (chunk_index < chunk_dirty_marks_.size()) chunk_dirty_marks_[chunk_index] = 1;
+
+            const DirectX::XMFLOAT3& p = vertices_[index].position;
+            const int cx = static_cast<int>((p.x - bounds_min_.x) / span_x * divisions);
+            const int cz = static_cast<int>((p.z - bounds_min_.z) / span_z * divisions);
+            for (int oz = -1; oz <= 1; ++oz)
+            {
+                for (int ox = -1; ox <= 1; ++ox)
+                {
+                    const int nx = cx + ox;
+                    const int nz = cz + oz;
+                    if (nx < 0 || nz < 0 || nx >= divisions || nz >= divisions) continue;
+                    chunk_dirty_marks_[static_cast<std::size_t>(nz) * divisions + nx] = 1;
+                }
+            }
+        }
+
+        for (std::size_t i = 0; i < chunks_.size(); ++i)
+        {
+            if (chunk_dirty_marks_[i] == 0) continue;
+            LandscapeChunk& chunk = chunks_[i];
+            chunk.revision = revision_;
+            chunk.render_dirty = true;
+            chunk.collision_dirty = true;
+            RecalculateChunkNormals(chunk);
+            RecalculateChunkBounds(chunk);
+        }
+        touched_vertices_.clear();
     }
 
     void LandscapeData::FinalizeGeometryEdit() noexcept
     {
-        RecalculateNormals();
-        RecalculateBounds();
+        if (topology_batch_depth_ > 0)
+        {
+            topology_batch_dirty_ = true;
+            return;
+        }
+
+        std::size_t chunk_index_count = 0;
+        for (const LandscapeChunk& chunk : chunks_) chunk_index_count += chunk.indices.size();
+        if (chunk_index_count != indices_.size())
+        {
+            RecalculateNormals();
+            RecalculateBounds();
+            TouchGeometry();
+            BuildChunks();
+            return;
+        }
+
+        // どこを触ったか分かっているときは、法線も境界もそのチャンクだけで済ませる。
+        // 全走査すると 1 ストロークごとに全頂点を 3 周することになる。
+        const bool partial = !touched_vertices_.empty() && !chunks_.empty();
+        if (!partial) RecalculateNormals();
+        RecalculateBoundsFromTouched(partial);
         TouchGeometry();
+    }
+
+    void LandscapeData::EndTopologyBatch() noexcept
+    {
+        if (topology_batch_depth_ <= 0) return;
+        --topology_batch_depth_;
+        if (topology_batch_depth_ == 0 && topology_batch_dirty_)
+        {
+            topology_batch_dirty_ = false;
+            FinalizeGeometryEdit();
+        }
+    }
+
+    // 触った頂点だけで全体の境界を広げる。縮む方向は塗り終わりに任せる。
+    void LandscapeData::RecalculateBoundsFromTouched(bool partial) noexcept
+    {
+        if (!partial) { RecalculateBounds(); return; }
+        for (const std::size_t index : touched_vertices_)
+        {
+            if (index >= vertices_.size()) continue;
+            const DirectX::XMFLOAT3& p = vertices_[index].position;
+            bounds_min_.x = (std::min)(bounds_min_.x, p.x);
+            bounds_min_.y = (std::min)(bounds_min_.y, p.y);
+            bounds_min_.z = (std::min)(bounds_min_.z, p.z);
+            bounds_max_.x = (std::max)(bounds_max_.x, p.x);
+            bounds_max_.y = (std::max)(bounds_max_.y, p.y);
+            bounds_max_.z = (std::max)(bounds_max_.z, p.z);
+        }
+    }
+
+    void LandscapeData::RecalculateChunkNormals(const LandscapeChunk& chunk) noexcept
+    {
+        for (const std::uint32_t index : chunk.indices)
+            if (index < vertices_.size()) vertices_[index].normal = { 0.0f, 0.0f, 0.0f };
+
+        for (std::size_t offset = 0; offset + 2 < chunk.indices.size(); offset += 3)
+        {
+            const std::uint32_t ia = chunk.indices[offset];
+            const std::uint32_t ib = chunk.indices[offset + 1];
+            const std::uint32_t ic = chunk.indices[offset + 2];
+            if (ia >= vertices_.size() || ib >= vertices_.size() ||
+                ic >= vertices_.size()) continue;
+            const XMFLOAT3 edge1 = Sub(vertices_[ib].position, vertices_[ia].position);
+            const XMFLOAT3 edge2 = Sub(vertices_[ic].position, vertices_[ia].position);
+            const XMFLOAT3 face = Cross(edge1, edge2);
+            vertices_[ia].normal = Add(vertices_[ia].normal, face);
+            vertices_[ib].normal = Add(vertices_[ib].normal, face);
+            vertices_[ic].normal = Add(vertices_[ic].normal, face);
+        }
+
+        for (const std::uint32_t index : chunk.indices)
+            if (index < vertices_.size())
+                vertices_[index].normal = Normalize(vertices_[index].normal);
     }
 
     void LandscapeData::RecalculateNormals() noexcept
@@ -264,32 +418,64 @@ namespace ReplayEngine::Landscape
             bounds_max_.y = (std::max)(bounds_max_.y, vertex.position.y);
             bounds_max_.z = (std::max)(bounds_max_.z, vertex.position.z);
         }
-        for (LandscapeChunk& chunk : chunks_)
-        {
-            chunk.bounds_min = bounds_min_;
-            chunk.bounds_max = bounds_max_;
-        }
+        for (LandscapeChunk& chunk : chunks_) RecalculateChunkBounds(chunk);
     }
     bool LandscapeData::Raycast(const XMFLOAT3& origin, const XMFLOAT3& direction,
         float max_distance, LandscapeRayHit& hit) const noexcept
     {
         hit = LandscapeRayHit{};
+        last_raycast_triangle_test_count_ = 0;
         if (!Valid() || !Finite3(origin) || !Finite3(direction) ||
             !std::isfinite(max_distance) || max_distance <= 0.0f) return false;
         const XMFLOAT3 ray_direction = Normalize(direction);
         float best = max_distance;
         std::size_t best_face = static_cast<std::size_t>(-1);
-        for (std::size_t face = 0; face < FaceCount(); ++face)
+        const auto test_face = [&](std::size_t face, const std::uint32_t* triangle)
         {
-            const std::size_t offset = face * 3;
+            ++last_raycast_triangle_test_count_;
             float distance = 0.0f;
             if (!RayTriangle(origin, ray_direction,
-                vertices_[indices_[offset]].position,
-                vertices_[indices_[offset + 1]].position,
-                vertices_[indices_[offset + 2]].position, distance)) continue;
-            if (distance > best) continue;
+                vertices_[triangle[0]].position,
+                vertices_[triangle[1]].position,
+                vertices_[triangle[2]].position, distance)) return;
+            if (distance > best || (distance == best && best_face !=
+                static_cast<std::size_t>(-1) && face < best_face)) return;
             best = distance;
             best_face = face;
+        };
+
+        std::size_t chunk_face_count = 0;
+        bool chunks_valid = !chunks_.empty() && chunk_faces_.size() == chunks_.size();
+        if (chunks_valid)
+        {
+            for (std::size_t chunk_index = 0; chunk_index < chunks_.size(); ++chunk_index)
+            {
+                const LandscapeChunk& chunk = chunks_[chunk_index];
+                if (chunk.indices.size() != chunk_faces_[chunk_index].size() * 3u)
+                {
+                    chunks_valid = false;
+                    break;
+                }
+                chunk_face_count += chunk_faces_[chunk_index].size();
+            }
+        }
+        chunks_valid = chunks_valid && chunk_face_count == FaceCount();
+
+        if (chunks_valid)
+        {
+            for (std::size_t chunk_index = 0; chunk_index < chunks_.size(); ++chunk_index)
+            {
+                const LandscapeChunk& chunk = chunks_[chunk_index];
+                if (chunk.indices.empty() || !RayBounds(origin, ray_direction, max_distance,
+                    chunk.bounds_min, chunk.bounds_max)) continue;
+                for (std::size_t face = 0; face < chunk_faces_[chunk_index].size(); ++face)
+                    test_face(chunk_faces_[chunk_index][face], chunk.indices.data() + face * 3u);
+            }
+        }
+        else
+        {
+            for (std::size_t face = 0; face < FaceCount(); ++face)
+                test_face(face, indices_.data() + face * 3u);
         }
         if (best_face == static_cast<std::size_t>(-1)) return false;
         hit.hit = true;
@@ -311,17 +497,70 @@ namespace ReplayEngine::Landscape
         return nullptr;
     }
 
+    // 三角形を XZ で区切って束ねる。任意 topology なので格子は前提にせず、重心で振り分ける。
     void LandscapeData::BuildChunks()
     {
         chunks_.clear();
-        LandscapeChunk chunk;
-        chunk.coord = { 0, 0 };
-        chunk.bounds_min = bounds_min_;
-        chunk.bounds_max = bounds_max_;
-        chunk.revision = revision_;
-        chunk.render_dirty = true;
-        chunk.collision_dirty = true;
-        chunks_.push_back(chunk);
+        chunk_faces_.clear();
+        vertex_chunks_.clear();
+        chunk_divisions_ = 1;
+        if (vertices_.empty() || indices_.size() < 3) return;
+
+        // 1 チャンクがおよそ chunk_target_vertices 頂点になる分割数を選ぶ。
+        const double estimated = static_cast<double>(vertices_.size()) /
+            static_cast<double>(chunk_target_vertices);
+        int divisions = static_cast<int>(std::ceil(std::sqrt((std::max)(1.0, estimated))));
+        divisions = (std::max)(1, (std::min)(divisions, chunk_maximum_divisions));
+        chunk_divisions_ = divisions;
+
+        const float span_x = (std::max)(0.0001f, bounds_max_.x - bounds_min_.x);
+        const float span_z = (std::max)(0.0001f, bounds_max_.z - bounds_min_.z);
+
+        chunks_.resize(static_cast<std::size_t>(divisions) * divisions);
+        chunk_faces_.resize(chunks_.size());
+        vertex_chunks_.resize(vertices_.size());
+        for (int z = 0; z < divisions; ++z)
+        {
+            for (int x = 0; x < divisions; ++x)
+            {
+                LandscapeChunk& chunk = chunks_[static_cast<std::size_t>(z) * divisions + x];
+                chunk.coord = { x, z };
+                chunk.revision = revision_;
+                chunk.render_dirty = true;
+                chunk.collision_dirty = true;
+            }
+        }
+
+        // 三角形の重心が入るチャンクへ配る。境界の頂点は複数チャンクへ複製される。
+        for (std::size_t offset = 0; offset + 2 < indices_.size(); offset += 3)
+        {
+            const DirectX::XMFLOAT3& a = vertices_[indices_[offset]].position;
+            const DirectX::XMFLOAT3& b = vertices_[indices_[offset + 1]].position;
+            const DirectX::XMFLOAT3& c = vertices_[indices_[offset + 2]].position;
+            const float center_x = (a.x + b.x + c.x) / 3.0f;
+            const float center_z = (a.z + b.z + c.z) / 3.0f;
+
+            int cx = static_cast<int>((center_x - bounds_min_.x) / span_x * divisions);
+            int cz = static_cast<int>((center_z - bounds_min_.z) / span_z * divisions);
+            cx = (std::max)(0, (std::min)(cx, divisions - 1));
+            cz = (std::max)(0, (std::min)(cz, divisions - 1));
+
+            const std::uint32_t chunk_index = static_cast<std::uint32_t>(cz * divisions + cx);
+            LandscapeChunk& chunk = chunks_[chunk_index];
+            chunk.indices.push_back(indices_[offset]);
+            chunk.indices.push_back(indices_[offset + 1]);
+            chunk.indices.push_back(indices_[offset + 2]);
+            chunk_faces_[chunk_index].push_back(static_cast<std::uint32_t>(offset / 3u));
+            for (int corner = 0; corner < 3; ++corner)
+                vertex_chunks_[indices_[offset + corner]].push_back(chunk_index);
+        }
+
+        for (auto& memberships : vertex_chunks_)
+        {
+            std::sort(memberships.begin(), memberships.end());
+            memberships.erase(std::unique(memberships.begin(), memberships.end()), memberships.end());
+        }
+        for (LandscapeChunk& chunk : chunks_) RecalculateChunkBounds(chunk);
     }
 
     void LandscapeData::MarkAllDirty() noexcept
@@ -332,8 +571,6 @@ namespace ReplayEngine::Landscape
             chunk.revision = revision_;
             chunk.render_dirty = true;
             chunk.collision_dirty = true;
-            chunk.bounds_min = bounds_min_;
-            chunk.bounds_max = bounds_max_;
         }
     }
 
@@ -343,9 +580,31 @@ namespace ReplayEngine::Landscape
         MarkAllDirty();
     }
 
+    // カリングに使うので、そのチャンクが実際に持つ三角形だけから求める。
     void LandscapeData::RecalculateChunkBounds(LandscapeChunk& chunk) noexcept
     {
-        chunk.bounds_min = bounds_min_;
-        chunk.bounds_max = bounds_max_;
+        if (chunk.indices.empty())
+        {
+            chunk.bounds_min = bounds_min_;
+            chunk.bounds_max = bounds_min_;
+            return;
+        }
+
+        constexpr float huge_value = (std::numeric_limits<float>::max)();
+        DirectX::XMFLOAT3 minimum{ huge_value, huge_value, huge_value };
+        DirectX::XMFLOAT3 maximum{ -huge_value, -huge_value, -huge_value };
+        for (const std::uint32_t index : chunk.indices)
+        {
+            if (index >= vertices_.size()) continue;
+            const DirectX::XMFLOAT3& p = vertices_[index].position;
+            minimum.x = (std::min)(minimum.x, p.x);
+            minimum.y = (std::min)(minimum.y, p.y);
+            minimum.z = (std::min)(minimum.z, p.z);
+            maximum.x = (std::max)(maximum.x, p.x);
+            maximum.y = (std::max)(maximum.y, p.y);
+            maximum.z = (std::max)(maximum.z, p.z);
+        }
+        chunk.bounds_min = minimum;
+        chunk.bounds_max = maximum;
     }
 }

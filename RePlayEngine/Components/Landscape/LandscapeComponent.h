@@ -32,6 +32,8 @@ namespace ReplayEngine::Components
         // Inspector に出す生成 preset 値。GenerateFlat を押すまでは既存 mesh を壊さない。
         int default_resolution = 33;
         float default_cell_size = 2.0f;
+        // この地形を作ったモデルの Asset GUID。手で作った地形は空。
+        std::string source_model_asset;
 
         const std::string& LastDeserializeError() const noexcept { return deserialize_error_; }
 

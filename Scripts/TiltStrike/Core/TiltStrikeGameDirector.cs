@@ -194,7 +194,7 @@ public sealed class TiltStrikeGameDirector : ScriptBehaviour
 
     private void SetMessage(string text, float holdSeconds)
     {
-        Runtime.SetUIText(messageText, text);
+        Runtime.SetUIText(messageText, text);              
         messageHold = holdSeconds;
     }
 

@@ -3,6 +3,7 @@
 #include "../../RePlayEngine/Scene/Services/IInputService.h"
 
 #include <array>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -13,6 +14,15 @@
 
 namespace GameInput
 {
+    enum ActionModifier : std::uint8_t
+    {
+        ActionModifierNone = 0,
+        ActionModifierCtrl = 1 << 0,
+        ActionModifierShift = 1 << 1,
+        ActionModifierAlt = 1 << 2,
+        ActionModifierAll = ActionModifierCtrl | ActionModifierShift | ActionModifierAlt,
+    };
+
     // 名前付き Action / Axis の既定マップ。
     // 数字の VK を呼び出し側へ漏らさず、設定ファイルから差し替えられるようにする。
     struct ActionBinding final
@@ -21,6 +31,8 @@ namespace GameInput
         int keyboard_secondary = 0;
         WORD gamepad_button = 0;
         std::string action_map{ "Gameplay" };
+        std::uint8_t keyboard_primary_modifiers = ActionModifierNone;
+        std::uint8_t keyboard_secondary_modifiers = ActionModifierNone;
     };
 
     enum class GamepadAxis : int
@@ -101,7 +113,8 @@ namespace GameInput
         void AccumulateWheel(float delta) noexcept { pending_wheel_ += delta; }
 
         // Saved/Editor/InputBindings.ini。壊れた行は無視し、既定値を残して続行する。
-        bool LoadBindings(const std::filesystem::path& path, std::string& error);
+        bool LoadBindings(const std::filesystem::path& path, std::string& error,
+            bool editor_only = false);
         bool SaveBindings(const std::filesystem::path& path, std::string& error) const;
         void ResetDefaultBindings();
 
@@ -128,6 +141,10 @@ namespace GameInput
         static bool IsMouseVirtualKey(int vk) noexcept;
         static bool BoundKeyDown(const std::array<BYTE, 256>& state, int vk,
             bool allow_keyboard, bool allow_mouse) noexcept;
+        static bool ModifiersMatch(const std::array<BYTE, 256>& state, int vk,
+            std::uint8_t required) noexcept;
+        static bool KeyboardBindingDown(const std::array<BYTE, 256>& state, int vk,
+            std::uint8_t modifiers, bool allow_keyboard, bool allow_mouse) noexcept;
         static float NormalizeStick(SHORT value, float dead_zone) noexcept;
         static float NormalizeTrigger(BYTE value, float dead_zone) noexcept;
         static float PadAxis(const XINPUT_GAMEPAD& pad, GamepadAxis axis,

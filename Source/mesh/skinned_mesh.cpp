@@ -28,11 +28,12 @@ skinned_mesh::skinned_mesh(const std::filesystem::path& source_filename,
         // 読める skinned_mesh の CPU 表現へ一度だけ変換する。
         if (!import_gltf(source_filename, sampling_rate))
             throw std::runtime_error("glTFモデルをスキンメッシュへ変換できません: " +
-                source_filename.string());
+                source_filename.u8string());
         return;
     }
 
-    const std::string narrow_source = source_filename.string();
+    // string() は ACP へ落とせない文字で例外を投げる。u8string なら安全。
+    const std::string narrow_source = source_filename.u8string();
     const char* fbx_filename = narrow_source.c_str();
 
     // UNIT30 手順5: シリアライズファイルのパスを作成 [cite: 316, 323]
@@ -98,7 +99,7 @@ skinned_mesh::skinned_mesh(const std::filesystem::path& source_filename,
 #else
         (void)triangulate;
         (void)sampling_rate;
-        throw std::runtime_error("実行用モデルキャッシュが見つかりません: " + cereal_filename.string());
+        throw std::runtime_error("実行用モデルキャッシュが見つかりません: " + cereal_filename.u8string());
 #endif
     }
 

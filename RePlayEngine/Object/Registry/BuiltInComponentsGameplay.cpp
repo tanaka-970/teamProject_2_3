@@ -47,13 +47,13 @@ namespace ReplayEngine::Core::Detail
                     .InModule("RePlayEngine.Template.ActionPlatformer"));
 
             // 移動用 Collider は明示的に選ぶ。暗黙の自動選択はしない。
-            // 一覧には Sphere / Capsule / Box だけが出る（Mesh と Trigger は除外）。
+            // 一覧には Sphere / Capsule / Box / Mesh が出る（Landscape と Trigger は除外）。
             PropertyRegistry::Register<CharacterMotorComponent>(
                 MakeProperty("primary_collider_key",
                     &CharacterMotorComponent::primary_collider_key)
                     .Display("移動用 Collider").AsColliderReference()
                     .Tooltip("移動・接地・押し戻しに使う Collider。"
-                        "未設定だと地形との当たり判定を行わない。"));
+                        "未設定だと地形との当たり判定を行わない。Mesh は外接球で近似する。"));
 
             PropertyRegistry::Register<CharacterMotorComponent>(
                 MakeProperty("move_speed", &CharacterMotorComponent::move_speed)
@@ -82,6 +82,12 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<CharacterMotorComponent>(
                 MakeProperty("maximum_fall_speed", &CharacterMotorComponent::maximum_fall_speed)
                     .Display("最大落下速度").Range(0.0, 200.0).Step(1.0));
+
+            PropertyRegistry::Register<CharacterMotorComponent>(
+                MakeProperty("jump_requested", &CharacterMotorComponent::jump_requested)
+                    .Display("ジャンプ要求")
+                    .Tooltip("立てると次の更新で 1 回だけジャンプして自動で倒れる。"
+                        "C# から RequestJump = true で跳ばせる。"));
 
             PropertyRegistry::Register<CharacterMotorComponent>(
                 MakeProperty("fallback_ground_y", &CharacterMotorComponent::fallback_ground_y)

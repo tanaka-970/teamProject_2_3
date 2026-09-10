@@ -1,4 +1,6 @@
 ﻿#include "framework.h"
+
+#include "imgui/ImGuizmo.h"
 // Prefab は v7 の SceneData 方式へ移行済み。
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 #include "../../RePlayEngine/Editor/Viewport/EditorSelectionBounds.h"
@@ -88,7 +90,8 @@ void framework::handle_viewport_selection()
         viewport_drag_selecting = false;
         return;
     }
-    if (!scene_view_hovered) return;
+    // 掴んでいる間は窓の外へ出ても離さない。ここで返すとドラッグが途中で止まる。
+    if (!scene_view_hovered && !ImGuizmo::IsUsing()) return;
 
     const bool suppress_drag_selection =
         landscape_edit_enabled && active_editor_view == editor_view::scene &&
@@ -101,7 +104,50 @@ void framework::handle_viewport_selection()
 
     draw_scene_grid_overlay();
     // GizmoハンドルがHover/Drag中ならPickingへ入力を渡さない。
+    if (draw_bone_transform_gizmo()) return;
     if (draw_object_transform_gizmo()) return;
+
+    // リグを出しているときは、骨のクリックを GameObject の選択より先に見る。
+    // 骨を掴めたらそこで消費し、選択が入れ替わらないようにする。
+    if ((show_rig_debug_draw || show_motion_rig_panel) &&
+        ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !object_rig_debug_bones.empty())
+    {
+        const DirectX::XMMATRIX rig_view_projection =
+            viewport_view_matrix() * viewport_projection_matrix();
+        const ImVec2 rig_origin = ImGui::GetMainViewport()->Pos;
+        const ImVec2 rig_size = ImGui::GetMainViewport()->Size;
+        const ImVec2 mouse = ImGui::GetIO().MousePos;
+        // 掴める距離。関節の見た目より少し広くしないと当てにくい。
+        const float pick_radius = (std::max)(6.0f, rig_joint_radius * 3.0f);
+        float best_distance = pick_radius;
+        const std::string* best_name = nullptr;
+        std::uint64_t best_owner = 0;
+        for (const auto& rig : object_rig_debug_bones)
+        {
+            for (const rig_debug_bone& bone : rig.second)
+            {
+                ImVec2 screen{};
+                if (!project_world_to_screen(rig_view_projection, bone.world,
+                    rig_origin, rig_size, screen))
+                    continue;
+                const float dx = screen.x - mouse.x;
+                const float dy = screen.y - mouse.y;
+                const float distance = std::sqrt(dx * dx + dy * dy);
+                if (distance >= best_distance) continue;
+                best_distance = distance;
+                best_name = &bone.name;
+                best_owner = rig.first;
+            }
+        }
+        if (best_name != nullptr)
+        {
+            select_rig_bone(*best_name, ImGui::GetIO().KeyCtrl);
+            object_editor_context.Selection().Select(
+                ReplayEngine::Core::ObjectID{ best_owner });
+            viewport_drag_selecting = false;
+            return;
+        }
+    }
 
     using namespace DirectX;
     const XMMATRIX view = viewport_view_matrix();
@@ -239,6 +285,8 @@ void framework::save_editor_session()
     state << "UI_STYLE " << (ui_style_overridden ? 1 : 0) << ' '
         << ui_button_scale << ' ' << ui_font_scale << ' '
         << ui_text_color[0] << ' ' << ui_text_color[1] << ' ' << ui_text_color[2] << '\n';
+    // 既存の UI_STYLE 行へ足すと古い session が読めなくなるので別行にする。
+    state << "UI_TEXTURE_PREVIEW " << ui_texture_preview_scale << '\n';
     for (const auto& entry : ReplayEngine::Editor::EditorStyle::ComponentCategoryColors())
         state << "COMPONENT_CATEGORY_COLOR " << std::quoted(entry.first) << ' '
             << entry.second.x << ' ' << entry.second.y << ' ' << entry.second.z << '\n';
@@ -336,6 +384,12 @@ void framework::restore_editor_session()
                 ReplayEngine::Editor::EditorStyle::SetComponentCategoryColor(
                     category, ImVec4(red, green, blue, 1.0f));
             }
+        }
+        else if (key == "UI_TEXTURE_PREVIEW")
+        {
+            float preview_scale = 4.5f;
+            if (state >> preview_scale)
+                ui_texture_preview_scale = (std::max)(1.5f, (std::min)(12.0f, preview_scale));
         }
         else if (key == "UI_STYLE")
         {

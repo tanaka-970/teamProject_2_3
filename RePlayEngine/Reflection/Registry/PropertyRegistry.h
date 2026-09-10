@@ -44,6 +44,10 @@ namespace ReplayEngine::Reflection
         static const PropertyDesc* Find(Core::ComponentTypeID type_id,
             const std::string& name) noexcept;
 
+        // 静的な表を先に見て、無ければインスタンスごとの動的分を見る。
+        static const PropertyDesc* FindForComponent(const Core::Component& component,
+            const std::string& name) noexcept;
+
         static bool HasProperties(Core::ComponentTypeID type_id) noexcept
         {
             return !PropertiesOf(type_id).empty();

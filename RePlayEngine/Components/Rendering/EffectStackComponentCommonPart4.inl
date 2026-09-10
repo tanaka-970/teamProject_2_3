@@ -507,6 +507,79 @@
                     .Tooltip("設定した場合は画像の明るい所から開く。")
                     .OfAssetType("Image"));
                 break;
+            case UI::UIEffectKind::Petals:
+                add_float("progress", "量", "0 で降らず、1 で最も多い。",
+                    0.0, 1.0, 0.001);
+                add_float("radius", "密度", "画面を割る格子の細かさ。", 1.0, 64.0, 1.0);
+                add_float("amount", "大きさ", "1 枚あたりの大きさ。", 0.001, 0.5, 0.001);
+                add_float("speed", "落下速度", "0 で完全に静止する。", -8.0, 8.0, 0.01);
+                add_float("angle", "横流れ", "左右へ揺れる量。", -8.0, 8.0, 0.01);
+                add_float("softness", "縁の柔らかさ", "花びらの輪郭をぼかす量。",
+                    0.0001, 1.0, 0.001);
+                add_float("intensity", "適用量", "元画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_color("色", "花びらまたは雪の色。");
+                add_seed();
+                break;
+            case UI::UIEffectKind::GodRays:
+                add_float("intensity", "強さ", "光芒の強さ。", 0.0, 8.0, 0.01);
+                add_float("threshold", "明るさしきい値", "ここより明るい所だけが伸びる。",
+                    0.0, 4.0, 0.01);
+                add_float("amount", "減衰", "遠いサンプルほど弱める率。", 0.0, 1.0, 0.001);
+                add_float("softness", "伸びる長さ", "光芒を伸ばす距離。", 0.0001, 2.0, 0.001);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable)
+                    .Display("光源").Tooltip("正規化座標で指定する光源。0.5, 0.5 が中央。")
+                    .Step(0.01));
+                add_color("光の色", "光芒へ掛ける色。");
+                break;
+            case UI::UIEffectKind::LensFlare:
+                add_float("intensity", "強さ", "フレアの強さ。", 0.0, 8.0, 0.01);
+                add_float("radius", "ゴーストの数", "並べる玉の数。", 1.0, 16.0, 1.0);
+                add_float("threshold", "明るさしきい値", "ここより明るい所だけが写り込む。",
+                    0.0, 4.0, 0.01);
+                add_float("amount", "ゴースト間隔", "玉を並べる間隔。", -2.0, 2.0, 0.001);
+                add_float("softness", "ハローの太さ", "光源を囲む輪の太さ。",
+                    0.0001, 1.0, 0.001);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable)
+                    .Display("光源").Tooltip("正規化座標で指定する光源。0.5, 0.5 が中央。")
+                    .Step(0.01));
+                add_color("フレアの色", "ゴーストとハローへ掛ける色。");
+                break;
+            case UI::UIEffectKind::Bokeh:
+                add_float("radius", "ボケ半径", "玉ボケの広がり（ピクセル）。",
+                    0.0, 128.0, 0.1);
+                add_float("intensity", "適用量", "元画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_float("threshold", "明るさしきい値", "ここより明るい所が強く玉になる。",
+                    0.0, 4.0, 0.01);
+                add_float("amount", "羽根の数", "3 未満で円、3 以上で多角形。",
+                    0.0, 12.0, 1.0);
+                break;
+            case UI::UIEffectKind::TiltShift:
+                add_float("radius", "ぼかし量", "帯の外をぼかす強さ（ピクセル）。",
+                    0.0, 128.0, 0.1);
+                add_float("intensity", "適用量", "元画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_float("amount", "帯の幅", "くっきり残す帯の半幅。", 0.0, 1.0, 0.001);
+                add_float("softness", "境界の柔らかさ", "帯の外へ移る距離。",
+                    0.0001, 1.0, 0.001);
+                add_float("angle", "帯の角度", "帯を傾ける角度（度）。",
+                    -360.0, 360.0, 0.1);
+                push(MakeEffectProperty(i, "direction", Reflection::PropertyType::Vector2,
+                    Reflection::Animatable::Interpolatable)
+                    .Display("帯の中心").Tooltip("正規化座標で指定する帯の中心。0.5, 0.5 が中央。")
+                    .Step(0.01));
+                break;
+            case UI::UIEffectKind::FilmScratch:
+                add_float("radius", "傷の数", "縦に走る傷の本数。", 0.0, 24.0, 1.0);
+                add_float("intensity", "適用量", "元画像へ混ぜる割合。", 0.0, 1.0, 0.01);
+                add_float("threshold", "ホコリの量", "画面へ散らす粒の量。", 0.0, 1.0, 0.001);
+                add_float("amount", "傷の太さ", "1 本あたりの太さ。", 0.0001, 0.05, 0.0001);
+                add_float("softness", "縁の柔らかさ", "傷の輪郭をぼかす量。",
+                    0.0, 1.0, 0.001);
+                add_float("speed", "コマ送り速度", "0 で 1 枚に固定する。", 0.0, 8.0, 0.01);
+                add_color("傷の色", "傷とホコリの色。");
+                add_seed();
+                break;
             default:
                 break;
             }

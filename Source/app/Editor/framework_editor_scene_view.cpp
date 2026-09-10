@@ -25,6 +25,7 @@
 
 void framework::draw_scene_view_panel()
 {
+    REPLAY_PROFILE_SCOPE("Editor/SceneView");
     scene_view_hovered = false;
     scene_view_focused = false;
     if (!show_scene_view) return;
@@ -110,6 +111,8 @@ void framework::draw_scene_view_panel()
             ImGui::Checkbox(u8"コライダー", &show_collider_debug_draw);
             ImGui::SameLine();
             ImGui::Checkbox(u8"ライト範囲", &show_light_range_debug_draw);
+            ImGui::SameLine();
+            ImGui::Checkbox(u8"リグ", &show_rig_debug_draw);
             ImGui::SameLine();
             ImGui::Checkbox(u8"グリッド", &show_scene_grid);
             ImGui::SameLine();
@@ -206,6 +209,7 @@ void framework::draw_scene_view_panel()
 
 void framework::draw_search_results()
 {
+    REPLAY_PROFILE_SCOPE("Editor/Search");
     if (editor_search_text[0] == '\0') return;
 
     ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -309,6 +313,7 @@ void framework::draw_search_results()
 
 void framework::draw_scene_hierarchy()
 {
+    REPLAY_PROFILE_SCOPE("Editor/Hierarchy");
     ReplayEngine::Editor::PanelTabColorScope panel_tab_color("Scene");
     ImGui::Begin("階層");
     const auto item = [this](const char* label, editor_selection value)

@@ -63,6 +63,7 @@
 #include <memory>
 #include <string>
 #include <utility>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -364,6 +365,7 @@ bool framework::build_dx12_static_scene(
 {
     using namespace ReplayEngine::Rendering;
     using namespace ReplayEngine::Rendering::DX12;
+    using ReplayEngine::Components::MeshMaterialSlot;
 
     // 呼出し側がフレームごとに選択した背景色とポストプロセス設定は、
     // Scene内の描画項目を集め直しても失ってはいけない。
@@ -493,7 +495,8 @@ bool framework::build_dx12_static_scene(
     {
         if (input_path.empty()) return {};
         // 解決結果はパスごとに不変。描画中に exists() を呼ぶと毎フレーム効いてくる。
-        const std::string input_key = input_path.generic_string();
+        // キーは UTF-8 で持つ。generic_string() は ACP へ落とせない文字で例外を投げる。
+        const std::string input_key = input_path.generic_u8string();
         std::string key;
         const auto cached_key = texture_path_resolve_cache.find(input_key);
         if (cached_key != texture_path_resolve_cache.end())
@@ -510,7 +513,7 @@ bool framework::build_dx12_static_scene(
                     resolved = content_path(resolved);
             }
             resolved = resolved.lexically_normal();
-            key = resolved.generic_string();
+            key = resolved.generic_u8string();
             texture_path_resolve_cache.insert_or_assign(input_key, key);
         }
         if (key.empty()) return {};
@@ -519,7 +522,7 @@ bool framework::build_dx12_static_scene(
         {
             D3D12StaticTextureSource source;
             source.key = key;
-            source.source_path = std::filesystem::path(key);
+            source.source_path = std::filesystem::u8path(key);
             submission.texture_sources.push_back(std::move(source));
         }
         return key;
@@ -537,7 +540,7 @@ bool framework::build_dx12_static_scene(
                 resolved = content_path(resolved);
         }
         resolved = resolved.lexically_normal();
-        const std::string key = "sky:" + resolved.generic_string();
+        const std::string key = "sky:" + resolved.generic_u8string();
         if (key == "sky:") return {};
         if (!dx12_device_context.HasStaticTexture(key) &&
             texture_source_keys.insert(key).second)
@@ -551,17 +554,22 @@ bool framework::build_dx12_static_scene(
         return key;
     };
 
-    const auto add_material_texture = [&add_texture](
-        D3D12StaticDrawItem& draw, std::uint32_t slot,
-        const std::filesystem::path& input_path, std::uint32_t semantic_bit)
+    const auto add_material_texture_key = [](D3D12StaticDrawItem& draw,
+        std::uint32_t slot, const std::string& key, std::uint32_t semantic_bit)
     {
-        const std::string key = add_texture(input_path);
         if (key.empty()) return;
         D3D12StaticMaterialTexture mapped;
         mapped.slot = slot;
         mapped.texture_key = key;
         draw.material_textures.push_back(std::move(mapped));
         draw.material_texture_semantic_mask |= semantic_bit;
+    };
+
+    const auto add_material_texture = [&add_texture, &add_material_texture_key](
+        D3D12StaticDrawItem& draw, std::uint32_t slot,
+        const std::filesystem::path& input_path, std::uint32_t semantic_bit)
+    {
+        add_material_texture_key(draw, slot, add_texture(input_path), semantic_bit);
     };
 
     const auto add_asset_texture = [this, &add_texture](
@@ -572,6 +580,14 @@ bool framework::build_dx12_static_scene(
             asset_database.FindByGuid(asset_guid);
         if (record == nullptr) return {};
         return add_texture(content_path(record->source_path));
+    };
+
+    const auto add_model_texture = [&add_texture, &add_asset_texture](
+        const std::filesystem::path& model_texture,
+        const std::string* override_texture) -> std::string
+    {
+        return override_texture != nullptr && !override_texture->empty()
+            ? add_asset_texture(*override_texture) : add_texture(model_texture);
     };
 
     struct BaseTextureBinding final
@@ -905,10 +921,46 @@ bool framework::build_dx12_static_scene(
         return material;
     };
 
-    const auto make_mesh_source = [&submission, &mesh_source_keys](
+    const auto resolve_texture_slot = [](const RenderItem& source_item,
+        std::size_t subset_index) -> const MeshMaterialSlot*
+    {
+        if (source_item.material_slots == nullptr ||
+            subset_index >= static_cast<std::size_t>(source_item.material_slot_count))
+            return nullptr;
+        return source_item.material_slots[subset_index];
+    };
+
+    const auto make_mesh_source = [&submission, &mesh_source_keys, this](
         const std::string& key, auto vertex_begin, auto vertex_end,
         const std::vector<std::uint32_t>& indices)
     {
+        // 視錐台カリング用の境界。メッシュごとに一度だけ求めて残す。
+        if (static_mesh_bounds_cache.find(key) == static_mesh_bounds_cache.end())
+        {
+            ReplayEngine::Rendering::DX12::D3D12MeshLocalBounds bounds;
+            bool initialized = false;
+            for (auto it = vertex_begin; it != vertex_end; ++it)
+            {
+                const DirectX::XMFLOAT3& position = it->position;
+                if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+                    !std::isfinite(position.z)) continue;
+                if (!initialized)
+                {
+                    bounds.minimum = position;
+                    bounds.maximum = position;
+                    initialized = true;
+                    continue;
+                }
+                bounds.minimum.x = (std::min)(bounds.minimum.x, position.x);
+                bounds.minimum.y = (std::min)(bounds.minimum.y, position.y);
+                bounds.minimum.z = (std::min)(bounds.minimum.z, position.z);
+                bounds.maximum.x = (std::max)(bounds.maximum.x, position.x);
+                bounds.maximum.y = (std::max)(bounds.maximum.y, position.y);
+                bounds.maximum.z = (std::max)(bounds.maximum.z, position.z);
+            }
+            bounds.valid = initialized;
+            static_mesh_bounds_cache.emplace(key, bounds);
+        }
         if (!mesh_source_keys.insert(key).second) return;
         D3D12StaticMeshSource source;
         source.key = key;
@@ -1057,7 +1109,7 @@ bool framework::build_dx12_static_scene(
         return true;
     };
 
-    const auto add_ribbon_draw = [&submission](const std::string& key,
+    const auto add_ribbon_draw = [&submission, this](const std::string& key,
         const std::string& motion_key, const ReplayEngine::Rendering::LineStrokeStyle& style)
     {
         D3D12StaticDrawItem draw;
@@ -1068,6 +1120,10 @@ bool framework::build_dx12_static_scene(
         draw.cast_shadow = false;
         draw.receive_shadow = false;
         draw.double_sided = true;
+        // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+        if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+            found_bounds != static_mesh_bounds_cache.end())
+            draw.material_bounds = found_bounds->second;
         submission.draws.push_back(std::move(draw));
     };
 
@@ -1351,6 +1407,10 @@ bool framework::build_dx12_static_scene(
                 draw.receive_shadow = false;
                 draw.double_sided = true;
                 submission.mesh_sources.push_back(std::move(bucket.source));
+                // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+                if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+                    found_bounds != static_mesh_bounds_cache.end())
+                    draw.material_bounds = found_bounds->second;
                 submission.draws.push_back(std::move(draw));
             }
         }
@@ -1445,8 +1505,79 @@ bool framework::build_dx12_static_scene(
                     }
                     skinned_palette_size_cache.insert_or_assign(mesh_key, palette_size);
                 }
-                std::vector<DirectX::XMFLOAT4X4> palette(palette_size,
-                    DirectX::XMFLOAT4X4{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 });
+                auto shared_palette = std::make_shared<std::vector<DirectX::XMFLOAT4X4>>(
+                    palette_size, DirectX::XMFLOAT4X4{ 1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1 });
+                std::vector<DirectX::XMFLOAT4X4>& palette = *shared_palette;
+
+                const auto pose_for_object = object_rig_pose.find(source_item.owner.Value());
+                const bool has_pose = pose_for_object != object_rig_pose.end() &&
+                    !pose_for_object->second.empty();
+                std::vector<DirectX::XMFLOAT4X4> bone_globals;
+                bool bone_globals_ready = false;
+
+                if ((show_rig_debug_draw || show_motion_rig_panel || has_pose) &&
+                    !mesh.bind_pose.bones.empty())
+                {
+                    REPLAY_PROFILE_SCOPE("Item/RigPose");
+                    // 骨のグローバル行列をまず作る。アニメーションが無ければバインドポーズ。
+                    const std::size_t bone_count = mesh.bind_pose.bones.size();
+                    bone_globals.resize(bone_count);
+                    for (std::size_t index = 0; index < bone_count; ++index)
+                    {
+                        const skeleton::bone& bone = mesh.bind_pose.bones[index];
+                        DirectX::XMMATRIX global;
+                        if (keyframe != nullptr && bone.node_index >= 0 &&
+                            static_cast<std::size_t>(bone.node_index) < keyframe->nodes.size())
+                            global = DirectX::XMLoadFloat4x4(&keyframe->nodes[
+                                static_cast<std::size_t>(bone.node_index)].global_transform);
+                        else
+                            global = DirectX::XMMatrixInverse(nullptr,
+                                DirectX::XMLoadFloat4x4(&bone.offset_transform));
+                        DirectX::XMStoreFloat4x4(&bone_globals[index], global);
+                    }
+                    if (has_pose)
+                    {
+                        // 親から順に組み直す。子は親の結果を受けて一緒に動く。
+                        std::vector<DirectX::XMFLOAT4X4> posed = bone_globals;
+                        for (std::size_t index = 0; index < bone_count; ++index)
+                        {
+                            const skeleton::bone& bone = mesh.bind_pose.bones[index];
+                            const std::int64_t parent = bone.parent_index;
+                            const bool has_parent = parent >= 0 &&
+                                static_cast<std::size_t>(parent) < bone_count &&
+                                static_cast<std::size_t>(parent) < index;
+                            DirectX::XMMATRIX local =
+                                DirectX::XMLoadFloat4x4(&bone_globals[index]);
+                            if (has_parent)
+                                local = local * DirectX::XMMatrixInverse(nullptr,
+                                    DirectX::XMLoadFloat4x4(
+                                        &bone_globals[static_cast<std::size_t>(parent)]));
+                            const auto override_entry =
+                                pose_for_object->second.find(bone.name);
+                            if (override_entry != pose_for_object->second.end())
+                            {
+                                const rig_pose_override& o = override_entry->second;
+                                // 骨の原点で回す。行ベクトルなので local の前へ掛ける。
+                                const DirectX::XMMATRIX adjust =
+                                    DirectX::XMMatrixScaling(o.scale.x, o.scale.y, o.scale.z) *
+                                    DirectX::XMMatrixRotationRollPitchYaw(
+                                        DirectX::XMConvertToRadians(o.rotation.x),
+                                        DirectX::XMConvertToRadians(o.rotation.y),
+                                        DirectX::XMConvertToRadians(o.rotation.z)) *
+                                    DirectX::XMMatrixTranslation(
+                                        o.translation.x, o.translation.y, o.translation.z);
+                                local = adjust * local;
+                            }
+                            DirectX::XMMATRIX global = local;
+                            if (has_parent)
+                                global = global * DirectX::XMLoadFloat4x4(
+                                    &posed[static_cast<std::size_t>(parent)]);
+                            DirectX::XMStoreFloat4x4(&posed[index], global);
+                        }
+                        bone_globals.swap(posed);
+                    }
+                    bone_globals_ready = true;
+                }
 
                 if (keyframe != nullptr && mesh.node_index >= 0 &&
                     static_cast<std::size_t>(mesh.node_index) < keyframe->nodes.size())
@@ -1465,11 +1596,50 @@ bool framework::build_dx12_static_scene(
                         if (bone.node_index < 0 ||
                             static_cast<std::size_t>(bone.node_index) >= keyframe->nodes.size())
                             continue;
-                        const auto& bone_node =
-                            keyframe->nodes[static_cast<std::size_t>(bone.node_index)];
+                        const DirectX::XMMATRIX global = bone_globals_ready
+                            ? DirectX::XMLoadFloat4x4(&bone_globals[bone_index])
+                            : DirectX::XMLoadFloat4x4(&keyframe->nodes[
+                                static_cast<std::size_t>(bone.node_index)].global_transform);
                         DirectX::XMStoreFloat4x4(&palette[bone_index],
                             DirectX::XMLoadFloat4x4(&bone.offset_transform) *
-                            DirectX::XMLoadFloat4x4(&bone_node.global_transform) * inverse_mesh);
+                            global * inverse_mesh);
+                    }
+                }
+                else if (has_pose && bone_globals_ready)
+                {
+                    // アニメーション未設定でもポーズは効かせる。
+                    // offset は逆バインドなので、ポーズ無しならちょうど単位行列になる。
+                    for (std::size_t bone_index = 0; bone_index < mesh.bind_pose.bones.size();
+                        ++bone_index)
+                    {
+                        DirectX::XMStoreFloat4x4(&palette[bone_index],
+                            DirectX::XMLoadFloat4x4(
+                                &mesh.bind_pose.bones[bone_index].offset_transform) *
+                            DirectX::XMLoadFloat4x4(&bone_globals[bone_index]));
+                    }
+                }
+
+                if ((show_rig_debug_draw || show_motion_rig_panel) && bone_globals_ready)
+                {
+                    // 上で組んだ行列をそのまま使う。ポーズも表示へ反映される。
+                    const DirectX::XMMATRIX object_world =
+                        DirectX::XMLoadFloat4x4(&item.world);
+                    std::vector<rig_debug_bone>& bones =
+                        object_rig_debug_bones[source_item.owner.Value()];
+                    bones.clear();
+                    bones.reserve(mesh.bind_pose.bones.size());
+                    for (std::size_t index = 0; index < mesh.bind_pose.bones.size(); ++index)
+                    {
+                        const skeleton::bone& bone = mesh.bind_pose.bones[index];
+                        rig_debug_bone entry{};
+                        entry.name = bone.name;
+                        entry.parent = static_cast<int>(bone.parent_index);
+                        const DirectX::XMMATRIX global =
+                            DirectX::XMLoadFloat4x4(&bone_globals[index]);
+                        const DirectX::XMMATRIX bone_world = global * object_world;
+                        DirectX::XMStoreFloat3(&entry.world, bone_world.r[3]);
+                        DirectX::XMStoreFloat4x4(&entry.world_matrix, bone_world);
+                        bones.push_back(std::move(entry));
                     }
                 }
 
@@ -1480,19 +1650,21 @@ bool framework::build_dx12_static_scene(
                     const std::string* slot_asset = nullptr;
                     const MaterialAsset* slot_material =
                         resolve_material_slot(source_item, subset_index, slot_asset);
+                    const MeshMaterialSlot* material_slot =
+                        resolve_texture_slot(source_item, subset_index);
                     RenderItem slot_item;
                     const RenderItem* material_item = &item;
                     if (slot_material != nullptr && slot_asset != nullptr)
-                    {
-                        slot_item = resolve_render_item_material(source_item, slot_asset, false);
-                        material_item = &slot_item;
-                    }
-                    D3D12SkinnedDrawItem skinned_draw;
-                    D3D12StaticDrawItem& draw = skinned_draw.surface;
-                    draw.mesh_key = mesh_key;
-                    draw.owner_id = source_item.owner.Value();
-                    draw.material_slot = static_cast<std::uint32_t>(subset_index);
-                    // 境界はバインドポーズ由来で不変。毎フレーム全インデックスを舐めない。
+                     {
+                         slot_item = resolve_render_item_material(source_item, slot_asset,  false);
+                         material_item =  &slot_item; 
+                     }
+                     D3D12SkinnedDrawItem  skinned_draw;
+                     D3D12StaticDrawItem& draw  = skinned_draw.surface;
+                     draw.mesh_key = mesh_key;
+                     draw.owner_id =  source_item.owner.Value();
+                     draw.material_slot = static_cast<std::uint32_t>(subset_index);
+                     // 境界はバインドポーズ由来で不変。毎フレーム全インデックスを舐めない。
                     {
                         auto& entries = material_subset_bounds_cache[mesh_key];
                         const auto found = std::find_if(entries.begin(), entries.end(),
@@ -1550,7 +1722,8 @@ bool framework::build_dx12_static_scene(
                             if (!texture_path.empty() && texture_path.is_relative() &&
                                 !model_source.empty())
                                 texture_path = model_source.parent_path() / texture_path;
-                            draw.base_color_texture_key = add_texture(texture_path);
+                            draw.base_color_texture_key = add_model_texture(texture_path,
+                                material_slot != nullptr ? &material_slot->base_color_texture : nullptr);
                             const auto embedded_texture_path =
                                 [&material, &model_source](std::size_t slot)
                             {
@@ -1560,12 +1733,15 @@ bool framework::build_dx12_static_scene(
                                     path = model_source.parent_path() / path;
                                 return path;
                             };
-                            add_material_texture(draw, 41u, embedded_texture_path(1),
-                                kNormalMapSemantic);
-                            add_material_texture(draw, 42u, embedded_texture_path(2),
-                                kPackedOrmMapSemantic);
-                            add_material_texture(draw, 44u, embedded_texture_path(3),
-                                kEmissiveMapSemantic);
+                            add_material_texture_key(draw, 41u,
+                                add_model_texture(embedded_texture_path(1), material_slot != nullptr
+                                    ? &material_slot->normal_texture : nullptr), kNormalMapSemantic);
+                            add_material_texture_key(draw, 42u,
+                                add_model_texture(embedded_texture_path(2), material_slot != nullptr
+                                    ? &material_slot->orm_texture : nullptr), kPackedOrmMapSemantic);
+                            add_material_texture_key(draw, 44u,
+                                add_model_texture(embedded_texture_path(3), material_slot != nullptr
+                                    ? &material_slot->emissive_texture : nullptr), kEmissiveMapSemantic);
                             if (const skinned_mesh::gltf_material_info* gltf_material =
                                 mesh_asset->GltfMaterial(material_id))
                             {
@@ -1589,7 +1765,7 @@ bool framework::build_dx12_static_scene(
                     skinned_draw.motion_key = std::to_string(source_item.owner.Value()) + ":" +
                         mesh_key + ":" + std::to_string(start);
                     resolve_normal_adjust(source_item, draw, &mesh, keyframe);
-                    skinned_draw.bone_palette = palette;
+                    skinned_draw.bone_palette = shared_palette;
                     skinned_draw.morph_weight = morph_weight;
                     submission.skinned_draws.push_back(std::move(skinned_draw));
                 };
@@ -1653,6 +1829,10 @@ bool framework::build_dx12_static_scene(
                 draw.world = item.world;
                 (void)fill_external_material(source_item, *material_item, draw, slot_material);
                 resolve_normal_adjust(source_item, draw, nullptr, nullptr);
+                // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+                if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+                    found_bounds != static_mesh_bounds_cache.end())
+                    draw.material_bounds = found_bounds->second;
                 submission.draws.push_back(std::move(draw));
                 continue;
             }
@@ -1673,6 +1853,10 @@ bool framework::build_dx12_static_scene(
             draw.world = item.world;
             (void)fill_external_material(source_item, *material_item, draw, slot_material);
             resolve_normal_adjust(source_item, draw, nullptr, nullptr);
+            // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+            if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+                found_bounds != static_mesh_bounds_cache.end())
+                draw.material_bounds = found_bounds->second;
             submission.draws.push_back(std::move(draw));
             continue;
         }
@@ -1713,6 +1897,8 @@ bool framework::build_dx12_static_scene(
             {
                 gltf_model::StaticPrimitiveInfo info;
                 if (!gltf->StaticPrimitiveInfoAt(primitive_index, info)) continue;
+                const MeshMaterialSlot* material_slot =
+                    resolve_texture_slot(source_item, primitive_index);
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = item.mesh_asset + "#gltf:" +
                     std::to_string(primitive_index);
@@ -1736,13 +1922,20 @@ bool framework::build_dx12_static_scene(
                 {
                     draw.base_color = multiply_color(info.embedded_base_color,
                         source_item.tint);
-                    draw.base_color_texture_key = add_texture(
-                        info.embedded_base_color_texture);
-                    add_material_texture(draw, 41u, info.embedded_normal_texture,
-                        kNormalMapSemantic);
-                    add_material_texture(draw, 42u, info.embedded_orm_texture,
-                        kPackedOrmMapSemantic);
-                    if (!info.embedded_orm_texture.empty())
+                    draw.base_color_texture_key = add_model_texture(
+                        info.embedded_base_color_texture, material_slot != nullptr
+                            ? &material_slot->base_color_texture : nullptr);
+                    add_material_texture_key(draw, 41u,
+                        add_model_texture(info.embedded_normal_texture, material_slot != nullptr
+                            ? &material_slot->normal_texture : nullptr), kNormalMapSemantic);
+                    add_material_texture_key(draw, 42u,
+                        add_model_texture(info.embedded_orm_texture, material_slot != nullptr
+                            ? &material_slot->orm_texture : nullptr), kPackedOrmMapSemantic);
+                    if (material_slot != nullptr && !material_slot->emissive_texture.empty())
+                        add_material_texture_key(draw, 44u,
+                            add_asset_texture(material_slot->emissive_texture), kEmissiveMapSemantic);
+                    if (!info.embedded_orm_texture.empty() ||
+                        (material_slot != nullptr && !material_slot->orm_texture.empty()))
                     {
                         draw.metallic = 1.0f;
                         draw.roughness = 1.0f;
@@ -1753,6 +1946,10 @@ bool framework::build_dx12_static_scene(
                     draw.double_sided = item.double_sided;
                 }
                 resolve_normal_adjust(source_item, draw, nullptr, nullptr);
+                // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+                if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+                    found_bounds != static_mesh_bounds_cache.end())
+                    draw.material_bounds = found_bounds->second;
                 submission.draws.push_back(std::move(draw));
             }
             continue;
@@ -1786,6 +1983,8 @@ bool framework::build_dx12_static_scene(
                 const std::string* slot_asset = nullptr;
                 const MaterialAsset* slot_material =
                     resolve_material_slot(source_item, subset_index, slot_asset);
+                const MeshMaterialSlot* material_slot =
+                    resolve_texture_slot(source_item, subset_index);
                 RenderItem slot_item;
                 const RenderItem* material_item = &item;
                 if (slot_material != nullptr && slot_asset != nullptr)
@@ -1840,7 +2039,8 @@ bool framework::build_dx12_static_scene(
                         if (!texture_path.empty() && texture_path.is_relative() &&
                             !model_source.empty())
                             texture_path = model_source.parent_path() / texture_path;
-                        draw.base_color_texture_key = add_texture(texture_path);
+                        draw.base_color_texture_key = add_model_texture(texture_path,
+                            material_slot != nullptr ? &material_slot->base_color_texture : nullptr);
                         const auto embedded_texture_path =
                             [&material, &model_source](std::size_t slot)
                         {
@@ -1850,12 +2050,15 @@ bool framework::build_dx12_static_scene(
                                 path = model_source.parent_path() / path;
                             return path;
                         };
-                        add_material_texture(draw, 41u, embedded_texture_path(1),
-                            kNormalMapSemantic);
-                        add_material_texture(draw, 42u, embedded_texture_path(2),
-                            kPackedOrmMapSemantic);
-                        add_material_texture(draw, 44u, embedded_texture_path(3),
-                            kEmissiveMapSemantic);
+                        add_material_texture_key(draw, 41u,
+                            add_model_texture(embedded_texture_path(1), material_slot != nullptr
+                                ? &material_slot->normal_texture : nullptr), kNormalMapSemantic);
+                        add_material_texture_key(draw, 42u,
+                            add_model_texture(embedded_texture_path(2), material_slot != nullptr
+                                ? &material_slot->orm_texture : nullptr), kPackedOrmMapSemantic);
+                        add_material_texture_key(draw, 44u,
+                            add_model_texture(embedded_texture_path(3), material_slot != nullptr
+                                ? &material_slot->emissive_texture : nullptr), kEmissiveMapSemantic);
                         if (const skinned_mesh::gltf_material_info* gltf_material =
                             mesh_asset->GltfMaterial(material_id))
                         {
@@ -2034,6 +2237,10 @@ bool framework::build_dx12_static_scene(
                 draw.double_sided = true;
                 draw.cast_shadow = false;
                 draw.receive_shadow = false;
+                // 境界はメッシュ単位で共有する。視錐台の判定に要る。
+                if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
+                    found_bounds != static_mesh_bounds_cache.end())
+                    draw.material_bounds = found_bounds->second;
                 submission.draws.push_back(std::move(draw));
             }
         }
@@ -2053,37 +2260,79 @@ bool framework::build_dx12_static_scene(
                 !renderer->ActiveInHierarchy() || !landscape->Data().Valid()) continue;
 
             const auto& data = landscape->Data();
-            const std::string mesh_key = "landscape:" +
-                std::to_string(object->ID().Value()) + ":" + std::to_string(data.Revision());
-            if (!dx12_device_context.HasStaticMesh(mesh_key))
-            {
-                D3D12StaticMeshSource source;
-                source.key = mesh_key;
-                source.vertices.reserve(data.Vertices().size());
-                for (const auto& input : data.Vertices())
-                {
-                    D3D12StaticVertex vertex;
-                    vertex.position = input.position;
-                    vertex.normal = input.normal;
-                    vertex.texcoord = input.uv;
-                    source.vertices.push_back(vertex);
-                }
-                source.indices = data.Indices();
-                submission.mesh_sources.push_back(std::move(source));
-            }
+            const std::string object_key = "landscape:" +
+                std::to_string(object->ID().Value());
+            auto& cache = landscape_gpu_mesh_cache[object->ID().Value()];
 
-            D3D12StaticDrawItem draw;
-            draw.mesh_key = mesh_key;
-            draw.owner_id = object->ID().Value();
-            draw.rendering_layer = 0;
-            draw.motion_key = std::to_string(object->ID().Value()) + ":" + mesh_key;
-            draw.world = object->GetTransform().WorldMatrixFloat4x4();
-            draw.base_color = renderer->tint;
-            draw.double_sided = renderer->double_sided;
-            draw.cast_shadow = renderer->cast_shadow;
-            draw.receive_shadow = renderer->receive_shadow;
-            draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Pbr);
-            submission.draws.push_back(std::move(draw));
+            // チャンクごとに別メッシュとして持つ。塗った所だけ載せ替えられ、
+            // 画面外のチャンクは視錐台で落とせる。
+            const bool source_changed = cache.source != &data;
+            cache.source = &data;
+            cache.revision = data.Revision();
+
+            const auto& chunks = data.Chunks();
+            if (source_changed || cache.chunk_revisions.size() != chunks.size())
+                cache.chunk_revisions.assign(chunks.size(), 0);
+            for (std::size_t chunk_index = 0; chunk_index < chunks.size(); ++chunk_index)
+            {
+                const auto& chunk = chunks[chunk_index];
+                if (chunk.indices.empty()) continue;
+
+                const std::string mesh_key = object_key + ":" + std::to_string(chunk_index);
+                if (cache.chunk_revisions[chunk_index] != chunk.revision ||
+                    !dx12_device_context.HasStaticMesh(mesh_key))
+                {
+                    REPLAY_PROFILE_SCOPE("Landscape/ChunkUpload");
+                    // このチャンクが使う頂点だけを詰め直す。境界の頂点は隣とも重複する。
+                    std::unordered_map<std::uint32_t, std::uint32_t> remap;
+                    D3D12StaticMeshSource source;
+                    source.key = mesh_key;
+                    source.replace_existing = true;
+                    source.vertices.reserve(chunk.indices.size());
+                    source.indices.reserve(chunk.indices.size());
+                    for (const std::uint32_t global : chunk.indices)
+                    {
+                        if (global >= data.Vertices().size()) continue;
+                        const auto found = remap.find(global);
+                        if (found != remap.end())
+                        {
+                            source.indices.push_back(found->second);
+                            continue;
+                        }
+                        const std::uint32_t local =
+                            static_cast<std::uint32_t>(source.vertices.size());
+                        remap.emplace(global, local);
+                        const auto& input = data.Vertices()[global];
+                        D3D12StaticVertex vertex;
+                        vertex.position = input.position;
+                        vertex.normal = input.normal;
+                        vertex.texcoord = input.uv;
+                        source.vertices.push_back(vertex);
+                        source.indices.push_back(local);
+                    }
+                    if (source.vertices.empty() || source.indices.empty()) continue;
+                    submission.mesh_sources.push_back(std::move(source));
+                    cache.chunk_revisions[chunk_index] = chunk.revision;
+                }
+
+                D3D12StaticDrawItem draw;
+                draw.mesh_key = mesh_key;
+                draw.owner_id = object->ID().Value();
+                draw.rendering_layer = 0;
+                draw.motion_key = std::to_string(object->ID().Value()) + ":" + mesh_key;
+                draw.world = object->GetTransform().WorldMatrixFloat4x4();
+                draw.base_color = renderer->tint;
+                draw.double_sided = renderer->double_sided;
+                draw.cast_shadow = renderer->cast_shadow;
+                draw.receive_shadow = renderer->receive_shadow;
+                draw.lighting_model = static_cast<std::int32_t>(ShaderLightingModel::Pbr);
+
+                // 境界はチャンク自身のものを使う。これが視錐台カリングの効き目になる。
+                draw.material_bounds.minimum = chunk.bounds_min;
+                draw.material_bounds.maximum = chunk.bounds_max;
+                draw.material_bounds.valid = true;
+                submission.draws.push_back(std::move(draw));
+            }
         }
     }
 

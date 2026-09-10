@@ -12,10 +12,32 @@
 #include "../../../RePlayEngine/Rendering/ShaderStack/BuiltInShaderLayers.h"
 #include "../../../RePlayEngine/Rendering/Materials/ShaderLayerBinding.h"
 #include "../../../RePlayEngine/UI/UILayout.h"
+
+namespace
+{
+    // REPLAY_TAA_TRACE=1 で前フレーム行列の診断を stderr へ出す。
+    bool TaaTraceEnabled() noexcept
+    {
+        static const bool enabled = []
+        {
+            char* value = nullptr;
+            std::size_t length = 0;
+            if (_dupenv_s(&value, &length, "REPLAY_TAA_TRACE") != 0 || value == nullptr)
+                return false;
+            const bool on = value[0] != '\0' && std::strcmp(value, "0") != 0;
+            std::free(value);
+            return on;
+        }();
+        return enabled;
+    }
+}
 #include "../../../RePlayEngine/Components/UI/UIEffectStackComponent.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
@@ -346,6 +368,20 @@ void framework::render(float elapsed_time)
                 previous_view_projection_valid = true;
             }
             constants.prev_view_projection = previous_view_projection;
+            if (TaaTraceEnabled())
+            {
+                float delta = 0.0f;
+                for (int row = 0; row < 4; ++row)
+                    for (int col = 0; col < 4; ++col)
+                        delta += std::fabs(constants.view_projection.m[row][col] -
+                            constants.prev_view_projection.m[row][col]);
+                std::fprintf(stderr,
+                    "[TaaTrace] frame=%llu prev_vs_current=%.6f jitter=(%.5f, %.5f)"
+                    " prev_jitter=(%.5f, %.5f)\n",
+                    static_cast<unsigned long long>(frame_index), delta,
+                    taa_jitter_ndc.x, taa_jitter_ndc.y,
+                    previous_taa_jitter_ndc.x, previous_taa_jitter_ndc.y);
+            }
             const DirectX::XMFLOAT3 eye = viewport_eye_position();
             constants.camera_position = { eye.x, eye.y, eye.z, 1.0f };
             const float viewport_width = static_cast<float>(
