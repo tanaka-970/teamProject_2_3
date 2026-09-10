@@ -1063,6 +1063,22 @@
   </ItemGroup>
   <ItemGroup>
   </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="RePlayEngine\Rendering\Shaders\ShaderPack.cpp" />
+    <ClCompile Include="RePlayEngine\Scripting\Core\ScriptPack.cpp" />
+    <ClInclude Include="RePlayEngine\Rendering\Shaders\ShaderPack.h" />
+    <ClInclude Include="RePlayEngine\Scripting\Core\ScriptPack.h" />
+    <ClInclude Include="RePlayEngine\Runtime\Packaging\PackIO.h" />
+    <None Include="Tools\GenerateShaderPackInventory.ps1" />
+  </ItemGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <Target Name="GenerateShaderPackInventory" BeforeTargets="ClCompile">
+    <Exec WorkingDirectory="$(MSBuildProjectDirectory)" Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\Tools\GenerateShaderPackInventory.ps1&quot; -ProjectRoot &quot;$(MSBuildProjectDirectory)&quot; -Output &quot;$(IntDir)ShaderPackInventory.inl&quot;" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

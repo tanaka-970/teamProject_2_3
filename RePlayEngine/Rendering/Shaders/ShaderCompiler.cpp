@@ -2,6 +2,7 @@
 #include "../DX12/D3D12ShaderCompiler.h"
 
 #include <mutex>
+#include "ShaderPack.h"
 
 #include <algorithm>
 #include <chrono>
@@ -165,7 +166,7 @@ namespace ReplayEngine::Rendering
     {
         ShaderCompileResult result;
         const auto started = std::chrono::steady_clock::now();
-        if (source_text.empty() || entry_point == nullptr || target == nullptr)
+        if ((!ShaderPack::IsStandalone() && source_text.empty()) || entry_point == nullptr || target == nullptr)
         {
             result.raw_output = source_text.empty() ? "ソースが空です: " + source_name.generic_u8string()
                 : "entry_point または target が未指定です";
@@ -179,9 +180,14 @@ namespace ReplayEngine::Rendering
         static std::mutex compiler_mutex;
         static DX12::D3D12ShaderCompiler compiler;
         static bool compiler_ready = false;
+        static bool compiler_packaged = false;
         const std::lock_guard<std::mutex> compiler_lock(compiler_mutex);
         const std::filesystem::path library = DX12::D3D12ShaderCompiler::FindDefaultLibraryPath();
-        if (!compiler_ready) compiler_ready = compiler.Initialize(library);
+        if (!compiler_ready || compiler_packaged != ShaderPack::IsStandalone())
+        {
+            compiler_packaged = ShaderPack::IsStandalone();
+            compiler_ready = compiler.Initialize(library);
+        }
         if (!compiler_ready)
         {
             result.raw_output = "DXC を初期化できません: " + library.generic_u8string();
@@ -223,6 +229,8 @@ namespace ReplayEngine::Rendering
         const std::filesystem::path& source, const char* entry_point, const char* target,
         const Options& options, ShaderBytecode& out_bytecode)
     {
+        if (ShaderPack::IsStandalone())
+            return CompileSource({}, source, entry_point, target, options, out_bytecode);
         std::error_code error;
         if (!std::filesystem::exists(source, error) || error)
         {

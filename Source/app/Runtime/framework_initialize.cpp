@@ -12,6 +12,7 @@
 #include <shellapi.h>
 #include <vector>
 #include <string>
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderPack.h"
 
 namespace
 {
@@ -109,6 +110,14 @@ namespace
 
 bool framework::initialize()
 {
+    std::string shader_pack_error;
+    if (!ReplayEngine::Rendering::ShaderPack::Configure(
+        standalone_game_mode, content_root_path(), shader_pack_error))
+    {
+        push_editor_log("Error", shader_pack_error);
+        std::fprintf(stderr, "%s\n", shader_pack_error.c_str());
+        return false;
+    }
     const auto initialize_begin = std::chrono::steady_clock::now();
     auto initialize_stage_begin = initialize_begin;
     const auto record_initialize_stage = [this, &initialize_stage_begin](std::size_t index)
@@ -217,6 +226,7 @@ bool framework::initialize()
     // AssetDatabase の読み込み後に呼ぶ必要がある（Asset 参照を解決するため）。
     record_initialize_stage(2);
     initialize_object_scene();
+    if (standalone_game_mode && object_runtime_blocked) return false;
     record_initialize_stage(3);
 
     const DX12RuntimeOptions dx12_options = ReadDX12RuntimeOptions();

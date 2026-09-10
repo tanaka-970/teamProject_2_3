@@ -25,6 +25,7 @@
 #include "CSharpScriptBackendHostInternal.h"
 #include "CSharpScriptBackendInternal.h"
 #include "CSharpScriptBackendNativeInternal.h"
+#include "../../Runtime/Packaging/PackIO.h"
 namespace ReplayEngine::Scripting::CSharp
 {
     using namespace Detail;
@@ -121,6 +122,15 @@ namespace ReplayEngine::Scripting::CSharp
             return false;
         }
 
+        std::string fingerprint;
+        try { fingerprint = Runtime::Packaging::FileFingerprint(load_path); }
+        catch (const std::exception& exception)
+        {
+            output = exception.what();
+            SetLastError(output);
+            return false;
+        }
+
         std::array<char, text_buffer_size> buffer{};
         std::vector<char> path = Utf8CString(load_path);
         const int result = reinterpret_cast<load_assembly_fn>(load_assembly_)(
@@ -134,6 +144,8 @@ namespace ReplayEngine::Scripting::CSharp
         }
 
         assembly_loaded_ = true;
+        loaded_game_assembly_ = assembly_path;
+        loaded_game_fingerprint_ = std::move(fingerprint);
         g_event_subscriptions.clear();
         type_states_.clear();
         instance_types_.clear();
@@ -166,6 +178,7 @@ namespace ReplayEngine::Scripting::CSharp
 
     bool CSharpScriptBackend::CompileAndReload(CSharpBuildResult* out_build)
     {
+        if (packaged_mode_) { SetLastError("C# compilation is disabled in standalone"); return false; }
         // 起動時に hostfxr / Managed API の接続へ失敗していると、
         // load_assembly_ が空のまま何度ビルドしてもロードできない。
         // Editor の「C# Build & Reload」を押しても永久に直らなくなるため、
@@ -209,6 +222,39 @@ namespace ReplayEngine::Scripting::CSharp
 
         std::string output;
         return LoadGameAssembly(last_build_.output_assembly, output);
+    }
+
+    bool CSharpScriptBackend::ValidateExportAssemblies(std::string& configuration,
+        std::string& error) const
+    {
+        try
+        {
+            Runtime::Packaging::Require(initialized_ && assembly_loaded_ && !packaged_mode_,
+                "C# assembly is not ready for export");
+            configuration.clear();
+            for (const std::string candidate : { "Release", "Debug" })
+            {
+                const auto path = CSharpProject::GameScriptsAssemblyPath(project_root_, candidate);
+                std::error_code filesystem_error;
+                if (std::filesystem::equivalent(path, loaded_game_assembly_, filesystem_error) && !filesystem_error)
+                {
+                    configuration = candidate;
+                    break;
+                }
+            }
+            Runtime::Packaging::Require(!configuration.empty(), "Cannot identify loaded C# assembly configuration");
+            Runtime::Packaging::Require(!CSharpProject::GameScriptsBuildRequired(project_root_, configuration) &&
+                !CSharpProject::ManagedApiBuildRequired(project_root_, configuration),
+                "C# sources are newer than the export DLLs; build and reload C# before exporting");
+            Runtime::Packaging::Require(loaded_game_fingerprint_ ==
+                Runtime::Packaging::FileFingerprint(CSharpProject::GameScriptsAssemblyPath(project_root_, configuration)),
+                "C# game DLL changed since it was loaded; reload C# before exporting");
+            Runtime::Packaging::Require(loaded_api_fingerprint_ ==
+                Runtime::Packaging::FileFingerprint(CSharpProject::ManagedApiAssemblyPath(project_root_, configuration)),
+                "Managed API DLL differs from the loaded API; restart the editor with matching DLLs");
+            return true;
+        }
+        catch (const std::exception& exception) { error = exception.what(); return false; }
     }
 
 }

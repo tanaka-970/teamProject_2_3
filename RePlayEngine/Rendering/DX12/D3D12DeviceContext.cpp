@@ -1,4 +1,5 @@
-#include "D3D12DeviceContext.h"
+﻿#include "D3D12DeviceContext.h"
+#include "../Shaders/ShaderPack.h"
 #include "D3D12ResourceFactory.h"
 #include "D3D12ObjectName.h"
 
@@ -2937,8 +2938,9 @@ namespace ReplayEngine::Rendering::DX12
         if (source.source_path.empty()) return false;
         ++pso_cache_misses_;
 
-        std::ifstream file(source.source_path, std::ios::binary);
-        if (!file)
+        std::ifstream file;
+        if (!ShaderPack::IsStandalone()) file.open(source.source_path, std::ios::binary);
+        if (!ShaderPack::IsStandalone() && !file)
         {
             try { custom_static_shader_failures_.insert(source.key); }
             catch (...) {}
@@ -2955,13 +2957,8 @@ namespace ReplayEngine::Rendering::DX12
         std::string combined;
         try
         {
-            combined.reserve(source.generated_declaration.size() + body.size() + 256);
-            combined += "#line 1 \"REPLAY_DX12_GENERATED\"\n";
-            combined += source.generated_declaration;
-            combined += "\n#line 1 \"";
-            combined += source.source_path.generic_string();
-            combined += "\"\n";
-            combined += body;
+            combined = ShaderPack::ComposeSource(body, source.generated_declaration,
+                source.source_path, false);
         }
         catch (...)
         {
@@ -2971,14 +2968,8 @@ namespace ReplayEngine::Rendering::DX12
         D3D12ShaderCompiler compiler;
         if (!compiler.Initialize(D3D12ShaderCompiler::FindDefaultLibraryPath()))
             return false;
-        D3D12ShaderCompileOptions options;
-        options.debug = debug_layer_enabled_;
-        options.optimize = !debug_layer_enabled_;
-        options.warnings_as_errors = false;
-        options.include_directories.push_back(std::filesystem::current_path() / "Shader");
-        options.include_directories.push_back(
-            std::filesystem::current_path() / "Shader" / "Include");
-        options.defines.push_back({ L"REPLAY_SKINNED", L"0" });
+        const auto options = ShaderPack::SurfaceOptions(debug_layer_enabled_);
+        // replay-pack-source: surface
         const D3D12ShaderCompileResult compiled = compiler.CompileSource(combined,
             source.source_path, L"main", L"ps_6_0", options);
         compiler.Shutdown();

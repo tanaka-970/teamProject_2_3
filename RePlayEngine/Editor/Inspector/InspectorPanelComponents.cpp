@@ -1,4 +1,4 @@
-// InspectorPanel のうち「Component 単体の表示・診断・削除」だけを持つ。
+﻿// InspectorPanel のうち「Component 単体の表示・診断・削除」だけを持つ。
 //
 // 単体選択のヘッダー・Prefab 表示は InspectorPanel.cpp、
 // 複数選択の一括編集は InspectorPanelMultiSelection.cpp に置く。
@@ -146,11 +146,20 @@ namespace ReplayEngine::Editor
         const ComponentTypeInfo* info = ComponentRegistry::Find(component.TypeID());
         const auto* missing = dynamic_cast<const Core::MissingComponent*>(&component);
 
-        const std::string title = missing != nullptr
+        std::string title = missing != nullptr
             ? missing->DescribeMissingType()
             : (info != nullptr
                 ? info->DisplayName()
                 : std::string("(未登録) ") + component.TypeName());
+
+        // Identify attached behaviours even while their property cards are folded.
+        if (const auto* script = dynamic_cast<const Scripting::ScriptComponent*>(&component))
+        {
+            if (!script->ClassName().empty())
+                title = script->ClassName() + " (Script)";
+            else
+                title += " (未指定)";
+        }
 
         const bool editable = context.CanEdit();
         const bool removable = ComponentRegistry::IsRemovable(component.TypeID());

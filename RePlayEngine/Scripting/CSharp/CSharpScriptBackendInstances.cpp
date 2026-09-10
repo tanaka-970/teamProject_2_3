@@ -69,6 +69,16 @@ namespace ReplayEngine::Scripting::CSharp
         }
 
         TypeState state;
+        if (packaged_mode_)
+        {
+            if (!descriptor.schema || descriptor.schema->TypeID() != descriptor.type_id)
+                return ScriptLoadResult::Failure("Missing packed C# schema: " + descriptor.type_id.ToString());
+            state.schema = descriptor.schema;
+            for (const auto& field : state.schema->Fields())
+                state.field_types[field.SavedName()] = field.type;
+            type_states_[descriptor.type_id] = state;
+            return ScriptLoadResult::Success(state.schema);
+        }
         std::string schema_error;
         if (!ParseSchemaText(descriptor.type_id, schema_revision, text,
             state.schema, state.field_types, schema_error))

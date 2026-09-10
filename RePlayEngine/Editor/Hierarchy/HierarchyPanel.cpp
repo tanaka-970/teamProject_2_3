@@ -56,15 +56,6 @@ namespace ReplayEngine::Editor
             return text;
         }
 
-        void CollectPreorder(GameObject& object, std::vector<GameObject*>& out, int depth = 0)
-        {
-            if (depth > maximum_depth || object.PendingDestroy()) return;
-            out.push_back(&object);
-            for (GameObject* child : object.Children())
-            {
-                if (child != nullptr) CollectPreorder(*child, out, depth + 1);
-            }
-        }
     }
 
     void HierarchyPanel::Draw(EditorContext& context)
@@ -122,11 +113,36 @@ namespace ReplayEngine::Editor
         ImGui::Separator();
 
         // 親を持たないものから再帰的に描く。
+        // Search expansion must not overwrite the normal hierarchy's folded state.
+        ImGui::PushID("CompactHierarchy");
+        ImGui::PushID(search_buffer_[0] != '\0');
+        visible_objects_.clear();
         const std::vector<GameObject*> roots = scene->RootGameObjects();
         for (GameObject* root : roots)
         {
             if (root == nullptr || root->PendingDestroy()) continue;
             DrawNode(context, *root, 0, roots);
+        }
+        ImGui::PopID();
+        ImGui::PopID();
+
+        // Shift selection includes only the rows actually visible in this view.
+        if (pending_range_selection_.Valid())
+        {
+            auto anchor = std::find(visible_objects_.begin(), visible_objects_.end(), selection_anchor_);
+            auto current = std::find(visible_objects_.begin(), visible_objects_.end(), pending_range_selection_);
+            if (anchor != visible_objects_.end() && current != visible_objects_.end())
+            {
+                if (anchor > current) std::swap(anchor, current);
+                context.Selection().Clear();
+                for (auto it = anchor; it <= current; ++it)
+                    context.Selection().Select(*it, true);
+            }
+            else
+            {
+                context.Selection().Select(pending_range_selection_, true);
+            }
+            pending_range_selection_ = ObjectID::Invalid();
         }
 
         if (const char* active_label = ActiveReorderLabel(); active_label != nullptr)
@@ -242,6 +258,7 @@ namespace ReplayEngine::Editor
     {
         if (depth > maximum_depth) return;
         if (!NodeMatchesFilter(object)) return;
+        visible_objects_.push_back(object.ID());
 
         const bool editable = context.CanEdit();
         const bool selected = context.Selection().IsSelected(object.ID());
@@ -256,14 +273,6 @@ namespace ReplayEngine::Editor
         if (renaming_ == object.ID())
         {
             ImGui::PushID(item_id.c_str());
-            bool enabled = object.Enabled();
-            if (ImGui::Checkbox("##Enabled", &enabled) && editable)
-            {
-                context.BeginEdit("GameObject の有効状態を変更");
-                object.SetEnabled(enabled);
-                context.CommitEdit();
-            }
-            ImGui::SameLine();
             ImGui::SetNextItemWidth(-1.0f);
             ImGui::SetKeyboardFocusHere();
             if (ImGui::InputText("##Rename", rename_buffer_, rename_buffer_size,
@@ -313,18 +322,14 @@ namespace ReplayEngine::Editor
         {
             (void)header_title;
             header_flags |= ImGuiTreeNodeFlags_OpenOnArrow |
-                ImGuiTreeNodeFlags_SpanAvailWidth;
+                ImGuiTreeNodeFlags_OpenOnDoubleClick |
+                ImGuiTreeNodeFlags_SpanAvailWidth |
+                ImGuiTreeNodeFlags_NoTreePushOnOpen;
             if (!has_children)
                 header_flags |= ImGuiTreeNodeFlags_Leaf |
                     ImGuiTreeNodeFlags_NoTreePushOnOpen;
-            bool enabled = object.Enabled();
-            if (ImGui::Checkbox("##Enabled", &enabled) && editable)
-            {
-                context.BeginEdit("GameObject の有効状態を変更");
-                object.SetEnabled(enabled);
-                context.CommitEdit();
-            }
-            ImGui::SameLine();
+            if (has_children && search_buffer_[0] != '\0')
+                ImGui::SetNextItemOpen(true, ImGuiCond_Always);
             if (dimmed || missing_prefab || prefab)
                 ImGui::PushStyleColor(ImGuiCol_Text,
                     dimmed ? ImVec4(0.55f, 0.55f, 0.55f, 1.0f)
@@ -344,34 +349,7 @@ namespace ReplayEngine::Editor
                 }
                 else if (io.KeyShift && selection_anchor_.Valid())
                 {
-                    Scene::Scene* scene = context.GetScene();
-                    std::vector<GameObject*> ordered;
-                    if (scene != nullptr)
-                    {
-                        for (GameObject* root : scene->RootGameObjects())
-                        {
-                            if (root != nullptr) CollectPreorder(*root, ordered);
-                        }
-                    }
-
-                    auto anchor = std::find_if(ordered.begin(), ordered.end(), [this](const GameObject* item)
-                    {
-                        return item != nullptr && item->ID() == selection_anchor_;
-                    });
-                    auto current = std::find(ordered.begin(), ordered.end(), &object);
-                    if (anchor != ordered.end() && current != ordered.end())
-                    {
-                        if (anchor > current) std::swap(anchor, current);
-                        context.Selection().Clear();
-                        for (auto it = anchor; it <= current; ++it)
-                        {
-                            if (*it != nullptr) context.Selection().Select((*it)->ID(), true);
-                        }
-                    }
-                    else
-                    {
-                        context.Selection().Select(object.ID(), true);
-                    }
+                    pending_range_selection_ = object.ID();
                 }
                 else
                 {
@@ -414,7 +392,7 @@ namespace ReplayEngine::Editor
         const ReorderableItemResult item = DrawReorderableItemEx(
             list_identity, item_id.c_str(), sibling_index, sibling_count,
             object.Name().c_str(), selected,
-            true, editable, object.ID().Value(),
+            false, editable, object.ID().Value(),
             &hierarchy_reorder_scope,
             draw_header,
             [&context, &object, this]
@@ -422,7 +400,7 @@ namespace ReplayEngine::Editor
                 if (!context.Selection().IsSelected(object.ID()))
                     context.Selection().Select(object.ID(), false);
                 DrawContextMenu(context, &object);
-            }, draw_drop);
+            }, draw_drop, true);
 
         if (item.request.Valid() && !pending_reparent_child_.Valid() &&
             item.request.destination < siblings.size())
@@ -436,6 +414,8 @@ namespace ReplayEngine::Editor
 
         if (item.opened && has_children)
         {
+            // Push after the row helper has balanced its own ID/group scopes.
+            ImGui::TreePush(item_id.c_str());
             // 走査中に子リストが変わらないよう控えを取る。
             const std::vector<GameObject*> children = object.Children();
             for (GameObject* child : children)
@@ -490,6 +470,12 @@ namespace ReplayEngine::Editor
         if (object == nullptr) return;
 
         ImGui::Separator();
+        if (ImGui::MenuItem("有効", nullptr, object->Enabled(), editable))
+        {
+            context.BeginEdit("GameObject の有効状態を変更");
+            object->SetEnabled(!object->Enabled());
+            context.CommitEdit();
+        }
         if (ImGui::MenuItem("名前を変更", "F2", false, editable))
         {
             renaming_ = object->ID();

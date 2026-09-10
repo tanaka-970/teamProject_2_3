@@ -290,7 +290,10 @@ float4 taa_resolve_main(PixelInput input) : SV_TARGET
 
 float3 acesToneMap(float3 color)
 {
-    color *= exp2(exposure);
+    // Settings/volumes store a linear exposure multiplier (1 = neutral), not EV.
+    // Match final_pass_ps.hlsl, including the ACES input scale. exp2 here made
+    // even the minimum exposure brighten HDR skies instead of darkening them.
+    color *= 0.6f * max(exposure, 0.0f);
     const float3 a = color * (color * 2.51f + 0.03f);
     const float3 b = color * (color * 2.43f + 0.59f) + 0.14f;
     return saturate(a / max(b, 0.0001f));

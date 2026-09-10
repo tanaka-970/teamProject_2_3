@@ -57,6 +57,8 @@ namespace ReplayEngine::Scripting::CSharp
         bool ReloadLastBuiltAssembly();
         const CSharpBuildResult& LastBuildResult() const noexcept { return last_build_; }
         bool AssemblyLoaded() const noexcept { return assembly_loaded_; }
+        bool ValidateExportAssemblies(std::string& configuration, std::string& error) const;
+        const ScriptTypeCatalog& PackagedCatalog() const noexcept { return packaged_catalog_; }
 
         // 起動時に C# を用意できなかった理由。空なら問題なく用意できた。
         // Initialize() は Editor を止めないため戻り値だけでは理由が残らない。
@@ -120,6 +122,11 @@ namespace ReplayEngine::Scripting::CSharp
         std::unordered_map<ScriptInstanceHandle, ScriptTypeID> instance_types_;
 
         CSharpBuildResult last_build_;
+        ScriptTypeCatalog packaged_catalog_;
+        std::string packaged_configuration_;
+        std::filesystem::path loaded_game_assembly_;
+        std::string loaded_game_fingerprint_;
+        std::string loaded_api_fingerprint_;
         mutable std::string last_error_;
         mutable std::string last_error_file_;
         mutable int last_error_line_ = 0;

@@ -72,5 +72,7 @@ namespace ReplayEngine::Editor
         static constexpr int search_buffer_size = 256;
         char search_buffer_[search_buffer_size]{};
         Core::ObjectID selection_anchor_;
+        std::vector<Core::ObjectID> visible_objects_;
+        Core::ObjectID pending_range_selection_;
     };
 }

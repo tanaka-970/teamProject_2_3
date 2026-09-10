@@ -25,6 +25,8 @@
 #include "CSharpScriptBackendHostInternal.h"
 #include "CSharpScriptBackendInternal.h"
 #include "CSharpScriptBackendNativeInternal.h"
+#include "../Core/ScriptPack.h"
+#include "../../Runtime/Packaging/PackIO.h"
 namespace ReplayEngine::Scripting::CSharp
 {
     using namespace Detail;
@@ -52,6 +54,12 @@ namespace ReplayEngine::Scripting::CSharp
 
         if (packaged_mode_)
         {
+            std::string pack_error;
+            if (!ScriptPack::Load(project_root_, packaged_catalog_, packaged_configuration_, pack_error))
+            {
+                SetLastError(pack_error);
+                return RecordStartupFailure();
+            }
             if (!LoadHost()) return RecordStartupFailure();
             if (!LoadManagedApi()) return RecordStartupFailure();
             if (!ResolveManagedEntryPoints()) return RecordStartupFailure();
@@ -59,7 +67,7 @@ namespace ReplayEngine::Scripting::CSharp
 
             initialized_ = true;
             const std::filesystem::path game_assembly =
-                GameScriptsAssemblyPathForMode(project_root_, true);
+                CSharpProject::GameScriptsAssemblyPath(project_root_, packaged_configuration_);
             std::error_code filesystem_error;
             if (std::filesystem::exists(game_assembly, filesystem_error) &&
                 !filesystem_error)
@@ -261,7 +269,8 @@ namespace ReplayEngine::Scripting::CSharp
         }
 
         const std::filesystem::path runtime_config =
-            ManagedApiRuntimeConfigPathForMode(project_root_, packaged_mode_);
+            packaged_mode_ ? CSharpProject::ManagedApiRuntimeConfigPath(project_root_, packaged_configuration_)
+                : ManagedApiRuntimeConfigPathForMode(project_root_, false);
         if (!std::filesystem::exists(runtime_config))
         {
             SetLastError("Managed API runtimeconfig is missing: " +
@@ -307,7 +316,10 @@ namespace ReplayEngine::Scripting::CSharp
             reinterpret_cast<load_assembly_and_get_function_pointer_fn>(
                 load_assembly_and_get_function_pointer_);
         const std::filesystem::path assembly =
-            ManagedApiAssemblyPathForMode(project_root_, packaged_mode_);
+            packaged_mode_ ? CSharpProject::ManagedApiAssemblyPath(project_root_, packaged_configuration_)
+                : ManagedApiAssemblyPathForMode(project_root_, false);
+        try { loaded_api_fingerprint_ = Runtime::Packaging::FileFingerprint(assembly); }
+        catch (const std::exception& exception) { SetLastError(exception.what()); return false; }
         const std::wstring assembly_path = assembly.wstring();
         const wchar_t* type_name = L"ReplayEngine.NativeBridge, RePlayEngine.Managed";
         const wchar_t* unmanaged_callers_only =

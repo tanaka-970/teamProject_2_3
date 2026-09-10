@@ -373,22 +373,41 @@ void framework::initialize_runtime_services()
     object_scene.Services().SetSceneFlow(nullptr);
     object_scene.Services().SetAudio(&object_audio_system);
 
-    // Script の型カタログはここでしか作られない。
-    //
-    // 【なぜ standalone でも呼ぶか】
-    //   以前は Editor のときだけ呼んでいた。standalone では Catalog が空のまま
-    //   なので、Scene に置いた ScriptComponent が型を解決できず、
-    //   インスタンスが 1 つも生まれない。画面は出るのにスクリプトが
-    //   まったく動かない、という形で出る。
-    //   RefreshCatalog はソースを走査して型を集めるだけでビルドはしない。
-    refresh_csharp_scripts();
-
-    // シェーダ資産の走査。
-    //
-    // ここへ置くのは、Console のログ経路が既に使える状態だから。
-    // まだ描画には使わないので、失敗しても他へ影響しない。
-    // standalone を除外しない。Material Asset のシェーダ解決に Catalog が要る。
-    scan_shader_library();
+    if (standalone_game_mode)
+    {
+        using namespace ReplayEngine::Scripting;
+        auto* backend = dynamic_cast<CSharp::CSharpScriptBackend*>(
+            object_script_runtime->Backend(ScriptLanguage::CSharp));
+        if (backend == nullptr || !backend->Initialized() || !backend->AssemblyLoaded())
+        {
+            const std::string reason = backend != nullptr
+                ? backend->StartupDiagnostic() : "C# backend is missing";
+            push_editor_log("Error", reason);
+            set_runtime_blocked(reason);
+            return;
+        }
+        for (const auto& descriptor : backend->PackagedCatalog().All())
+        {
+            if (!object_script_runtime->RegisterScriptType(descriptor))
+            {
+                const std::string reason = "C# packed type could not be registered: " +
+                    descriptor.type_id.ToString() + " / " + descriptor.class_name;
+                push_editor_log("Error", reason);
+                set_runtime_blocked(reason);
+            }
+        }
+        std::string error;
+        if (!shader_library.LoadPack(error))
+        {
+            push_editor_log("Error", error);
+            set_runtime_blocked(error);
+        }
+    }
+    else
+    {
+        refresh_csharp_scripts();
+        scan_shader_library();
+    }
 
     object_bound_world_instance = object_runtime_scenes.ActiveWorldID();
 }
@@ -416,6 +435,7 @@ void framework::clear_runtime_blocked() noexcept
 void framework::begin_startup_scene()
 {
     initialize_runtime_services();
+    if (standalone_game_mode && object_runtime_blocked) return;
     if (!object_scene_flow) return;
 
     clear_runtime_blocked();

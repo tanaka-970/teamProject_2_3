@@ -295,6 +295,12 @@ void framework::register_object_scene_asset()
 {
     object_scene_asset_guid.clear();
     if (object_scene_path.empty()) return;
+    if (standalone_game_mode)
+    {
+        const auto* record = asset_database.FindByPath(object_scene_path);
+        if (record != nullptr) object_scene_asset_guid = record->guid;
+        return;
+    }
 
     const ReplayEngine::Assets::AssetRecord& record = asset_database.Register(
         object_scene_path, ReplayEngine::Assets::AssetKind::Scene);
@@ -472,4 +478,3 @@ void framework::request_application_quit()
 //   （ユーザーが Prefab ファイルを選んで配置する操作）の 2 か所だけ。
 //   どちらもユーザーの明示操作からしか呼ばれない。
 //   起動処理・Scene 読み込み・Component 不足の検出からは呼ばれない。
-

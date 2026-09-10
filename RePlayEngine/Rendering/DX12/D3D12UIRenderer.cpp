@@ -1,4 +1,5 @@
 ﻿#include "D3D12DeviceContext.h"
+#include "../Shaders/ShaderPack.h"
 #include "D3D12ResourceFactory.h"
 #include "D3D12ObjectName.h"
 
@@ -621,8 +622,9 @@ namespace ReplayEngine::Rendering::DX12
             diagnostics = "UI Effect renderer is not ready";
             return false;
         }
-        std::ifstream file(source.source_path, std::ios::binary);
-        if (!file)
+        std::ifstream file;
+        if (!ShaderPack::IsStandalone()) file.open(source.source_path, std::ios::binary);
+        if (!ShaderPack::IsStandalone() && !file)
         {
             diagnostics = "Shader source file could not be opened: " +
                 source.source_path.generic_u8string();
@@ -647,11 +649,11 @@ namespace ReplayEngine::Rendering::DX12
             diagnostics = "DXC compiler initialization failed";
             return false;
         }
-        const std::string combined = "#line 1 \"REPLAY_GENERATED\"\n" +
-            source.generated_declaration + "#line 1 \"" +
-            source.source_path.generic_u8string() + "\"\n" + shader_source;
+        const std::string combined = ShaderPack::ComposeSource(shader_source,
+            source.generated_declaration, source.source_path, true);
+        // replay-pack-source: ui-effect
         const auto pixel = compiler.CompileSource(combined, source.source_path,
-            L"main", L"ps_6_0", debug_layer_enabled_);
+            L"main", L"ps_6_0", ShaderPack::UIOptions(debug_layer_enabled_));
         compiler.Shutdown();
         diagnostics = pixel.diagnostics;
         if (!pixel.succeeded || pixel.bytecode.empty())
