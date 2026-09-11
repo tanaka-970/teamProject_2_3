@@ -9,7 +9,7 @@ cbuffer MaterialCB : register(b2)
     float4 surfaceParams; // metallic、roughness、AO、alpha cutoff
     float4 renderParams;  // alpha mode、lighting model、receive shadow、texture semantic mask
     float4 builtinParams;  // BuiltIn固有表現。x=効果ID、y/z/w=引数
-    float4 builtinParams1; // Toon=ShadowTint、GGST=ShadeColorをrgbへ入れる
+    float4 builtinParams1; // Toon=ShadowTint、GGST=ShadeColor(rgb)/SpecularIntensity(w)
     float4 builtinParams2; // Toon=RimColor/SpecularPower、GGST.x=顔ライティング、y=顔ボーンID、z/w=軸反転
     float4 builtinParams3; // Toon。rgb=SpecularTint、w=予約
 };
@@ -34,6 +34,7 @@ Texture2D emissiveTexture : register(t4);
 Texture2D occlusionTexture : register(t5);
 // t8/t9 は Bone Palette の root SRV が使うので RampMap は t10 に置く。
 Texture2D rampTexture : register(t10);
+Texture2D sssTexture : register(t11);
 Texture2D ilmTexture : register(t12);
 SamplerState materialSampler : register(s0);
 
@@ -62,6 +63,7 @@ static const uint MATERIAL_OCCLUSION_MAP = 1u << 5;
 static const uint MATERIAL_PACKED_ORM_MAP = 1u << 6;
 static const uint MATERIAL_RAMP_MAP = 1u << 7;
 static const uint MATERIAL_ILM_MAP = 1u << 8;
+static const uint MATERIAL_SSS_MAP = 1u << 9;
 
 struct PSIn
 {
@@ -200,7 +202,7 @@ PSOut main(PSIn input)
     const float toonSteps = isGgst ? (float)BUILTIN_EFFECT_GGST / 255.0f :
         (isToon ? (float)toonCode / 255.0f : ao);
     const float3 ggstIlm = (isGgst && (semanticMask & MATERIAL_ILM_MAP) != 0u) ?
-        ilmTexture.Sample(materialSampler, input.uv).rgb : float3(1.0f, 0.5f, 1.0f);
+        ilmTexture.Sample(materialSampler, input.uv).rgb : Dx12DefaultGgstIlm();
     output.material = isGgst ? float4(ggstIlm, toonSteps) :
         float4(ao, roughness, metallic, toonSteps);
     output.vertexColor = input.vertexColor;
@@ -221,10 +223,13 @@ PSOut main(PSIn input)
     }
     if (isGgst)
     {
-        output.toon.x = Dx12PackColor565(builtinParams1.rgb);
+        const float3 ggstShadeColor = builtinParams1.rgb *
+            ((semanticMask & MATERIAL_SSS_MAP) != 0u ?
+                sssTexture.Sample(materialSampler, input.uv).rgb : 1.0f.xxx);
+        output.toon.x = Dx12PackColor565(ggstShadeColor);
         output.toon.y = saturate(builtinParams.y);
         output.toon.z = saturate(builtinParams.z);
-        output.toon.w = saturate(builtinParams.w);
+        output.toon.w = Dx12PackTwoBytes(builtinParams.w, builtinParams1.w / 20.0f);
         if (builtinParams2.x >= 0.5f)
         {
             output.faceBasis.xy = Dx12EncodeOctahedral(input.faceRight);

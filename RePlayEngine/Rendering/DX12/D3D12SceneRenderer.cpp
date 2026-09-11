@@ -44,6 +44,7 @@ namespace ReplayEngine::Rendering::DX12
         constexpr UINT kScene3DLightingSrvRangeCount = 17;
         constexpr float kScene3DOutlineDepthOffsetDistance = 0.01f;
         constexpr std::uint32_t kScene3DGgstIlmMaterialSlot = 47u;
+        constexpr std::uint32_t kScene3DGgstSssMaterialSlot = 48u;
         constexpr std::uint32_t kScene3DMaterialRampSemanticBit = 1u << 7;
         static_assert(kScene3DGBufferCount <= D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT);
         constexpr DXGI_FORMAT kScene3DDepthResourceFormat = DXGI_FORMAT_R32_TYPELESS;
@@ -508,7 +509,7 @@ namespace ReplayEngine::Rendering::DX12
         device_->CreateShaderResourceView(nullptr, &null_ibl_srv,
             scene3d_null_ibl_specular_srv_.cpu);
 
-        // t0..t5はMaterial Map、t6はCSM、t7はLocal Shadow Atlas、t10はToon RampMap、t12はGGST ILM。
+        // t0..t5はMaterial Map、t6はCSM、t7はLocal Shadow Atlas、t10はToon Ramp、t11/t12はGGST SSS/ILM。
         // Slot番号ではなく draw.material_texture_semantic_mask で意味を判定する。
         // t8/t9 は Bone Palette の root SRV が使うので追加テクスチャは t10 以降へ置く。
         constexpr UINT kScene3DGeometrySrvRangeCount = 15;
@@ -2645,8 +2646,11 @@ namespace ReplayEngine::Rendering::DX12
             const StaticTextureResource* ramp = material_texture_for(draw, 46u, "__dx12_white");
             const StaticTextureResource* ilm = material_texture_for(
                 draw, kScene3DGgstIlmMaterialSlot, "__dx12_white");
+            const StaticTextureResource* sss = material_texture_for(
+                draw, kScene3DGgstSssMaterialSlot, "__dx12_white");
             if (normal == nullptr || metallic == nullptr || roughness == nullptr ||
-                emissive == nullptr || occlusion == nullptr || ramp == nullptr || ilm == nullptr)
+                emissive == nullptr || occlusion == nullptr || ramp == nullptr || ilm == nullptr ||
+                sss == nullptr)
                 return false;
             const std::uint32_t semantic_mask = draw.material_texture_semantic_mask;
             Scene3DMaterialConstants material{};
@@ -2688,6 +2692,8 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootDescriptorTable(12, directional_shadow_srv);      // t6
             command_list_->SetGraphicsRootDescriptorTable(13, local_shadow_srv);            // t7
             command_list_->SetGraphicsRootDescriptorTable(14, ramp->srv.gpu);               // t10
+            command_list_->SetGraphicsRootDescriptorTable(15, sss->srgb_srv.IsValid()
+                ? sss->srgb_srv.gpu : sss->srv.gpu);                                         // t11
             command_list_->SetGraphicsRootDescriptorTable(21, ilm->srv.gpu);                 // t12
             command_list_->SetGraphicsRootDescriptorTable(17, ibl_diffuse_srv);             // t33
             command_list_->SetGraphicsRootDescriptorTable(18, ibl_specular_srv);            // t34

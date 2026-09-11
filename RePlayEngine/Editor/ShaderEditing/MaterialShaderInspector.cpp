@@ -170,7 +170,8 @@ namespace ReplayEngine::Editor
                     const std::string label = record->display_name.empty()
                         ? record->source_path.filename().u8string()
                         : record->display_name;
-                    if (ImGui::Selectable(label.c_str(), record->guid == guid))
+                    const std::string item_id = label + "##" + record->guid;
+                    if (ImGui::Selectable(item_id.c_str(), record->guid == guid))
                     {
                         material.properties.Set(saved,
                             Reflection::PropertyValue::MakeAssetReference(record->guid));

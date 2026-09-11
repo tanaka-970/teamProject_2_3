@@ -74,8 +74,9 @@ namespace ReplayEngine::Rendering::Validation
                     "PixelSize", "PixelateStrength", "PixelateOpacity" } },
                 { BuiltInShaders::Ggst, {
                     "BaseColor", "BaseMap", "ShadeColor", "ShadingThreshold",
-                    "ShadingOffset", "SpecularSize", "IlmMap", "FaceLighting",
-                    "FaceBoneIndex", "FlipFaceRight", "FlipFaceFront" } },
+                    "ShadingOffset", "SpecularSize", "SpecularIntensity", "IlmMap",
+                    "SssMap", "FaceLighting", "FaceBoneIndex", "FlipFaceRight",
+                    "FlipFaceFront" } },
             };
         }
     }

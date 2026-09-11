@@ -116,10 +116,12 @@ float4 main(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_Target0
     if (isGgst)
     {
         const float4 packed = gToon.SampleLevel(pointSampler, uv, 0);
+        const float2 ggstSpecular = Dx12UnpackTwoBytes(packed.w);
         ggst.shadeColor = Dx12UnpackColor565(packed.x);
         ggst.shadingThreshold = saturate(packed.y);
         ggst.shadingOffset = saturate(packed.z);
-        ggst.specularSize = saturate(packed.w);
+        ggst.specularSize = ggstSpecular.x;
+        ggst.specularIntensity = ggstSpecular.y * 20.0f;
     }
     else if (lightingModel == 1u && !pixelatePayload)
     {

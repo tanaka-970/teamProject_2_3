@@ -20,8 +20,8 @@ using namespace DirectX;
 namespace
 {
     constexpr std::uint32_t kMeshCacheMagic = 0x48534D52u;  // 'RMSH'
-    // v4 は Skin と Animation の有無も保存して CPU キャッシュ経路の判定を一致させる。
-    constexpr std::uint32_t kMeshCacheVersion = 4;
+    // v5 は GLB COLOR_0 も保存し、CPU Geometry 解放後のDX12再構築でも維持する。
+    constexpr std::uint32_t kMeshCacheVersion = 5;
 
     // 文字列は長さ+本体で書く。
     void WriteString(std::ofstream& stream, const std::string& text)
@@ -152,6 +152,7 @@ bool gltf_model::SaveMeshCache(const std::string& filename) const
         stream.write(reinterpret_cast<const char*>(&primitive.material),
             sizeof(primitive.material));
         WriteVector(stream, primitive.source_vertices);
+        WriteVector(stream, primitive.source_vertex_colors);
         WriteVector(stream, primitive.source_indices);
     }
 
@@ -219,6 +220,9 @@ bool gltf_model::LoadMeshCache(const std::string& filename)
             sizeof(primitive.material));
         if (!stream) return false;
         if (!ReadVector(stream, primitive.source_vertices, 1u << 24)) return false;
+        if (!ReadVector(stream, primitive.source_vertex_colors, 1u << 24)) return false;
+        if (!primitive.source_vertex_colors.empty() &&
+            primitive.source_vertex_colors.size() != primitive.source_vertices.size()) return false;
         if (!ReadVector(stream, primitive.source_indices, 1u << 26)) return false;
         if (primitive.source_vertices.empty() || primitive.source_indices.empty()) return false;
     }
@@ -287,6 +291,7 @@ bool gltf_model::ExportStaticPrimitives(
                 StaticPrimitiveExport exported;
                 exported.vertices = primitive.source_vertices;
                 exported.indices = primitive.source_indices;
+                exported.vertex_colors = primitive.source_vertex_colors;
                 exported.node_transform = primitive.node_transform;
                 exported.material = primitive.material;
                 if (primitive.material >= 0 &&
@@ -384,6 +389,9 @@ bool gltf_model::ExportStaticPrimitives(
             sizeof(primitive.material));
         if (!stream) return false;
         if (!ReadVector(stream, primitive.source_vertices, 1u << 24)) return false;
+        if (!ReadVector(stream, primitive.source_vertex_colors, 1u << 24)) return false;
+        if (!primitive.source_vertex_colors.empty() &&
+            primitive.source_vertex_colors.size() != primitive.source_vertices.size()) return false;
         if (!ReadVector(stream, primitive.source_indices, 1u << 26)) return false;
     }
     return append_exports(primitives, materials);

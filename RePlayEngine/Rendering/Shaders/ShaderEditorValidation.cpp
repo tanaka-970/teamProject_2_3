@@ -84,6 +84,8 @@ namespace ReplayEngine::Rendering::Validation
         if (ggst && ggst->schema)
         {
             check.Expect(ggst->schema->FindByName("IlmMap") != nullptr &&
+                ggst->schema->FindByName("SssMap") != nullptr &&
+                ggst->schema->FindByName("SpecularIntensity") != nullptr &&
                 ggst->schema->FindByName("FaceLighting") != nullptr &&
                 ggst->schema->FindByName("FaceBoneIndex") != nullptr,
                 "GGST 専用 Property を HLSL Schema から公開する");
@@ -110,6 +112,8 @@ namespace ReplayEngine::Rendering::Validation
             ggst_material.shading_model == 2,
             "GGST は正式GUIDを正本にしつつ legacy fallback は Toon に固定する");
         check.Expect(ggst_material.properties.Find("prop.IlmMap") != nullptr &&
+            ggst_material.properties.Find("prop.SssMap") != nullptr &&
+            ggst_material.properties.Find("prop.SpecularIntensity") != nullptr &&
             ggst_material.properties.Find("prop.FaceLighting") != nullptr,
             "GGST 専用 Material Property を自動生成する");
 

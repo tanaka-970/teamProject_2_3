@@ -846,7 +846,8 @@ bool framework::build_dx12_static_scene(
                 std::clamp(property_float("prop.SpecularSize", 0.2f), 0.0f, 1.0f) };
             draw.builtin_params1 = {
                 std::clamp(shade.x, 0.0f, 1.0f), std::clamp(shade.y, 0.0f, 1.0f),
-                std::clamp(shade.z, 0.0f, 1.0f), std::clamp(shade.w, 0.0f, 1.0f) };
+                std::clamp(shade.z, 0.0f, 1.0f),
+                std::clamp(property_float("prop.SpecularIntensity", 10.0f), 0.0f, 20.0f) };
             draw.builtin_params2 = {
                 property_bool("prop.FaceLighting", false) ? 1.0f : 0.0f,
                 std::clamp(property_float("prop.FaceBoneIndex", 0.0f), 0.0f, 1023.0f),
@@ -935,7 +936,8 @@ bool framework::build_dx12_static_scene(
             std::uint32_t bridge_slot = 0;
             const bool fixed_bridge_texture =
                 (is_toon && texture.property_name == "RampMap") ||
-                (is_ggst && texture.property_name == "IlmMap");
+                (is_ggst && (texture.property_name == "IlmMap" ||
+                    texture.property_name == "SssMap"));
             if (fixed_bridge_texture && ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
                 texture.property_name, bridge_slot))
                 mapped.slot = bridge_slot;
@@ -1041,7 +1043,8 @@ bool framework::build_dx12_static_scene(
     const auto make_mesh_source = [&submission, &mesh_source_keys, &copy_vertex_colors, this](
         const std::string& key, auto vertex_begin, auto vertex_end,
         const std::vector<std::uint32_t>& indices,
-        const RenderItem* item = nullptr, std::uint32_t mesh_index = 0)
+        const RenderItem* item = nullptr, std::uint32_t mesh_index = 0,
+        const std::vector<ReplayEngine::Assets::VertexColorRgba8>* imported_colors = nullptr)
     {
         // 視錐台カリング用の境界。メッシュごとに一度だけ求めて残す。
         if (static_mesh_bounds_cache.find(key) == static_mesh_bounds_cache.end())
@@ -1065,6 +1068,8 @@ bool framework::build_dx12_static_scene(
                 source.vertices.push_back(vertex);
             }
             source.indices = indices;
+            if (imported_colors != nullptr && imported_colors->size() == source.vertices.size())
+                source.vertex_colors = *imported_colors;
             copy_vertex_colors(source, item, mesh_index);
             submission.mesh_sources.push_back(std::move(source));
         }
@@ -1101,6 +1106,8 @@ bool framework::build_dx12_static_scene(
                 source.vertices.push_back(vertex);
             }
             source.indices = mesh.indices;
+            if (mesh.vertex_colors.size() == source.vertices.size())
+                source.vertex_colors = mesh.vertex_colors;
             copy_vertex_colors(source, &item, mesh_index);
             submission.skinned_mesh_sources.push_back(std::move(source));
         }
@@ -2095,7 +2102,8 @@ bool framework::build_dx12_static_scene(
                     if (!dx12_device_context.HasStaticMesh(key))
                         make_mesh_source(key, exported[primitive_index].vertices.begin(),
                             exported[primitive_index].vertices.end(),
-                            exported[primitive_index].indices, &item, static_cast<std::uint32_t>(primitive_index));
+                            exported[primitive_index].indices, &item, static_cast<std::uint32_t>(primitive_index),
+                            &exported[primitive_index].vertex_colors);
                 }
             }
 
@@ -2182,7 +2190,8 @@ bool framework::build_dx12_static_scene(
             {
                 load_vertex_colors(item, model_source, mesh_asset->meshes);
                 make_mesh_source(mesh_key, mesh.vertices.begin(), mesh.vertices.end(),
-                    mesh.indices, &item, static_cast<std::uint32_t>(mesh_index));
+                    mesh.indices, &item, static_cast<std::uint32_t>(mesh_index),
+                    &mesh.vertex_colors);
             }
 
             const DirectX::XMFLOAT4X4 mesh_world =

@@ -185,7 +185,7 @@ namespace ReplayEngine::Rendering::DX12
         std::uint32_t material_texture_semantic_mask = 0;
         // BuiltIn固有表現。GGSTはx=3、y=Threshold、z=Offset、w=SpecularSize。
         DirectX::XMFLOAT4 builtin_params{ 0.0f, 0.0f, 0.0f, 0.0f };
-        // 追加色枠。ToonはShadowTint、GGSTはShadeColorをrgbへ入れる。
+        // 追加色枠。ToonはShadowTint、GGSTはShadeColor(rgb)/SpecularIntensity(w)。
         DirectX::XMFLOAT4 builtin_params1{ 0.0f, 0.0f, 0.0f, 0.0f };
         // Toonはrgb=RimColor/w=SpecularPower、GGSTはx=顔ライティング、y=顔ボーンID、z/w=軸反転。
         DirectX::XMFLOAT4 builtin_params2{ 0.0f, 0.0f, 0.0f, 1.0f };

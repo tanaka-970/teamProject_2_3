@@ -131,6 +131,7 @@ namespace ReplayEngine::Rendering
             property_name == "AmbientOcclusionMap") out_slot = 45;
         else if (property_name == "RampMap") out_slot = 46;
         else if (property_name == "IlmMap") out_slot = 47;
+        else if (property_name == "SssMap") out_slot = 48;
         else return false;
         return true;
     }
@@ -157,6 +158,8 @@ namespace ReplayEngine::Rendering
                 mask |= RampMapSemantic;
             else if (texture.property_name == "IlmMap" && !texture.asset_guid.empty())
                 mask |= IlmMapSemantic;
+            else if (texture.property_name == "SssMap" && !texture.asset_guid.empty())
+                mask |= SssMapSemantic;
         }
         return mask;
     }

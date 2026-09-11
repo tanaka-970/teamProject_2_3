@@ -24,6 +24,7 @@ Texture2D roughnessTexture : register(t3);
 Texture2D emissiveTexture : register(t4);
 Texture2D occlusionTexture : register(t5);
 Texture2D rampTexture : register(t10);
+Texture2D sssTexture : register(t11);
 Texture2D ilmTexture : register(t12);
 SamplerState materialSampler : register(s0);
 
@@ -49,6 +50,7 @@ static const uint MATERIAL_OCCLUSION_MAP = 1u << 5;
 static const uint MATERIAL_PACKED_ORM_MAP = 1u << 6;
 static const uint MATERIAL_RAMP_MAP = 1u << 7;
 static const uint MATERIAL_ILM_MAP = 1u << 8;
+static const uint MATERIAL_SSS_MAP = 1u << 9;
 static const uint BUILTIN_EFFECT_TOON = 2u;
 static const uint BUILTIN_EFFECT_GGST = 3u;
 
@@ -95,7 +97,8 @@ Dx12GgstSurface ResolveDeferredGgstSurface()
     ggst.shadeColor = QuantizeColor565(builtinParams1.rgb);
     ggst.shadingThreshold = QuantizeUnorm16(builtinParams.y);
     ggst.shadingOffset = QuantizeUnorm16(builtinParams.z);
-    ggst.specularSize = QuantizeUnorm16(builtinParams.w);
+    ggst.specularSize = QuantizeUnorm8(builtinParams.w);
+    ggst.specularIntensity = QuantizeUnorm8(builtinParams1.w / 20.0f) * 20.0f;
     return ggst;
 }
 
@@ -181,9 +184,11 @@ float4 main(PSIn input) : SV_Target0
     }
     Dx12ToonSurface toon = Dx12DefaultToonSurface();
     if (matchDeferredToon) toon = ResolveDeferredToonSurface();
-    const Dx12GgstSurface ggst = ResolveDeferredGgstSurface();
+    Dx12GgstSurface ggst = ResolveDeferredGgstSurface();
+    if (isGgst && (semanticMask & MATERIAL_SSS_MAP) != 0u)
+        ggst.shadeColor *= sssTexture.Sample(materialSampler, input.uv).rgb;
     const float3 ggstIlm = (semanticMask & MATERIAL_ILM_MAP) != 0u ?
-        ilmTexture.Sample(materialSampler, input.uv).rgb : float3(1.0f, 0.5f, 1.0f);
+        ilmTexture.Sample(materialSampler, input.uv).rgb : Dx12DefaultGgstIlm();
     const bool ggstFaceLighting = isGgst && builtinParams2.x >= 0.5f;
     const float3 lit = isGgst ?
         Dx12EvaluateLightingGgst(input.worldPosition, worldNormal, albedo.rgb,
