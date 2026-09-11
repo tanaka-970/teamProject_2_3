@@ -8,7 +8,7 @@ public sealed class fukushima_dousa_kensyou : ScriptBehaviour
     public float Speed = 1.0f;//0hhwuhh
     public ObjectReference Target;
 
-    public override void Awake()//ndyeneyygijinsuusvjvdibxjdbvjsb;
+    public override void Awake()//
     {
     }
 

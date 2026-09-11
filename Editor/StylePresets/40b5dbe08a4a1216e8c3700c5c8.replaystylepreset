@@ -1,0 +1,36 @@
+REPLAY_EDITOR_STYLE_PRESET 2
+ID "40b5dbe08a4a1216e8c3700c5c8"
+NAME "RePlay Default Shared"
+SCOPE SHARED
+BUTTON_SCALE 1
+FONT_SCALE 1
+TEXT_COLOR 1 1 1
+TOKEN_COLOR main_background 0 0 0
+TOKEN_COLOR panel_background 0 0 0
+TOKEN_COLOR header_background 0 0 0
+TOKEN_COLOR toolbar_background 0 0 0
+TOKEN_COLOR border 0 0 0
+TOKEN_COLOR text 0 0 0
+TOKEN_COLOR secondary_text 0 0 0
+TOKEN_COLOR disabled_text 0 0 0
+TOKEN_COLOR accent 0 0 0
+TOKEN_COLOR selection 0 0 0
+TOKEN_COLOR hover 0 0 0
+TOKEN_COLOR active 0 0 0
+TOKEN_COLOR success 0 0 0
+TOKEN_COLOR warning 0 0 0
+TOKEN_COLOR error 0 0 0
+TOKEN_COLOR missing 0 0 0
+TOKEN_COLOR prefab 0 0 0
+TOKEN_COLOR normal_collider 0 0 0
+TOKEN_COLOR trigger_collider 0 0 0
+TOKEN_COLOR primary_collider 0 0 0
+TOKEN_VALUE padding 8
+TOKEN_VALUE item_spacing 6
+TOKEN_VALUE panel_spacing 8
+TOKEN_VALUE header_height 24
+TOKEN_VALUE toolbar_height 30
+TOKEN_VALUE input_height 24
+TOKEN_VALUE border_thickness 1
+TOKEN_VALUE corner_radius 3
+TOKEN_VALUE font_size 15
