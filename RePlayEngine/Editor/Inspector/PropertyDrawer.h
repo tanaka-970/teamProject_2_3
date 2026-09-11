@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 
 namespace ReplayEngine::Core { class Component; }
 namespace ReplayEngine::Reflection { class PropertyDesc; }
@@ -28,12 +29,14 @@ namespace ReplayEngine::Editor
             Core::Component& component,
             const Assets::AssetDatabase* assets,
             const Scene::Scene* scene,
-            bool mixed = false);
+            bool mixed = false,
+            const std::function<void()>& before_change = {});
 
         // Component に登録された全プロパティを順に描く。
         // いずれか 1 つでも変更されたら true。
         static bool DrawAll(Core::Component& component,
             const Assets::AssetDatabase* assets,
-            const Scene::Scene* scene);
+            const Scene::Scene* scene,
+            const std::function<void()>& before_change = {});
     };
 }

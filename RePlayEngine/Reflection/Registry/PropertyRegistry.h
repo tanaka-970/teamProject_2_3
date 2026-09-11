@@ -57,7 +57,8 @@ namespace ReplayEngine::Reflection
 
         // Component の保存対象プロパティをすべて PropertyBag へ書き出す。
         // Component::OnSerialize による追加分もここで合流させる。
-        static void Capture(const Core::Component& component, PropertyBag& output);
+        static void Capture(const Core::Component& component, PropertyBag& output,
+            bool include_custom = true);
 
         // PropertyBag の値を Component へ反映する。
         //

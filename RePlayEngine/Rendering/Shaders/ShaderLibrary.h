@@ -55,6 +55,7 @@ namespace ReplayEngine::Rendering
         // 分けても得が無く、分けると「走査したがコンパイルしていない」
         // 中途半端な状態が生まれて扱いが増える。
         ScanReport ScanAll(const std::filesystem::path& project_root);
+        bool LoadPack(std::string& error);
 
         // カタログ内の全シェーダをコンパイルする。
         //

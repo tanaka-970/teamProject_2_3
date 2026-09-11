@@ -51,7 +51,7 @@ public static unsafe class NativeBridge
     }
 
     // 関数ポインタ表の互換番号。C++ の Detail::kNativeApiAbiVersion と必ず一致させる。
-    public const uint NativeApiAbiVersion = 16;
+    public const uint NativeApiAbiVersion = 20;
 
     // 表の先頭に必ず置く自己記述ヘッダー。C++ の Detail::NativeApiHeader と同じ並び。
     [StructLayout(LayoutKind.Sequential)]
@@ -177,6 +177,15 @@ public static unsafe class NativeBridge
         public delegate* unmanaged[Cdecl]<int> FlushDeferredOperations;
         public delegate* unmanaged[Cdecl]<ulong*, int> PendingDeferredOperationCount;
         public delegate* unmanaged[Cdecl]<ObjectHandle, uint, int*, int> HasComponent;
+
+        // v17 additions. Landscape。C++ の NativeApiTable と同じ並びで末尾へ足す。
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int*, int*, float*, int> LandscapeInfo;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int, int, float*, int> LandscapeGetHeight;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int, int, float, int> LandscapeSetHeight;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float, float, float*, int> LandscapeSampleHeight;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, int, int, float, float, float, float, float, float, int> LandscapeSculpt;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, Vector3, Vector3, float, Vector3*, Vector3*, float*, int> LandscapeRaycast;
+
         public delegate* unmanaged[Cdecl]<float*, int> GetTimeScale;
         public delegate* unmanaged[Cdecl]<int*, int> GetSceneTransitionInProgress;
         public delegate* unmanaged[Cdecl]<int> PhysicsAvailable;
@@ -263,6 +272,17 @@ public static unsafe class NativeBridge
 
         // v16 Scene 遷移の進捗・実行中・最終結果。
         public delegate* unmanaged[Cdecl]<float*, int*, int*, int> GetSceneTransitionState;
+
+        // v18 additions. 表の本当の末尾。既存 entry の offset は動かさない。
+        // C++ 側の NativeApiTable も v18 以降を同じ順で末尾へ append している。
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int*, int> ComponentAlive;
+        public delegate* unmanaged[Cdecl]<ObjectHandle, uint, ComponentHandle*, int> FindColliderComponent;
+
+        // v19 addition. 同じく本当の末尾。
+        public delegate* unmanaged[Cdecl]<ObjectHandle, ulong, ulong, ComponentHandle*, int> AddScriptComponent;
+
+        // v20 addition. Public GameObject.Find 用の activeInHierarchy 限定検索。
+        public delegate* unmanaged[Cdecl]<byte*, ObjectHandle*, int> FindActiveGameObjectByName;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -397,6 +417,12 @@ public static unsafe class NativeBridge
             var oldContext = scriptContext;
             Types.Clear();
             InstancesByComponent.Clear();
+            PendingReferences.Clear();
+            // 型解析と wrapper のキャッシュも捨てる。
+            // 古い Type を握ったままだと AssemblyLoadContext が解放されない。
+            BehaviourTypeDescriptor.ClearCache();
+            MonoBehaviourHost.ClearAll();
+            GameObject.ClearCache();
             foreach (var pair in discovered)
             {
                 Types[pair.Key] = pair.Value;
@@ -432,6 +458,10 @@ public static unsafe class NativeBridge
         UnloadScriptContext();
         Types.Clear();
         InstancesByComponent.Clear();
+        PendingReferences.Clear();
+        BehaviourTypeDescriptor.ClearCache();
+        MonoBehaviourHost.ClearAll();
+        GameObject.ClearCache();
         WriteUtf8("Unloaded C# assembly.", output, outputCapacity);
         return 1;
     }
@@ -469,13 +499,25 @@ public static unsafe class NativeBridge
                 return 0;
             }
 
-            if (Activator.CreateInstance(type) is not ScriptBehaviour behaviour)
+            var created = Activator.CreateInstance(type);
+
+            // MonoBehaviour は ScriptBehaviour ではないので、駆動用の Host で包む。
+            // C++ から見えるのは今までどおり ScriptBehaviour 1 種類だけ。
+            MonoBehaviourHost? host = null;
+            if (created is MonoBehaviour authored)
+            {
+                NativeComponentBootstrap.EnsureRegistered();
+                host = new MonoBehaviourHost(authored);
+            }
+
+            if ((object?)(host ?? created as ScriptBehaviour) is not ScriptBehaviour behaviour)
             {
                 SetLastError("C# Behaviour could not be created.");
                 return 0;
             }
 
             behaviour.Attach(Context, owner, component);
+            host?.OnAttached();
             var handle = nextHandle++;
             Instances[handle] = new ManagedInstance(behaviour, component);
             InstancesByComponent[new ComponentInstanceKey(component)] = behaviour;
@@ -494,6 +536,7 @@ public static unsafe class NativeBridge
     {
         if (!Instances.Remove(instance, out var state)) return 0;
         InstancesByComponent.Remove(new ComponentInstanceKey(state.Component));
+        (state.Behaviour as MonoBehaviourHost)?.OnDetached();
         state.Behaviour.ReleaseManagedSubscriptions();
         return 1;
     }
@@ -505,21 +548,34 @@ public static unsafe class NativeBridge
         {
             if (!Instances.TryGetValue(instance, out var state)) return 2;
 
-            switch (callback)
+            // 非 Active の相手など、Scene の復元パスで未解決だった参照だけを引き直す。
+            DrainPendingReferences();
+
+            // Managed callback を実行している間だけ実行文脈を立てる。
+            // Time / Physics / GameObject.Find などはここから World を解決する。
+            // using なので、例外で抜けても必ず元へ戻る。
+            using (ScriptExecutionContext.Enter(Context, state.Behaviour as MonoBehaviourHost))
             {
-                case 0: state.Behaviour.Awake(); break;
-                case 1: state.Behaviour.OnEnable(); break;
-                case 2: state.Behaviour.Start(); break;
-                case 3: state.Behaviour.FixedUpdate(deltaTime); break;
-                case 4:
-                    // 接触イベントと Coroutine / Timer / Tween を Update の直前に進める。
-                    state.Behaviour.PumpFrame(deltaTime);
-                    state.Behaviour.Update(deltaTime);
-                    break;
-                case 5: state.Behaviour.LateUpdate(deltaTime); break;
-                case 6: state.Behaviour.OnDisable(); break;
-                case 7: state.Behaviour.OnDestroy(); break;
-                default: return 1;
+                switch (callback)
+                {
+                    case 0:
+                        state.Behaviour.BeginRuntimeLifecycle();
+                        state.Behaviour.Awake();
+                        break;
+                    case 1: state.Behaviour.OnEnable(); break;
+                    case 2: state.Behaviour.Start(); break;
+                    case 3: state.Behaviour.FixedUpdate(deltaTime); break;
+                    case 4:
+                        // Legacy の Coroutine / Timer / Tween は従来の Update 直前で進める。
+                        if (state.Behaviour is not MonoBehaviourHost)
+                            state.Behaviour.AdvanceCoroutines(TimeDeltaTime);
+                        state.Behaviour.Update(deltaTime);
+                        break;
+                    case 5: state.Behaviour.LateUpdate(deltaTime); break;
+                    case 6: state.Behaviour.OnDisable(); break;
+                    case 7: state.Behaviour.OnDestroy(); break;
+                    default: return 1;
+                }
             }
 
             ClearLastError();
@@ -539,11 +595,22 @@ public static unsafe class NativeBridge
         {
             if (!Instances.TryGetValue(instance, out var state)) return 0;
             var fieldName = StripFieldPrefix(FromUtf8(savedName));
-            var field = FindSerializableField(state.Behaviour.GetType(), fieldName);
+            // Inspector の値は Host ではなくユーザーのオブジェクトが持っている。
+            var owner = SerializationTargetOf(state.Behaviour);
+            var field = FindSerializableField(owner.GetType(), fieldName);
             if (field == null) return 0;
 
-            var parsed = ParseValue(field.FieldType, FromUtf8(valueText));
-            field.SetValue(state.Behaviour, parsed);
+            // Inspector / Serialization は callback の外から来る。
+            // 参照の解決だけは Handle で決まるので文脈に依らないが、
+            // ユーザーの field 型が engine API を触る場合に備えて同じ文脈を張る。
+            using (ScriptExecutionContext.Enter(Context,
+                state.Behaviour as MonoBehaviourHost))
+            {
+                var text = FromUtf8(valueText);
+                var parsed = ParseValue(field.FieldType, text);
+                field.SetValue(owner, parsed);
+                RememberUnresolvedReference(instance, owner, field, text, parsed);
+            }
             return 1;
         }
         catch (Exception ex)
@@ -560,16 +627,112 @@ public static unsafe class NativeBridge
         {
             if (!Instances.TryGetValue(instance, out var state)) return 0;
             var fieldName = StripFieldPrefix(FromUtf8(savedName));
-            var field = FindSerializableField(state.Behaviour.GetType(), fieldName);
+            var owner = SerializationTargetOf(state.Behaviour);
+            var field = FindSerializableField(owner.GetType(), fieldName);
             if (field == null) return 0;
 
-            WriteUtf8(FormatValue(field.GetValue(state.Behaviour), field.FieldType), output, outputCapacity);
+            using (ScriptExecutionContext.Enter(Context,
+                state.Behaviour as MonoBehaviourHost))
+            {
+                WriteUtf8(FormatValue(field.GetValue(owner), field.FieldType),
+                    output, outputCapacity);
+            }
             return 1;
         }
         catch (Exception ex)
         {
             SetLastError(ex);
             return 0;
+        }
+    }
+
+    // 物理と Event の配送が終わった同期点で、C++ が 1 回だけ呼ぶ。
+    //
+    // ここで接触イベントを配ると、Native Behaviour と同じフレームで届く。
+    // deltaTime は Update と同じゲーム時間（Time.timeScale を掛けた後）。
+    //
+    // 【何を止めて何を進めるか】
+    //
+    //   GameObject が非 Active
+    //     MonoBehaviour … イベントも Coroutine も止める。Coroutine は捨てる。
+    //                     再 Active でも前の IEnumerator の途中からは再開しない。
+    //     Legacy        … 従来どおり「Update が来ない」だけ。途中位置は保つ。
+    //                     ここを捨てる側に変えると既存スクリプトの意味が変わる。
+    //
+    //   Component が enabled = false
+    //     MonoBehaviour … Coroutine と接触イベントは進める。
+    //     Legacy        … Coroutine も止まる。以前は Update 経由で進めていたので、
+    //                     無効なあいだは進まなかった。その意味を保つ。
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static int PumpEvents(float deltaTime)
+    {
+        try
+        {
+            DrainPendingReferences();
+
+            // 走査中に Instances が変わることがある（Destroy / AddComponent）。
+            // 変更に強い形へ写してから回す。
+            // 写す先は使い回す。毎フレーム配列を確保しない。
+            var count = Instances.Count;
+            if (count == 0) return 1;
+            if (pumpBuffer.Length < count)
+                pumpBuffer = new ManagedInstance[Math.Max(count, pumpBuffer.Length * 2)];
+            Instances.Values.CopyTo(pumpBuffer, 0);
+
+            for (var index = 0; index < count; ++index) PumpOne(pumpBuffer[index], deltaTime);
+
+            // 写した参照を残さない。破棄済みの Behaviour を 1 フレーム余分に掴まない。
+            Array.Clear(pumpBuffer, 0, count);
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            SetLastError(ex);
+            return 0;
+        }
+    }
+
+    private static ManagedInstance[] pumpBuffer = Array.Empty<ManagedInstance>();
+
+    private static void PumpOne(ManagedInstance state, float deltaTime)
+    {
+        var behaviour = state.Behaviour;
+        if (!IsComponentAlive(state.Component)) return;
+        var host = behaviour as MonoBehaviourHost;
+        using (ScriptExecutionContext.Enter(Context, host))
+        {
+            try
+            {
+                // 配るものも進めるものも無いなら、状態を聞きに行かない。
+                var wantsEvents = behaviour.HasEngineEventSubscriptions;
+                var wantsRoutines = host != null && behaviour.HasPendingRoutines;
+                if (!wantsEvents && !wantsRoutines) return;
+
+                if (!ActiveInHierarchy(behaviour.GameObject))
+                {
+                    if (wantsEvents) behaviour.PumpEngineEvents(false, false);
+                    if (host != null) behaviour.StopCoroutinesForInactive();
+                    return;
+                }
+
+                if (!behaviour.RuntimeLifecycleStarted) return;
+                var enabled = IsComponentEnabled(state.Component);
+                var componentEnabled = !enabled.Succeeded || enabled.Value;
+                // Scene / Button / Motion は従来の有効時限定とし、無効期間の通知を捨てる。
+                if (wantsEvents) behaviour.PumpEngineEvents(host != null || componentEnabled, componentEnabled);
+                if (!ActiveInHierarchy(behaviour.GameObject))
+                {
+                    if (host != null) behaviour.StopCoroutinesForInactive();
+                    return;
+                }
+                if (wantsRoutines && IsComponentAlive(state.Component))
+                    behaviour.AdvanceCoroutines(deltaTime);
+            }
+            catch (Exception inner)
+            {
+                // 1 つの Script の失敗で、残りの配送を止めない。
+                SetLastError(inner);
+            }
         }
     }
 
@@ -613,6 +776,18 @@ public static unsafe class NativeBridge
         RuntimeStatus status;
         fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
             status = (RuntimeStatus)api.FindGameObjectByName(text, &result);
+        return new RuntimeResult<ObjectHandle>(status, result);
+    }
+
+    internal static RuntimeResult<ObjectHandle> FindActiveGameObjectByName(string name)
+    {
+        if (api.FindActiveGameObjectByName == null)
+            return new(RuntimeStatus.ServiceUnavailable);
+        if (name == null) return new(RuntimeStatus.InvalidArgument);
+        ObjectHandle result = default;
+        RuntimeStatus status;
+        fixed (byte* text = Encoding.UTF8.GetBytes(name + "\0"))
+            status = (RuntimeStatus)api.FindActiveGameObjectByName(text, &result);
         return new RuntimeResult<ObjectHandle>(status, result);
     }
 
@@ -1404,11 +1579,19 @@ public static unsafe class NativeBridge
             return (RuntimeStatus)api.PublishEvent(guid.High, guid.Low, name, source, target);
     }
 
+    // Inspector の値を持っているオブジェクト。
+    // Legacy はその ScriptBehaviour 自身、新 API は Host が抱える MonoBehaviour。
+    private static object SerializationTargetOf(ScriptBehaviour behaviour)
+        => behaviour is MonoBehaviourHost host ? host.Target : behaviour;
+
     private static IEnumerable<Type> DiscoverBehaviourTypes(Assembly assembly)
     {
+        // Legacy の ScriptBehaviour と、新しい MonoBehaviour の両方を拾う。
+        // どちらも同じ ScriptComponent から駆動するので、扱いはここから先で分かれない。
         return assembly.GetTypes().Where(type =>
             !type.IsAbstract &&
-            typeof(ScriptBehaviour).IsAssignableFrom(type) &&
+            (typeof(ScriptBehaviour).IsAssignableFrom(type) ||
+                typeof(MonoBehaviour).IsAssignableFrom(type)) &&
             type.GetCustomAttribute<ReplayGuidAttribute>() != null);
     }
 
@@ -1557,6 +1740,13 @@ public static unsafe class NativeBridge
     private static string BuildSchema(Type type)
     {
         var builder = new StringBuilder();
+
+        // Field とは別の型メタデータ。新しい MonoBehaviour だけ inactive 時にも
+        // instance を用意し、Legacy ScriptBehaviour の constructor 時期は変えない。
+        builder.Append("TYPE\tAUTHORING_MONO\t");
+        builder.Append(typeof(MonoBehaviour).IsAssignableFrom(type) ? '1' : '0');
+        builder.Append('\n');
+
         foreach (var field in SerializableFields(type))
         {
             var mapped = MapFieldType(field.FieldType);
@@ -1653,6 +1843,177 @@ public static unsafe class NativeBridge
         }
     }
 
+    // ---- Inspector の Public 参照 -----------------------------------------
+    //
+    // 保存されるのは今までどおり ObjectReference / ComponentReference。
+    // ここでやるのは、その ID と Public wrapper の間の変換だけ。
+
+    // 非 Active の相手や Runtime 生成・再ロードで遅れて現れる Component を待つ。
+    private sealed class PendingReference
+    {
+        internal PendingReference(ulong instance, object owner, FieldInfo field, string text, object? value)
+        {
+            Instance = instance;
+            Owner = owner;
+            Field = field;
+            Text = text;
+            OriginalValue = value;
+            CreatedFrame = TimeFrameIndex;
+            if (value is System.Collections.IList collection)
+            {
+                OriginalElements = new object?[collection.Count];
+                collection.CopyTo(OriginalElements, 0);
+            }
+        }
+
+        internal ulong Instance { get; }
+        internal object Owner { get; }
+        internal FieldInfo Field { get; }
+        internal string Text { get; }
+        internal ulong CreatedFrame { get; set; }
+        private object? OriginalValue { get; }
+        private object?[]? OriginalElements { get; }
+
+        internal bool IsUnchanged()
+        {
+            var current = Field.GetValue(Owner);
+            if (!ReferenceEquals(current, OriginalValue)) return false;
+            if (OriginalElements == null) return true;
+            if (current is not System.Collections.IList collection ||
+                collection.Count != OriginalElements.Length) return false;
+            for (var index = 0; index < collection.Count; ++index)
+                if (!ReferenceEquals(collection[index], OriginalElements[index])) return false;
+            return true;
+        }
+    }
+
+    private static readonly List<PendingReference> PendingReferences = new();
+
+    // 新しい SetField は古い待機を置き換え、未生成の Component 参照だけを覚える。
+    private static void RememberUnresolvedReference(ulong instance, object owner,
+        FieldInfo field, string text, object? value)
+    {
+        PendingReferences.RemoveAll(entry => entry.Instance == instance && entry.Field == field);
+        if (!HasUnresolvedReference(field.FieldType, text, value)) return;
+        if (PendingReferences.Count >= 4096) return;
+        PendingReferences.Add(new PendingReference(instance, owner, field, text, value));
+    }
+
+    private static bool HasUnresolvedReference(Type type, string text, object? value)
+    {
+        if (typeof(Component).IsAssignableFrom(type))
+        {
+            if (value != null || string.IsNullOrEmpty(text)) return false;
+            var parts = text.Split(',');
+            return parts.Length >= 2 && ParseULong(parts, 0) != 0 && ParseULong(parts, 1) != 0;
+        }
+        if (!TryGetCollectionElementType(type, out var elementType) ||
+            !typeof(Component).IsAssignableFrom(elementType) ||
+            value is not System.Collections.IList collection) return false;
+        var fields = text.Split('|', 3);
+        var encoded = fields.Length == 3 && fields[2].Length != 0
+            ? fields[2].Split(';') : Array.Empty<string>();
+        for (var index = 0; index < collection.Count && index < encoded.Length; ++index)
+        {
+            var itemText = Encoding.UTF8.GetString(Convert.FromHexString(encoded[index]));
+            if (HasUnresolvedReference(elementType, itemText, collection[index])) return true;
+        }
+        return false;
+    }
+
+    // 積んである参照を引き直す。callback の入口とフレーム末尾で呼ぶ。
+    // 空なら分岐 1 つで終わるので、通常のフレームには何も足さない。
+    private static void DrainPendingReferences()
+    {
+        if (PendingReferences.Count == 0) return;
+        for (var index = PendingReferences.Count - 1; index >= 0; --index)
+        {
+            var entry = PendingReferences[index];
+
+            // 持ち主が消えていたら追いかけない。
+            if (!Instances.ContainsKey(entry.Instance) || !entry.IsUnchanged())
+            {
+                PendingReferences.RemoveAt(index);
+                continue;
+            }
+
+            // World の切り替えで frame index が戻った場合は最初の同期フレームを起点にする。
+            if (TimeFrameIndex < entry.CreatedFrame) entry.CreatedFrame = TimeFrameIndex;
+            if (TimeFrameIndex - entry.CreatedFrame >= 64)
+            {
+                PendingReferences.RemoveAt(index);
+                continue;
+            }
+
+            try
+            {
+                var resolved = ParseValue(entry.Field.FieldType, entry.Text);
+                if (HasUnresolvedReference(entry.Field.FieldType, entry.Text, resolved)) continue;
+                entry.Field.SetValue(entry.Owner, resolved);
+                PendingReferences.RemoveAt(index);
+            }
+            catch (Exception ex)
+            {
+                SetLastError(ex);
+                PendingReferences.RemoveAt(index);
+            }
+        }
+    }
+
+    private static GameObject? ResolvePublicGameObject(ObjectReference reference)
+    {
+        if (!reference.IsAssigned) return null;
+        var handle = FindGameObject(reference.ObjectId);
+        return handle.Succeeded ? GameObject.Wrap(handle.Value) : null;
+    }
+
+    private static object? ResolvePublicComponent(Type type, ComponentReference reference)
+    {
+        if (!reference.IsAssigned) return null;
+        var handle = ResolveComponentReference(reference);
+        if (!handle.Succeeded || handle.Value.IsEmpty) return null;
+
+        // Managed Behaviour への参照は、保存した ScriptComponent の Stable ID から
+        // 復元した ComponentHandle でそのまま引く。
+        //
+        // 【なぜ owner + 型で探さないか】
+        //   同じ GameObject に同じ型の MonoBehaviour を 2 つ付けられる。
+        //   型で探すと必ず 1 つ目が返るので、Inspector で 2 つ目を指しても
+        //   Scene を読み直した瞬間に 1 つ目へ化ける。
+        //   ここは field の宣言型を見ずに先に引く。宣言型が基底の Component でも
+        //   MonoBehaviour を入れられるようにするため。
+        var managed = FindManagedTarget(handle.Value);
+        if (managed != null) return type.IsInstanceOfType(managed) ? managed : null;
+
+        // ScriptComponent 以外は Native の型名から wrapper を作る。
+        var owner = GameObject.Wrap(handle.Value.Owner);
+        if (owner == null) return null;
+        var factory = NativeComponentRegistry.FindByNativeTypeName(handle.Value);
+        if (factory == null) return null;
+        var created = factory(owner, handle.Value);
+        return type.IsInstanceOfType(created) ? created : null;
+    }
+
+    private static string ObjectIdTextOf(GameObject value)
+    {
+        // ObjectHandle の Object が、そのまま保存用の ObjectID。
+        return value.Handle.Object.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string ComponentReferenceTextOf(Component value)
+    {
+        // Managed Behaviour は、その instance を持つ ScriptComponent を指す。
+        var handle = value is MonoBehaviour authored
+            ? (authored.Host != null ? authored.Host.Component : default)
+            : (value is NativeComponent native ? native.Handle : default);
+        if (handle.IsEmpty) return string.Empty;
+
+        var reference = ComponentToReference(handle);
+        if (!reference.Succeeded || !reference.Value.IsAssigned) return string.Empty;
+        return reference.Value.OwnerObjectId.ToString(CultureInfo.InvariantCulture) + "," +
+            reference.Value.ComponentStableId.ToString(CultureInfo.InvariantCulture);
+    }
+
     private static string? MapFieldType(Type type)
     {
         if (type == typeof(bool)) return "bool";
@@ -1669,6 +2030,10 @@ public static unsafe class NativeBridge
         if (type == typeof(Color)) return "color";
         if (type == typeof(ObjectReference)) return "object";
         if (type == typeof(ComponentReference)) return "component";
+        // Public Authoring 型も、保存形式は既存の object / component と同じ。
+        // Inspector から見える型を増やすだけで、新しい保存形式は作らない。
+        if (type == typeof(GameObject)) return "object";
+        if (typeof(Component).IsAssignableFrom(type)) return "component";
         if (typeof(IAssetReference).IsAssignableFrom(type)) return "asset";
         // enum は内部 int。ラベルは EnumLabels が別列で渡す。
         if (type.IsEnum && Enum.GetUnderlyingType(type) == typeof(int)) return "enum";
@@ -1742,6 +2107,16 @@ public static unsafe class NativeBridge
         if (type == typeof(Quaternion)) return new Quaternion(ParseFloat(parts, 0), ParseFloat(parts, 1), ParseFloat(parts, 2), ParseFloat(parts, 3));
         if (type == typeof(Color)) return new Color(ParseFloat(parts, 0), ParseFloat(parts, 1), ParseFloat(parts, 2), ParseFloat(parts, 3));
         if (type == typeof(ObjectReference)) return new ObjectReference { ObjectId = ParseULong(parts, 0) };
+        // Public GameObject / Component は、保存されている ID から解決して返す。
+        // 解決できないときは null。Inspector 未設定と同じ扱いになる。
+        if (type == typeof(GameObject))
+            return ResolvePublicGameObject(new ObjectReference { ObjectId = ParseULong(parts, 0) });
+        if (typeof(Component).IsAssignableFrom(type))
+            return ResolvePublicComponent(type, new ComponentReference
+            {
+                OwnerObjectId = ParseULong(parts, 0),
+                ComponentStableId = (uint)ParseULong(parts, 1),
+            });
         if (type == typeof(ComponentReference)) return new ComponentReference { OwnerObjectId = ParseULong(parts, 0), ComponentStableId = (uint)ParseULong(parts, 1) };
         if (typeof(IAssetReference).IsAssignableFrom(type))
             return Activator.CreateInstance(type, text);
@@ -1764,6 +2139,11 @@ public static unsafe class NativeBridge
         if (type == typeof(float)) return ((float)value).ToString("R", CultureInfo.InvariantCulture);
         if (type == typeof(double)) return ((double)value).ToString("R", CultureInfo.InvariantCulture);
         if (type == typeof(string)) return (string)value;
+        // Public wrapper は、保存時に既存の ID 形式へ戻す。
+        if (value is GameObject publicObject)
+            return publicObject.IsAlive ? ObjectIdTextOf(publicObject) : string.Empty;
+        if (value is Component publicComponent)
+            return ComponentReferenceTextOf(publicComponent);
         if (type == typeof(Vector2))
         {
             var v = (Vector2)value;
@@ -2618,6 +2998,177 @@ public static unsafe class NativeBridge
         return new RuntimeResult<SceneTransitionInfo>(status,
             new SceneTransitionInfo(progress, inProgress != 0,
                 (RuntimeStatus)transitionStatus));
+    }
+
+    // ---- v19 Managed Behaviour の追加 --------------------------------------
+
+    // 型 GUID を指定して ScriptComponent を足す。
+    // Managed instance は既存のライフサイクルが作る。
+    // TypeGuid は内部表現なので外へ出さない。呼び出し側は Type を渡す。
+    internal static RuntimeResult<ComponentHandle> AddScriptComponentFor(ObjectHandle owner,
+        Type behaviourType)
+    {
+        if (!TryGetScriptTypeGuid(behaviourType, out var type))
+            return new(RuntimeStatus.ComponentNotFound);
+        return AddScriptComponent(owner, type);
+    }
+
+    private static RuntimeResult<ComponentHandle> AddScriptComponent(ObjectHandle owner,
+        TypeGuid type)
+    {
+        if (api.AddScriptComponent == null) return new(RuntimeStatus.ServiceUnavailable);
+        ComponentHandle handle = default;
+        var status = (RuntimeStatus)api.AddScriptComponent(owner, type.High, type.Low, &handle);
+        return new RuntimeResult<ComponentHandle>(status, handle);
+    }
+
+    // 型から ReplayGuid を逆引きする。Assembly をロードしたときに作った表を使う。
+    private static bool TryGetScriptTypeGuid(Type type, out TypeGuid guid)
+    {
+        foreach (var pair in Types)
+        {
+            if (pair.Value == type)
+            {
+                guid = pair.Key;
+                return true;
+            }
+        }
+        guid = default;
+        return false;
+    }
+
+    // ---- v18 Component の生存 / Collider 解決 ------------------------------
+
+    // Component がまだ生きているか。
+    // GameObject が生きていても Component だけ壊れていることがある。
+    internal static bool IsComponentAlive(ComponentHandle handle)
+    {
+        if (handle.IsEmpty || api.ComponentAlive == null) return false;
+        int alive = 0;
+        var status = (RuntimeStatus)api.ComponentAlive(handle, &alive);
+        return status == RuntimeStatus.Ok && alive != 0;
+    }
+
+    // 接触イベントが持つ ColliderID から、その Collider の Handle を引く。
+    internal static RuntimeResult<ComponentHandle> FindColliderComponent(
+        ObjectHandle owner, uint colliderId)
+    {
+        if (api.FindColliderComponent == null) return new(RuntimeStatus.ServiceUnavailable);
+        ComponentHandle handle = default;
+        var status = (RuntimeStatus)api.FindColliderComponent(owner, colliderId, &handle);
+        return new RuntimeResult<ComponentHandle>(status, handle);
+    }
+
+    // ---- v17 Landscape -----------------------------------------------------
+
+    internal static RuntimeStatus LandscapeInfo(ComponentHandle handle,
+        out int width, out int height, out float cellSize)
+    {
+        width = 0;
+        height = 0;
+        cellSize = 0.0f;
+        if (api.LandscapeInfo == null) return RuntimeStatus.ServiceUnavailable;
+        int w = 0;
+        int h = 0;
+        float cell = 0.0f;
+        var status = (RuntimeStatus)api.LandscapeInfo(handle, &w, &h, &cell);
+        width = w;
+        height = h;
+        cellSize = cell;
+        return status;
+    }
+
+    internal static RuntimeResult<float> LandscapeGetHeight(ComponentHandle handle, int x, int z)
+    {
+        if (api.LandscapeGetHeight == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        var status = (RuntimeStatus)api.LandscapeGetHeight(handle, x, z, &value);
+        return new RuntimeResult<float>(status, value);
+    }
+
+    internal static RuntimeStatus LandscapeSetHeight(ComponentHandle handle, int x, int z,
+        float value)
+    {
+        if (api.LandscapeSetHeight == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.LandscapeSetHeight(handle, x, z, value);
+    }
+
+    internal static RuntimeResult<float> LandscapeSampleHeight(ComponentHandle handle,
+        float localX, float localZ)
+    {
+        if (api.LandscapeSampleHeight == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        var status = (RuntimeStatus)api.LandscapeSampleHeight(handle, localX, localZ, &value);
+        return new RuntimeResult<float>(status, value);
+    }
+
+    internal static RuntimeStatus LandscapeSculpt(ComponentHandle handle, Vector3 localCenter,
+        int mode, int direction, float radius, float strength, float falloff,
+        float flattenHeight, float noiseScale, float deltaTime)
+    {
+        if (api.LandscapeSculpt == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.LandscapeSculpt(handle, localCenter, mode, direction,
+            radius, strength, falloff, flattenHeight, noiseScale, deltaTime);
+    }
+
+    internal static RuntimeStatus LandscapeRaycast(ComponentHandle handle, Vector3 localOrigin,
+        Vector3 localDirection, float maxDistance, out Vector3 position, out Vector3 normal,
+        out float distance)
+    {
+        position = default;
+        normal = new Vector3(0.0f, 1.0f, 0.0f);
+        distance = 0.0f;
+        if (api.LandscapeRaycast == null) return RuntimeStatus.ServiceUnavailable;
+        Vector3 hitPosition = default;
+        Vector3 hitNormal = default;
+        float hitDistance = 0.0f;
+        var status = (RuntimeStatus)api.LandscapeRaycast(handle, localOrigin, localDirection,
+            maxDistance, &hitPosition, &hitNormal, &hitDistance);
+        position = hitPosition;
+        normal = hitNormal;
+        distance = hitDistance;
+        return status;
+    }
+
+    // ---- 実行文脈に依存しない生死・有効判定 --------------------------------
+    //
+    // 【なぜ ScriptExecutionContext を通さないか】
+    //   Inspector / Serialization / Scene 保存は Managed callback の外から走る。
+    //   「いま callback 中か」で答えが変わる判定を identity に混ぜると、
+    //   生きている GameObject が保存時だけ死んで見えて参照が空になる。
+    //   Handle の有効性は World と世代番号だけで決まる話なので、
+    //   関数ポインタ表へ直接聞く。Current Context は見ない。
+
+    internal static bool IsHandleAlive(ObjectHandle handle)
+        => !handle.IsEmpty && IsGameObjectValid(handle) == RuntimeStatus.Ok;
+
+    // 親を辿って 1 つでも無効なら false。Unity の activeInHierarchy と同じ意味。
+    internal static bool ActiveInHierarchy(ObjectHandle handle)
+    {
+        var current = handle;
+        for (var depth = 0; depth < 256 && !current.IsEmpty; ++depth)
+        {
+            var enabled = IsGameObjectEnabled(current);
+            if (!enabled.Succeeded || !enabled.Value) return false;
+            var parent = GetParent(current);
+            if (!parent.Succeeded || parent.Value.IsEmpty) return true;
+            current = parent.Value;
+        }
+        return true;
+    }
+
+    // ComponentHandle からその Managed instance を引く。
+    //
+    // 同じ GameObject に同じ型の MonoBehaviour が 2 つ付いていても、
+    // ScriptComponent が別なので取り違えない。
+    // 型で探す FindOn は 1 つ目を返してしまうので、参照の復元には使わない。
+    internal static object? FindManagedTarget(ComponentHandle component)
+    {
+        if (component.IsEmpty) return null;
+        if (!InstancesByComponent.TryGetValue(new ComponentInstanceKey(component),
+            out var behaviour))
+            return null;
+        return behaviour is MonoBehaviourHost host ? host.Target : behaviour;
     }
 
     internal static RuntimeResult<T> GetBehaviour<T>(ComponentHandle component)

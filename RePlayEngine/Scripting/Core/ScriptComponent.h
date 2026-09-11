@@ -137,6 +137,18 @@ namespace ReplayEngine::Scripting
         // 戻り値は「Schema を持っているか」。
         bool ResolveSchema();
 
+        // インスタンスだけを先に作る。Awake は呼ばない。
+        //
+        // 【なぜ Awake と分けるか】
+        //   AddComponent<T>() は Unity と同じく「戻り値をその場で使える」必要がある。
+        //   一方で Awake / OnEnable / Start の順序は Scene の同期点が決めており、
+        //   追加したその場で Awake まで走らせると、
+        //   「Awake 中に足した Component が Start 側だけ先に走る」を防ぐために
+        //   入れた 2 パス構成が崩れる。
+        //   そこで instance 生成だけを前倒しし、Awake は同期点のままにする。
+        //   すでにインスタンスがあれば何もしない。戻り値は「持っているか」。
+        bool EnsureInstance();
+
         // ---- 動的プロパティ（案 A） -----------------------------------------
         //
         // Schema が持つ共有配列をそのまま指す。コピーしない。
@@ -172,6 +184,8 @@ namespace ReplayEngine::Scripting
         // ---- Component のライフサイクル --------------------------------------
 
         void OnAttach() override;
+        void SyncInstantiateState() override;
+        void SyncRestoreFieldsState() override;
         void OnRuntimeAwake() override;
         void OnEnable() override;
         void OnStart() override;
@@ -195,8 +209,11 @@ namespace ReplayEngine::Scripting
         // asset_guid_ / class_name_ / language_ から script_type_ を作り直す。
         void RefreshScriptType();
 
-        // インスタンスを作って Field を流し込み、Awake まで通す。
+        // インスタンスを（必要なら作って）Awake まで通す。Awake は一度だけ。
         void CreateInstanceAndAwake();
+
+        // Scene の Phase 0 用。field 復元は全 instance が揃った次のパスへ委ねる。
+        bool InstantiateWithoutFields();
 
         // インスタンスを片付ける。ユーザーの OnDestroy は
         // 「インスタンスがある場合だけ」呼ぶ。
@@ -232,5 +249,10 @@ namespace ReplayEngine::Scripting
 
         // ScriptWorld へ登録済みか。二重登録・登録漏れを防ぐ。
         bool registered_ = false;
+
+        // ユーザーの Awake を呼んだか。EnsureInstance で先に実体を作っても、
+        // Awake は Scene の同期点で一度だけ通す。
+        bool awake_invoked_ = false;
+        bool fields_restored_ = false;
     };
 }

@@ -760,6 +760,9 @@ public static class ComponentCatalog
         new("LandscapeRendererComponent", "Landscape Renderer", "Landscape", new ComponentPropertyEntry[]
         {
             new("tint", "color", false, true),
+            new("base_color_texture", "asset", false, true),
+            new("uv_tiling", "float", false, true),
+            new("load_range", "float", false, true),
             new("visible", "bool", false, true),
             new("cast_shadow", "bool", false, true),
             new("receive_shadow", "bool", false, true),
@@ -789,12 +792,15 @@ public static class ComponentCatalog
             new("maximum_fall_speed", "float", false, true),
             new("jump_requested", "bool", false, true),
             new("fallback_ground_y", "float", false, true),
+            new("lock_plane_z", "bool", false, true),
+            new("plane_z", "float", false, true),
             new("max_step_height", "float", false, true),
             new("vertical_physics", "bool", false, true),
         }),
-        new("PlayerInputComponent", "Player Input", "Gameplay", new ComponentPropertyEntry[]
+        new("PlayerInputComponent", "Character Input", "Gameplay", new ComponentPropertyEntry[]
         {
             new("input_enabled", "bool", false, true),
+            new("input_source", "int", false, true),
             new("local_player_slot", "int", false, true),
         }),
         new("PlayerControllerComponent", "Player Controller", "Gameplay", new ComponentPropertyEntry[]

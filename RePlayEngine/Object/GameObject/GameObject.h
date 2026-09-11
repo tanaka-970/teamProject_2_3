@@ -280,6 +280,10 @@ namespace ReplayEngine::Core
 
         // Scene の同期点から呼ばれるライフサイクル駆動部。
         void SyncComponentStates();
+        void SyncComponentInstantiate();
+        void SyncComponentRestoreFields();
+        void SyncComponentAwakeAndEnable();
+        void SyncComponentStart();
         void CompactComponents();
         void DetachAllComponents();
         void MarkPendingDestroyRecursive() noexcept;

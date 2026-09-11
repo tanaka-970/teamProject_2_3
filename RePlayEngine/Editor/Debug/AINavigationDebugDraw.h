@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "ColliderDebugDraw.h"
 #include "../../Core/ObjectID/ObjectID.h"
@@ -64,6 +64,6 @@ namespace ReplayEngine::Editor
         AINavigationDebugDraw() = delete;
 
         static void Build(const Scene::Scene& scene, Core::ObjectID selected_object,
-            AINavigationDebugFrame& out);
+            AINavigationDebugFrame& out, bool all_objects = true);
     };
 }

@@ -23,6 +23,34 @@ namespace ReplayEngine::Scripting
         status_ = script_type_.IsValid() ? ScriptStatus::Unresolved : ScriptStatus::Unassigned;
     }
 
+    void ScriptComponent::SyncInstantiateState()
+    {
+        if (PendingDestroy() || Owner() == nullptr) return;
+        if (HasInstance()) return;
+
+        ResolveSchema();
+
+        // 新しい MonoBehaviour Authoring 型だけは inactive の GameObject 上でも
+        // Managed instance を先に作る。Scene の Phase 0 で全 instance、Phase 1 で
+        // serialized field を揃えてから最初の Awake へ進めるため。
+        //
+        // Awake 自体は DeferAwakeUntilObjectActive() が従来どおり遅延する。
+        // Legacy ScriptBehaviour / Lua は Schema flag が false のままなので、
+        // 非 Active 時の constructor / instance 生成タイミングを変えない。
+        const bool object_active = Owner()->ActiveInHierarchy();
+        const bool prepare_while_inactive = schema_ && schema_->InstantiateWhenInactive();
+        if (!object_active && !prepare_while_inactive) return;
+
+        InstantiateWithoutFields();
+    }
+
+    void ScriptComponent::SyncRestoreFieldsState()
+    {
+        if (!HasInstance() || fields_restored_ || PendingDestroy()) return;
+        fields_restored_ = true;
+        PushAllFields();
+    }
+
     void ScriptComponent::OnRuntimeAwake()
     {
         // DeferAwakeUntilObjectActive() が true なので、
@@ -89,7 +117,26 @@ namespace ReplayEngine::Scripting
 
     void ScriptComponent::CreateInstanceAndAwake()
     {
-        if (HasInstance()) return;
+        if (!EnsureInstance()) return;
+
+        // Awake は「実体があって、まだ一度も呼んでいない」ときだけ。
+        // AddComponent で先に実体を作っていても、Awake はこの同期点で通る。
+        if (!HasInstance() || awake_invoked_) return;
+        awake_invoked_ = true;
+        InvokeCallback(ScriptCallback::Awake, ScriptArguments::None());
+    }
+
+    bool ScriptComponent::EnsureInstance()
+    {
+        if (!InstantiateWithoutFields()) return false;
+        SyncRestoreFieldsState();
+        return true;
+    }
+
+    bool ScriptComponent::InstantiateWithoutFields()
+    {
+        if (PendingDestroy()) return false;
+        if (HasInstance()) return true;
 
         // どの条件で作られなかったのかを last_error_ へ必ず残す。
         //
@@ -102,7 +149,7 @@ namespace ReplayEngine::Scripting
         {
             last_error_ = "Scene に ScriptServices が接続されていません"
                 "（World 構築時の SetScripts 漏れ）";
-            return;
+            return false;
         }
 
         // Edit Mode では作らない。「置いただけで動き出す」ことを防ぐ。
@@ -110,14 +157,14 @@ namespace ReplayEngine::Scripting
         {
             last_error_ = "Play セッションがありません"
                 "（Edit 中は正常。Play 中に出るなら OnWorldActivating 未通過）";
-            return;
+            return false;
         }
 
         if (!script_type_.IsValid())
         {
             last_error_ = "Script 型が未指定です";
             status_ = ScriptStatus::Unassigned;
-            return;
+            return false;
         }
 
         if (!schema_)
@@ -126,7 +173,7 @@ namespace ReplayEngine::Scripting
             last_error_ = "Schema を解決できていません"
                 "（Catalog に型が無い / Assembly 未ロード）";
             status_ = ScriptStatus::Unresolved;
-            return;
+            return false;
         }
 
         if (!registered_)
@@ -155,17 +202,13 @@ namespace ReplayEngine::Scripting
         {
             status_ = ScriptStatus::Error;
             if (last_error_.empty()) last_error_ = "スクリプトインスタンスを生成できませんでした。";
-            return;
+            return false;
         }
 
         status_ = ScriptStatus::Running;
         last_error_.clear();
 
-        // Inspector と Scene に保存された値を、Awake より前に流し込む。
-        // Awake の中で自分の Field を読めるようにするため。
-        PushAllFields();
-
-        InvokeCallback(ScriptCallback::Awake, ScriptArguments::None());
+        return true;
     }
 
     void ScriptComponent::DestroyInstanceIfAny()
@@ -176,11 +219,23 @@ namespace ReplayEngine::Scripting
         {
             if (services != nullptr)
             {
-                InvokeCallback(ScriptCallback::OnDestroy, ScriptArguments::None());
+                // 新 MonoBehaviour は inactive の GameObject 上でも Phase 0 で
+                // instance だけ先に作る。まだ一度も Awake していない instance へ
+                // OnDestroy だけを送ると、初期化前の後始末という逆転が起きる。
+                // Awake 済みの実体にだけユーザー OnDestroy を配送し、Managed instance
+                // 自体は Awake の有無に関係なく必ず破棄する。
+                if (awake_invoked_)
+                {
+                    InvokeCallback(ScriptCallback::OnDestroy, ScriptArguments::None());
+                }
                 services->DestroyInstance(instance_);
             }
             instance_ = invalid_script_instance_handle;
         }
+
+        // 次に実体を作り直したときは、Awake からもう一度通す。
+        awake_invoked_ = false;
+        fields_restored_ = false;
 
         if (registered_)
         {
@@ -197,7 +252,7 @@ namespace ReplayEngine::Scripting
     void ScriptComponent::InvokeCallback(ScriptCallback callback,
         const ScriptArguments& arguments)
     {
-        if (!HasInstance()) return;
+        if (!HasInstance() || !awake_invoked_) return;
 
         IScriptServices* services = Services();
         if (services == nullptr) return;

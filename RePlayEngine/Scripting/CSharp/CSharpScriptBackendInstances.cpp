@@ -34,13 +34,22 @@ namespace ReplayEngine::Scripting::CSharp
     ScriptLoadResult CSharpScriptBackend::LoadType(
         const ScriptTypeDescriptor& descriptor, std::uint32_t schema_revision)
     {
+        // 型ごとに 1 行出るメッセージなので、理由が分かっているなら足す。
+        // 「読み込まれていない」だけでは、ビルドが失敗したのか
+        // hostfxr へ接続できていないのかが読み手に分からない。
         if (!initialized_)
         {
-            return ScriptLoadResult::Failure("C# Backend is not initialized.");
+            return ScriptLoadResult::Failure(startup_diagnostic_.empty()
+                ? "C# Backend is not initialized."
+                : "C# Backend is not initialized: " + startup_diagnostic_);
         }
         if (!assembly_loaded_)
         {
-            return ScriptLoadResult::Failure("C# Assembly is not loaded.");
+            const std::string& reason = startup_diagnostic_.empty()
+                ? last_error_ : startup_diagnostic_;
+            return ScriptLoadResult::Failure(reason.empty()
+                ? "C# Assembly is not loaded."
+                : "C# Assembly is not loaded: " + reason);
         }
         if (describe_type_ == nullptr)
         {
@@ -60,6 +69,16 @@ namespace ReplayEngine::Scripting::CSharp
         }
 
         TypeState state;
+        if (packaged_mode_)
+        {
+            if (!descriptor.schema || descriptor.schema->TypeID() != descriptor.type_id)
+                return ScriptLoadResult::Failure("Missing packed C# schema: " + descriptor.type_id.ToString());
+            state.schema = descriptor.schema;
+            for (const auto& field : state.schema->Fields())
+                state.field_types[field.SavedName()] = field.type;
+            type_states_[descriptor.type_id] = state;
+            return ScriptLoadResult::Success(state.schema);
+        }
         std::string schema_error;
         if (!ParseSchemaText(descriptor.type_id, schema_revision, text,
             state.schema, state.field_types, schema_error))
@@ -69,6 +88,28 @@ namespace ReplayEngine::Scripting::CSharp
 
         type_states_[descriptor.type_id] = state;
         return ScriptLoadResult::Success(std::move(state.schema));
+    }
+
+    void CSharpScriptBackend::PumpScriptEvents()
+    {
+        if (!initialized_ || !assembly_loaded_ || pump_events_ == nullptr) return;
+
+        // Coroutine が進む時間も Time.deltaTime も、Update と同じ 1 つの値から取る。
+        // RuntimeTime.delta_time は Time.timeScale を掛けたあとのゲーム時間。
+        float delta_time = 0.0f;
+        if (runtime_context_ != nullptr)
+        {
+            const Runtime::RuntimeTime& time = runtime_context_->Time();
+            delta_time = time.delta_time;
+
+            // Coroutine の中や接触コールバックでも Time.deltaTime を正しく読ませる。
+            if (set_time_ != nullptr)
+            {
+                reinterpret_cast<set_time_fn>(set_time_)(time.delta_time,
+                    time.fixed_delta_time, time.frame_index);
+            }
+        }
+        reinterpret_cast<pump_events_fn>(pump_events_)(delta_time);
     }
 
     bool CSharpScriptBackend::CanInstantiate(ScriptTypeID type_id) const
@@ -119,7 +160,9 @@ namespace ReplayEngine::Scripting::CSharp
         if (runtime_context_ != nullptr && set_time_ != nullptr)
         {
             const Runtime::RuntimeTime& time = runtime_context_->Time();
-            reinterpret_cast<set_time_fn>(set_time_)(time.delta_time,
+            const float callback_delta = callback == ScriptCallback::FixedUpdate
+                ? arguments.delta_time : time.delta_time;
+            reinterpret_cast<set_time_fn>(set_time_)(callback_delta,
                 time.fixed_delta_time, time.frame_index);
         }
 

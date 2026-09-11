@@ -3,12 +3,14 @@
 #include <DirectXMath.h>
 
 #include <cstddef>
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
 namespace ReplayEngine::Landscape
 {
     class LandscapeData;
+    struct LandscapeGeometry;
 
     // 1 stroke の頂点位置差分。
     // Height ではなく xyz を持つので、洞窟壁を法線方向へ Sculpt した操作も戻せる。
@@ -31,11 +33,14 @@ namespace ReplayEngine::Landscape
         void Undo(LandscapeData& data) const;
         void Redo(LandscapeData& data) const;
         void Seal();
-        bool Empty() const noexcept { return samples_.empty(); }
+        void BeginTopology(const LandscapeData& data);
+        void EndTopology(const LandscapeData& data);
+        bool Empty() const noexcept { return samples_.empty() && topology_before_ == topology_after_; }
         std::size_t ChangedSampleCount() const noexcept { return samples_.size(); }
 
     private:
         std::vector<Sample> samples_;
         std::unordered_map<std::size_t, std::size_t> lookup_;
+        std::shared_ptr<const LandscapeGeometry> topology_before_, topology_after_;
     };
 }

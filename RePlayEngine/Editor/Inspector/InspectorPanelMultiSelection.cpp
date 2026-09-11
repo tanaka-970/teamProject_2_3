@@ -1,4 +1,4 @@
-﻿// InspectorPanel のうち「複数選択と共通 Component の一括編集」だけを持つ。
+// InspectorPanel のうち「複数選択と共通 Component の一括編集」だけを持つ。
 //
 // 単体選択のヘッダー・Prefab 表示は InspectorPanel.cpp、
 // Component 単体の表示は InspectorPanelComponents.cpp に置く。
@@ -295,12 +295,12 @@ namespace ReplayEngine::Editor
                 return component == nullptr || !PropertyValuesEqual(primary_value, desc.Capture(*component));
             });
 
-            const bool had_transaction = context.History().InTransaction();
-            if (editable && !had_transaction) context.BeginEdit(title + " の設定を一括変更");
-
             ImGui::PushID(desc.name.c_str());
             const bool changed = PropertyDrawer::Draw(desc, *components.front(),
-                context.GetAssetDatabase(), context.GetScene(), mixed);
+                context.GetAssetDatabase(), context.GetScene(), mixed, [&]()
+                {
+                    if (editable) BeginPropertyEdit(context, title + " の設定を一括変更");
+                });
             ImGui::PopID();
 
             if (changed)
@@ -315,11 +315,7 @@ namespace ReplayEngine::Editor
                 prefab_cache_valid_ = false;
             }
 
-            if (editable && context.History().InTransaction() && !ImGui::IsAnyItemActive())
-            {
-                if (changed || had_transaction) context.CommitEdit();
-                else context.CancelEdit();
-            }
+            FinishPropertyEdit(context);
         }
 
         if (!editable)

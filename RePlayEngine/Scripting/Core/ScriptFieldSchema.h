@@ -168,7 +168,8 @@ namespace ReplayEngine::Scripting
         static std::shared_ptr<const ScriptFieldSchema> Build(
             ScriptTypeID type_id, std::uint32_t revision,
             std::vector<ScriptFieldDefinition> fields,
-            std::vector<std::string>* rejected = nullptr);
+            std::vector<std::string>* rejected = nullptr,
+            bool instantiate_when_inactive = false);
 
         ScriptTypeID TypeID() const noexcept { return type_id_; }
 
@@ -183,6 +184,12 @@ namespace ReplayEngine::Scripting
 
         std::size_t FieldCount() const noexcept { return fields_.size(); }
         bool Empty() const noexcept { return fields_.empty(); }
+
+        // 新しい MonoBehaviour Authoring 型は、GameObject が inactive でも
+        // Managed instance と serialized field だけは先に用意する。
+        // Awake / OnEnable / Start の時期は Component lifecycle が別に制御する。
+        // Legacy ScriptBehaviour / Lua は false のまま従来の生成時期を維持する。
+        bool InstantiateWhenInactive() const noexcept { return instantiate_when_inactive_; }
 
         // "RotationSpeed" で引く。
         const ScriptFieldDefinition* FindField(std::string_view name) const noexcept;
@@ -204,6 +211,7 @@ namespace ReplayEngine::Scripting
 
         ScriptTypeID type_id_;
         std::uint32_t revision_ = 0;
+        bool instantiate_when_inactive_ = false;
 
         std::vector<ScriptFieldDefinition> fields_;
         std::vector<Reflection::PropertyDesc> descs_;

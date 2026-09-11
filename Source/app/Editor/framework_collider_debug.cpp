@@ -1,4 +1,4 @@
-﻿// Collider と AI / Navigation の Scene View 可視化。
+// Collider と AI / Navigation の Scene View 可視化。
 //
 // 新しい描画パイプラインは作らず、既存の DebugLine -> ImGui overlay 経路へ
 // AI の塗り・文字・編集ハンドルを同居させる。Runtime Component は ImGui に依存しない。
@@ -79,11 +79,12 @@ void framework::draw_collider_debug_overlay()
     if (active_editor_view == editor_view::scene)
     {
         const ReplayEngine::Core::ObjectID selected = object_editor_context.Selection().Primary();
-        ReplayEngine::Editor::AINavigationDebugDraw::Build(active_object_scene(), selected, ai_frame);
-        for (std::size_t index = 0; index < active_object_scene().GameObjectCount(); ++index)
+        ReplayEngine::Editor::AINavigationDebugDraw::Build(active_object_scene(), selected, ai_frame, show_all_ai_stage_debug);
+        for (std::size_t index = 0; index < (show_all_ai_stage_debug ? active_object_scene().GameObjectCount() : 1u); ++index)
         {
             const ReplayEngine::Core::GameObject* object =
-                active_object_scene().GameObjectAt(index);
+                show_all_ai_stage_debug ? active_object_scene().GameObjectAt(index) :
+                active_object_scene().FindGameObjectByID(object_editor_context.Selection().Primary());
             if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy())
                 continue;
             const auto* spawn = object->GetComponent<
@@ -373,10 +374,11 @@ void framework::draw_collider_debug_overlay()
 
     if (has_stage_markers)
     {
-        for (std::size_t index = 0; index < active_object_scene().GameObjectCount(); ++index)
+        for (std::size_t index = 0; index < (show_all_ai_stage_debug ? active_object_scene().GameObjectCount() : 1u); ++index)
         {
             const ReplayEngine::Core::GameObject* object =
-                active_object_scene().GameObjectAt(index);
+                show_all_ai_stage_debug ? active_object_scene().GameObjectAt(index) :
+                active_object_scene().FindGameObjectByID(object_editor_context.Selection().Primary());
             if (object == nullptr || object->PendingDestroy() || !object->ActiveInHierarchy())
                 continue;
             const DirectX::XMFLOAT3 center = object->GetTransform().WorldPosition();
@@ -632,6 +634,7 @@ void framework::draw_collision_diagnostics_panel()
     ImGui::TextUnformatted(u8"表示");
     ImGui::Separator();
     ImGui::Checkbox(u8"Collider の形を描く", &show_collider_debug_draw);
+    ImGui::Checkbox(u8"非選択の AI・ステージのデバッグ表示", &show_all_ai_stage_debug);
     ImGui::Checkbox(u8"境界ボックスを描く", &show_collider_debug_bounds);
     ImGui::Checkbox(u8"Mesh の三角形を描く", &show_collider_debug_wireframe);
     ImGui::Checkbox(u8"ライトの範囲を描く", &show_light_range_debug_draw);

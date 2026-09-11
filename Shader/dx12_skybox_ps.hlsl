@@ -19,9 +19,10 @@ float3 SkyDirection(float2 uv)
         (farWorld.w < 0.0f ? -1.0f : 1.0f);
     return normalize(farWorld.xyz / safeW - cameraPosition.xyz);
 }
-
+// スカイマップの方向をパノラマ座標に変換する関数
 float2 SkyDirectionToPano(float3 direction)
 {
+// パノラマ座標は、方向ベクトルのx軸とz軸の角度を計算し、0から1の範囲に正規化する    
     return float2(atan2(direction.z, direction.x) * 0.15915494309189535f + 0.5f,
         asin(clamp(direction.y, -1.0f, 1.0f)) * 0.3183098861837907f + 0.5f);
 }

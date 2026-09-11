@@ -1,4 +1,4 @@
-﻿// GameObject / Component 基盤のうち「Object / Landscape 描画」を持つ。
+// GameObject / Component 基盤のうち「Object / Landscape 描画」を持つ。
 // 描画パス、Material binding、Depth/GBuffer 分岐は関数本体のまま移動している。
 #include "framework.h"
 #include "../../../RePlayEngine/Components/Rendering/ModelEffectStackComponent.h"
@@ -67,6 +67,37 @@
 #include <unordered_set>
 #include <vector>
 
+namespace
+{
+    template <typename VertexIterator>
+    ReplayEngine::Rendering::DX12::D3D12MeshLocalBounds calculate_mesh_bounds(
+        VertexIterator vertex_begin, VertexIterator vertex_end) noexcept
+    {
+        ReplayEngine::Rendering::DX12::D3D12MeshLocalBounds bounds;
+        bool initialized = false;
+        for (auto it = vertex_begin; it != vertex_end; ++it)
+        {
+            const DirectX::XMFLOAT3& position = it->position;
+            if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
+                !std::isfinite(position.z)) continue;
+            if (!initialized)
+            {
+                bounds.minimum = position;
+                bounds.maximum = position;
+                initialized = true;
+                continue;
+            }
+            bounds.minimum.x = (std::min)(bounds.minimum.x, position.x);
+            bounds.minimum.y = (std::min)(bounds.minimum.y, position.y);
+            bounds.minimum.z = (std::min)(bounds.minimum.z, position.z);
+            bounds.maximum.x = (std::max)(bounds.maximum.x, position.x);
+            bounds.maximum.y = (std::max)(bounds.maximum.y, position.y);
+            bounds.maximum.z = (std::max)(bounds.maximum.z, position.z);
+        }
+        bounds.valid = initialized;
+        return bounds;
+    }
+}
 
 ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
     const ReplayEngine::Rendering::RenderItem& source,
@@ -937,29 +968,8 @@ bool framework::build_dx12_static_scene(
         // 視錐台カリング用の境界。メッシュごとに一度だけ求めて残す。
         if (static_mesh_bounds_cache.find(key) == static_mesh_bounds_cache.end())
         {
-            ReplayEngine::Rendering::DX12::D3D12MeshLocalBounds bounds;
-            bool initialized = false;
-            for (auto it = vertex_begin; it != vertex_end; ++it)
-            {
-                const DirectX::XMFLOAT3& position = it->position;
-                if (!std::isfinite(position.x) || !std::isfinite(position.y) ||
-                    !std::isfinite(position.z)) continue;
-                if (!initialized)
-                {
-                    bounds.minimum = position;
-                    bounds.maximum = position;
-                    initialized = true;
-                    continue;
-                }
-                bounds.minimum.x = (std::min)(bounds.minimum.x, position.x);
-                bounds.minimum.y = (std::min)(bounds.minimum.y, position.y);
-                bounds.minimum.z = (std::min)(bounds.minimum.z, position.z);
-                bounds.maximum.x = (std::max)(bounds.maximum.x, position.x);
-                bounds.maximum.y = (std::max)(bounds.maximum.y, position.y);
-                bounds.maximum.z = (std::max)(bounds.maximum.z, position.z);
-            }
-            bounds.valid = initialized;
-            static_mesh_bounds_cache.emplace(key, bounds);
+            static_mesh_bounds_cache.emplace(key,
+                calculate_mesh_bounds(vertex_begin, vertex_end));
         }
         if (!mesh_source_keys.insert(key).second) return;
         D3D12StaticMeshSource source;
@@ -1045,7 +1055,8 @@ bool framework::build_dx12_static_scene(
         camera_up, camera_forward](const std::string& key,
         const std::vector<DirectX::XMFLOAT3>& points,
         const std::vector<float>& point_alpha,
-        const ReplayEngine::Rendering::LineStrokeStyle& style) -> bool
+        const ReplayEngine::Rendering::LineStrokeStyle& style,
+        D3D12MeshLocalBounds& bounds) -> bool
     {
         if (key.empty() || points.size() < 2) return false;
         D3D12StaticMeshSource source;
@@ -1105,25 +1116,25 @@ bool framework::build_dx12_static_scene(
             return false;
         }
         if (source.vertices.empty() || source.indices.empty()) return false;
+        bounds = calculate_mesh_bounds(source.vertices.begin(), source.vertices.end());
         submission.mesh_sources.push_back(std::move(source));
         return true;
     };
 
-    const auto add_ribbon_draw = [&submission, this](const std::string& key,
-        const std::string& motion_key, const ReplayEngine::Rendering::LineStrokeStyle& style)
+    const auto add_ribbon_draw = [&submission](const std::string& key,
+        const std::string& motion_key, std::uint64_t owner_id,
+        const D3D12MeshLocalBounds& bounds, const ReplayEngine::Rendering::LineStrokeStyle& style)
     {
         D3D12StaticDrawItem draw;
         draw.mesh_key = key;
+        draw.owner_id = owner_id;
+        draw.material_bounds = bounds;
         draw.motion_key = motion_key;
         draw.alpha_mode = D3D12StaticAlphaMode::Blend;
         draw.base_color = style.fill_color;
         draw.cast_shadow = false;
         draw.receive_shadow = false;
         draw.double_sided = true;
-        // 境界はメッシュ単位で共有する。視錐台の判定に要る。
-        if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
-            found_bounds != static_mesh_bounds_cache.end())
-            draw.material_bounds = found_bounds->second;
         submission.draws.push_back(std::move(draw));
     };
 
@@ -1157,8 +1168,10 @@ bool framework::build_dx12_static_scene(
                                 DirectX::XMLoadFloat3(&point), DirectX::XMLoadFloat4x4(&world)));
                     }
                     const auto style = line->StrokeStyle();
-                    if (add_ribbon(key_prefix, path, {}, style))
-                        add_ribbon_draw(key_prefix, key_prefix, style);
+                    D3D12MeshLocalBounds bounds;
+                    if (add_ribbon(key_prefix, path, {}, style, bounds))
+                        add_ribbon_draw(key_prefix, key_prefix, object->ID().Value(),
+                            bounds, style);
                     continue;
                 }
                 const auto* trail = dynamic_cast<const ReplayEngine::Components::TrailComponent*>(component);
@@ -1177,8 +1190,10 @@ bool framework::build_dx12_static_scene(
                                 DirectX::XMLoadFloat3(&point), DirectX::XMLoadFloat4x4(&parent_world)));
                 }
                 const auto style = trail->StrokeStyle();
-                if (add_ribbon(key_prefix, path, alpha, style))
-                    add_ribbon_draw(key_prefix, key_prefix, style);
+                D3D12MeshLocalBounds bounds;
+                if (add_ribbon(key_prefix, path, alpha, style, bounds))
+                    add_ribbon_draw(key_prefix, key_prefix, object->ID().Value(),
+                        bounds, style);
             }
         }
     }
@@ -1392,6 +1407,9 @@ bool framework::build_dx12_static_scene(
                 const float inverse_count = 1.0f / static_cast<float>(bucket.count);
                 D3D12StaticDrawItem draw;
                 draw.mesh_key = bucket.source.key;
+                draw.owner_id = object_id.Value();
+                draw.material_bounds = calculate_mesh_bounds(
+                    bucket.source.vertices.begin(), bucket.source.vertices.end());
                 draw.motion_key = bucket.source.key;
                 draw.base_color = {
                     bucket.color_sum.x * inverse_count,
@@ -1407,10 +1425,6 @@ bool framework::build_dx12_static_scene(
                 draw.receive_shadow = false;
                 draw.double_sided = true;
                 submission.mesh_sources.push_back(std::move(bucket.source));
-                // 境界はメッシュ単位で共有する。視錐台の判定に要る。
-                if (const auto found_bounds = static_mesh_bounds_cache.find(draw.mesh_key);
-                    found_bounds != static_mesh_bounds_cache.end())
-                    draw.material_bounds = found_bounds->second;
                 submission.draws.push_back(std::move(draw));
             }
         }
@@ -1515,7 +1529,8 @@ bool framework::build_dx12_static_scene(
                 std::vector<DirectX::XMFLOAT4X4> bone_globals;
                 bool bone_globals_ready = false;
 
-                if ((show_rig_debug_draw || show_motion_rig_panel || has_pose) &&
+                if ((show_rig_debug_draw || (show_motion_rig_panel && motion_rig_panel_visible &&
+                    active_editor_workspace == editor_workspace::motion) || has_pose) &&
                     !mesh.bind_pose.bones.empty())
                 {
                     REPLAY_PROFILE_SCOPE("Item/RigPose");
@@ -1619,7 +1634,8 @@ bool framework::build_dx12_static_scene(
                     }
                 }
 
-                if ((show_rig_debug_draw || show_motion_rig_panel) && bone_globals_ready)
+                if ((show_rig_debug_draw || (show_motion_rig_panel && motion_rig_panel_visible &&
+                    active_editor_workspace == editor_workspace::motion)) && bone_globals_ready)
                 {
                     // 上で組んだ行列をそのまま使う。ポーズも表示へ反映される。
                     const DirectX::XMMATRIX object_world =
@@ -2250,6 +2266,30 @@ bool framework::build_dx12_static_scene(
     // D3D11専用のstatic_meshキャッシュをDX12から参照しないため、編集後のRevisionもキーへ含める。
     if (options.include_auxiliary_geometry)
     {
+        const DirectX::XMFLOAT3 camera_position = viewport_eye_position();
+        const auto transform_bounds = [](const DirectX::XMFLOAT3& local_min,
+            const DirectX::XMFLOAT3& local_max, const DirectX::XMFLOAT4X4& world,
+            DirectX::XMFLOAT3& world_min, DirectX::XMFLOAT3& world_max) noexcept
+        {
+            world_min = { FLT_MAX, FLT_MAX, FLT_MAX };
+            world_max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+            for (std::uint32_t corner_index = 0; corner_index < 8; ++corner_index)
+            {
+                const DirectX::XMFLOAT3 local{
+                    (corner_index & 1u) != 0 ? local_max.x : local_min.x,
+                    (corner_index & 2u) != 0 ? local_max.y : local_min.y,
+                    (corner_index & 4u) != 0 ? local_max.z : local_min.z };
+                DirectX::XMFLOAT3 transformed{};
+                DirectX::XMStoreFloat3(&transformed, DirectX::XMVector3TransformCoord(
+                    DirectX::XMLoadFloat3(&local), DirectX::XMLoadFloat4x4(&world)));
+                world_min.x = (std::min)(world_min.x, transformed.x);
+                world_min.y = (std::min)(world_min.y, transformed.y);
+                world_min.z = (std::min)(world_min.z, transformed.z);
+                world_max.x = (std::max)(world_max.x, transformed.x);
+                world_max.y = (std::max)(world_max.y, transformed.y);
+                world_max.z = (std::max)(world_max.z, transformed.z);
+            }
+        };
         for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
         {
             const ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
@@ -2257,12 +2297,18 @@ bool framework::build_dx12_static_scene(
             const auto* landscape = object->GetComponent<ReplayEngine::Components::LandscapeComponent>();
             const auto* renderer = object->GetComponent<ReplayEngine::Components::LandscapeRendererComponent>();
             if (landscape == nullptr || renderer == nullptr || !renderer->visible ||
-                !renderer->ActiveInHierarchy() || !landscape->Data().Valid()) continue;
+                !renderer->ActiveInHierarchy() || landscape->Data().FaceCount() == 0) continue;
 
             const auto& data = landscape->Data();
             const std::string object_key = "landscape:" +
                 std::to_string(object->ID().Value());
             auto& cache = landscape_gpu_mesh_cache[object->ID().Value()];
+            const DirectX::XMFLOAT4X4 object_world =
+                object->GetTransform().WorldMatrixFloat4x4();
+            const float uv_tiling = std::isfinite(renderer->uv_tiling)
+                ? std::clamp(renderer->uv_tiling, 0.0001f, 10000.0f) : 1.0f;
+            const std::string base_color_texture_key =
+                add_asset_texture(renderer->base_color_texture);
 
             // チャンクごとに別メッシュとして持つ。塗った所だけ載せ替えられ、
             // 画面外のチャンクは視錐台で落とせる。
@@ -2271,46 +2317,59 @@ bool framework::build_dx12_static_scene(
             cache.revision = data.Revision();
 
             const auto& chunks = data.Chunks();
-            if (source_changed || cache.chunk_revisions.size() != chunks.size())
+            if (source_changed || cache.chunk_revisions.size() != chunks.size() ||
+                cache.uv_tiling != uv_tiling)
+            {
+                for (std::size_t old=chunks.size();old<cache.chunk_revisions.size();++old)
+                    dx12_device_context.ReleaseStaticMesh(object_key+":"+std::to_string(old));
                 cache.chunk_revisions.assign(chunks.size(), 0);
+                cache.chunk_topology_revisions.assign(chunks.size(), 0);
+            }
+            cache.uv_tiling = uv_tiling;
             for (std::size_t chunk_index = 0; chunk_index < chunks.size(); ++chunk_index)
             {
                 const auto& chunk = chunks[chunk_index];
-                if (chunk.indices.empty()) continue;
-
                 const std::string mesh_key = object_key + ":" + std::to_string(chunk_index);
+                if (chunk.indices.empty())
+                {
+                    dx12_device_context.ReleaseStaticMesh(mesh_key);
+                    cache.chunk_revisions[chunk_index]=0;
+                    continue;
+                }
+                const bool resident = dx12_device_context.HasStaticMesh(mesh_key);
+                DirectX::XMFLOAT3 world_bounds_min{};
+                DirectX::XMFLOAT3 world_bounds_max{};
+                transform_bounds(chunk.bounds_min, chunk.bounds_max, object_world,
+                    world_bounds_min, world_bounds_max);
+                if (!renderer->ShouldSubmitChunk(camera_position, world_bounds_min,
+                    world_bounds_max, resident))
+                {
+                    if (resident) dx12_device_context.ReleaseStaticMesh(mesh_key);
+                    cache.chunk_revisions[chunk_index] = 0;
+                    continue;
+                }
                 if (cache.chunk_revisions[chunk_index] != chunk.revision ||
-                    !dx12_device_context.HasStaticMesh(mesh_key))
+                    !resident)
                 {
                     REPLAY_PROFILE_SCOPE("Landscape/ChunkUpload");
-                    // このチャンクが使う頂点だけを詰め直す。境界の頂点は隣とも重複する。
-                    std::unordered_map<std::uint32_t, std::uint32_t> remap;
                     D3D12StaticMeshSource source;
                     source.key = mesh_key;
                     source.replace_existing = true;
-                    source.vertices.reserve(chunk.indices.size());
-                    source.indices.reserve(chunk.indices.size());
-                    for (const std::uint32_t global : chunk.indices)
+                    source.vertices_only = resident &&
+                        cache.chunk_topology_revisions[chunk_index] == data.TopologyRevision();
+                    source.vertices.reserve(chunk.vertex_map.size());
+                    for (const auto global : chunk.vertex_map)
                     {
-                        if (global >= data.Vertices().size()) continue;
-                        const auto found = remap.find(global);
-                        if (found != remap.end())
-                        {
-                            source.indices.push_back(found->second);
-                            continue;
-                        }
-                        const std::uint32_t local =
-                            static_cast<std::uint32_t>(source.vertices.size());
-                        remap.emplace(global, local);
                         const auto& input = data.Vertices()[global];
                         D3D12StaticVertex vertex;
                         vertex.position = input.position;
                         vertex.normal = input.normal;
-                        vertex.texcoord = input.uv;
+                        vertex.texcoord = { input.uv.x * uv_tiling, input.uv.y * uv_tiling };
                         source.vertices.push_back(vertex);
-                        source.indices.push_back(local);
                     }
-                    if (source.vertices.empty() || source.indices.empty()) continue;
+                    if (!source.vertices_only) source.indices = chunk.local_indices;
+                    if (source.vertices.empty()) continue;
+                    cache.chunk_topology_revisions[chunk_index] = data.TopologyRevision();
                     submission.mesh_sources.push_back(std::move(source));
                     cache.chunk_revisions[chunk_index] = chunk.revision;
                 }
@@ -2320,8 +2379,9 @@ bool framework::build_dx12_static_scene(
                 draw.owner_id = object->ID().Value();
                 draw.rendering_layer = 0;
                 draw.motion_key = std::to_string(object->ID().Value()) + ":" + mesh_key;
-                draw.world = object->GetTransform().WorldMatrixFloat4x4();
+                draw.world = object_world;
                 draw.base_color = renderer->tint;
+                draw.base_color_texture_key = base_color_texture_key;
                 draw.double_sided = renderer->double_sided;
                 draw.cast_shadow = renderer->cast_shadow;
                 draw.receive_shadow = renderer->receive_shadow;

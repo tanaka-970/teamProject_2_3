@@ -1,6 +1,9 @@
 ﻿#include "framework.h"
 
 #include "../../../RePlayEngine/Scripting/CSharp/CSharpProject.h"
+#include "../../../RePlayEngine/Scripting/CSharp/CSharpScriptBackend.h"
+#include "../../../RePlayEngine/Scripting/Core/ScriptPack.h"
+#include "../../../RePlayEngine/Rendering/Shaders/ShaderPack.h"
 
 #include <commdlg.h>
 #include <shellapi.h>
@@ -151,6 +154,11 @@ namespace
         }
 
         const std::string filename = LowerCopy(relative.filename().generic_u8string());
+        const std::string extension = LowerCopy(relative.extension().generic_u8string());
+        if (extension == ".hlsl" || extension == ".hlsli" || extension == ".cs" ||
+            extension == ".csproj" || extension == ".sln" || extension == ".pdb" ||
+            filename == "shadercache.replaypack" || filename == "scriptcatalog.replaypack")
+            return true;
         return filename == "imgui.ini" ||
             filename.size() >= 4 && filename.substr(filename.size() - 4) == ".bak" ||
             filename.size() >= 19 &&
@@ -202,17 +210,22 @@ namespace
         }
 
         for (std::filesystem::recursive_directory_iterator it(
-            source_root, std::filesystem::directory_options::skip_permission_denied, error),
+            source_root, std::filesystem::directory_options::none, error),
             end; !error && it != end; it.increment(error))
         {
             const std::filesystem::path relative =
                 std::filesystem::relative(it->path(), source_root, error);
             if (error)
             {
-                error.clear();
-                continue;
+                errors.push_back("コピー元の相対パスを取得できません: " + it->path().generic_u8string());
+                return;
             }
-            if (skip && skip(relative))
+            if (relative.is_absolute() || ContainsParentTraversal(relative))
+            {
+                errors.push_back("コピー元フォルダー外への参照です: " + it->path().generic_u8string());
+                return;
+            }
+            if (ShouldSkipResourceEntry(relative) || (skip && skip(relative)))
             {
                 if (it->is_directory(error)) it.disable_recursion_pending();
                 error.clear();
@@ -253,6 +266,17 @@ namespace
         CopyDirectoryFiltered(source_root, destination_root,
             [](const std::filesystem::path&) { return false; }, errors);
     }
+
+    struct ExportStaging final
+    {
+        std::filesystem::path path;
+        ~ExportStaging()
+        {
+            if (path.empty()) return;
+            std::error_code error;
+            std::filesystem::remove_all(path, error);
+        }
+    };
 }
 
 void framework::open_export_game_dialog()
@@ -274,13 +298,21 @@ void framework::open_export_game_dialog()
 
 bool framework::export_standalone_game(const std::filesystem::path& export_root,
     const std::filesystem::path& startup_scene, bool overwrite_existing)
+try
 {
     export_errors.clear();
     export_status.clear();
 
+    if (standalone_game_mode)
+    {
+        export_errors.push_back("standalone からの書き出しには対応していません");
+        return false;
+    }
+
     const std::string game_name = SafeGameName(export_game_name);
-    const std::filesystem::path destination =
+    const std::filesystem::path final_destination =
         export_root / std::filesystem::u8path(game_name);
+    std::filesystem::path destination = final_destination;
 
     if (export_root.empty())
     {
@@ -294,7 +326,9 @@ bool framework::export_standalone_game(const std::filesystem::path& export_root,
         return false;
     }
     if (IsSameOrAncestorOf(content_path("resources"), destination) ||
-        IsSameOrAncestorOf(content_path("Shader"), destination))
+        IsSameOrAncestorOf(content_path("Shader"), destination) ||
+        IsSameOrAncestorOf(content_path("Scripts"), destination) ||
+        IsSameOrAncestorOf(content_path("Managed"), destination))
     {
         export_errors.push_back("コピー元フォルダーの内側へは書き出せません: " +
             destination.generic_u8string());
@@ -311,15 +345,11 @@ bool framework::export_standalone_game(const std::filesystem::path& export_root,
                 destination.generic_u8string());
             return false;
         }
-        std::filesystem::remove_all(destination, error);
-        if (error)
-        {
-            export_errors.push_back("既存フォルダーを削除できません: " +
-                destination.generic_u8string());
-            return false;
-        }
     }
 
+    destination = export_root / std::filesystem::u8path(
+        "." + game_name + ".export-" + ReplayEngine::Scripting::CSharp::CSharpProject::GenerateTypeGuid());
+    ExportStaging staging{ destination };
     std::filesystem::create_directories(destination, error);
     if (error)
     {
@@ -328,19 +358,50 @@ bool framework::export_standalone_game(const std::filesystem::path& export_root,
         return false;
     }
 
-    const std::filesystem::path source_exe_release =
-        content_path(std::filesystem::path("x64") / "Release" / "3dgp.exe");
-    const std::filesystem::path source_exe_debug =
-        content_path(std::filesystem::path("x64") / "Debug" / "3dgp.exe");
-    const std::filesystem::path source_exe =
-        std::filesystem::exists(source_exe_release, error) && !error
-        ? source_exe_release
-        : source_exe_debug;
-    error.clear();
-    if (!std::filesystem::exists(source_exe, error) || error)
+    namespace CSharp = ReplayEngine::Scripting::CSharp;
+    namespace Scripting = ReplayEngine::Scripting;
+    std::string script_configuration;
+    std::string script_error;
+    auto* backend = object_script_runtime != nullptr
+        ? dynamic_cast<CSharp::CSharpScriptBackend*>(
+            object_script_runtime->Backend(Scripting::ScriptLanguage::CSharp)) : nullptr;
+    if (backend == nullptr || !backend->ValidateExportAssemblies(script_configuration, script_error))
+        export_errors.push_back("C# export: " + (script_error.empty() ? "Backend is unavailable" : script_error));
+    else if (!refresh_csharp_scripts())
+        export_errors.push_back("C# catalog refresh failed: " + editor_command_result);
+    else if (const auto managed_api_build = CSharp::CSharpProject::BuildManagedApi(content_root_path(), "Release");
+        !managed_api_build.succeeded)
+        export_errors.push_back("C# Managed API Release build failed: " + managed_api_build.output_text);
+    else if (const auto game_scripts_build = CSharp::CSharpProject::BuildGameScripts(content_root_path(), "Release");
+        !game_scripts_build.succeeded)
+        export_errors.push_back("C# GameScripts Release build failed: " + game_scripts_build.output_text);
+    else
+        Scripting::ScriptPack::Save(content_root_path(), object_script_runtime->Catalog(),
+            "Release", destination / "resources" / "ScriptCatalog.replaypack", export_errors);
+    ReplayEngine::Rendering::ShaderPack::Build(content_root_path(),
+        destination / "resources" / "ShaderCache.replaypack", export_errors);
+    if (backend != nullptr && !backend->ValidateExportAssemblies(script_configuration, script_error))
+        export_errors.push_back("C# export: " + script_error);
+    if (!export_errors.empty())
+    {
+        export_status = "書き出しに失敗しました";
+        return false;
+    }
+
+    wchar_t executable_path[32768]{};
+    const DWORD executable_length = GetModuleFileNameW(nullptr, executable_path,
+        static_cast<DWORD>(std::size(executable_path)));
+    const std::filesystem::path source_exe = executable_path;
+    // パック形式と組み込みシェーダ一覧が一致する実行中のエンジンを配布する。
+    if (executable_length == 0 || executable_length >= std::size(executable_path) ||
+        !std::filesystem::is_regular_file(source_exe, error) || error)
     {
         export_errors.push_back("コピー元 exe が見つかりません: " +
-            source_exe_release.generic_u8string());
+            source_exe.generic_u8string());
+    }
+    else if (IsSameOrAncestorOf(final_destination, source_exe))
+    {
+        export_errors.push_back("実行中のエンジンを含むフォルダーへは書き出せません");
     }
     else
     {
@@ -355,38 +416,6 @@ bool framework::export_standalone_game(const std::filesystem::path& export_root,
         },
         export_errors);
 
-    // Standalone は起動時に DX12 の組み込みシェーダを Shader/*.hlsl から
-    // コンパイルし、ShaderLibrary も Materials/Layers を走査する。
-    // compiled だけを配ると、編集環境では動くのに書き出し先で
-    // 「シェーダ 0 枚」「CreateStaticRendererResources 失敗」になる。
-    // ソース一式を配り、生成済み bytecode は従来どおり compiled へ分けて置く。
-    CopyDirectoryFiltered(
-        content_path("Shader"), destination / "Shader",
-        [](const std::filesystem::path& relative)
-        {
-            for (const std::filesystem::path& part : relative)
-            {
-                if (LowerCopy(part.generic_u8string()) == "compiled") return true;
-            }
-            return false;
-        },
-        export_errors);
-
-    CopyDirectoryFiltered(
-        content_path(std::filesystem::path("Shader") / "compiled"),
-        destination / "Shader" / "compiled",
-        [](const std::filesystem::path&) { return false; },
-        export_errors);
-
-    // DX12 の組み込みシェーダと ShaderLibrary は配布先でも DXC を使う。
-    // 開発環境の ThirdParty/DXC をそのまま同じ相対パスへ置き、
-    // FindDefaultLibraryPath() が standalone から解決できるようにする。
-    CopyDirectoryIfExists(
-        content_path(std::filesystem::path("ThirdParty") / "DXC" / "bin" / "x64"),
-        destination / "ThirdParty" / "DXC" / "bin" / "x64",
-        export_errors);
-
-    namespace CSharp = ReplayEngine::Scripting::CSharp;
     for (const std::string configuration : { "Release", "Debug" })
     {
         CopyDirectoryIfExists(
@@ -402,6 +431,14 @@ bool framework::export_standalone_game(const std::filesystem::path& export_root,
                 destination, configuration).parent_path(),
             export_errors);
     }
+
+    Scripting::ScriptTypeCatalog packaged_catalog;
+    std::string packaged_configuration;
+    if (!Scripting::ScriptPack::Load(destination, packaged_catalog, packaged_configuration, script_error))
+        export_errors.push_back("C# packaged catalog: " + script_error);
+    else
+        Scripting::ScriptPack::ValidateReferences(destination, packaged_catalog, export_errors);
+    ReplayEngine::Rendering::ShaderPack::ValidateReferences(destination, export_errors);
 
     const std::filesystem::path startup_absolute = startup_scene.is_absolute()
         ? startup_scene.lexically_normal()
@@ -437,6 +474,7 @@ bool framework::export_standalone_game(const std::filesystem::path& export_root,
             config << "STARTUP_SCENE " << startup_relative.generic_u8string() << '\n';
             config << "WINDOW " << client_width << ' ' << client_height << '\n';
             config << "FULLSCREEN 0\n";
+            config.flush();
             if (!config) export_errors.push_back(".replaygame の書き込みに失敗しました");
         }
     }
@@ -447,10 +485,59 @@ bool framework::export_standalone_game(const std::filesystem::path& export_root,
         return false;
     }
 
-    export_status = "書き出しました: " + destination.generic_u8string();
-    ShellExecuteW(nullptr, L"open", destination.wstring().c_str(),
+    for (std::filesystem::recursive_directory_iterator it(destination, error), end;
+        !error && it != end; it.increment(error))
+    {
+        const auto extension = LowerCopy(it->path().extension().generic_u8string());
+        if (extension == ".hlsl" || extension == ".hlsli" || extension == ".cs")
+            export_errors.push_back("配布禁止のソースが含まれています: " + it->path().generic_u8string());
+    }
+    if (error || std::filesystem::exists(destination / "Shader") ||
+        std::filesystem::exists(destination / "ThirdParty"))
+        export_errors.push_back("書き出し結果のソース除外を確認できません");
+    if (!export_errors.empty())
+    {
+        export_status = "書き出しに失敗しました";
+        return false;
+    }
+
+    const auto previous = export_root / std::filesystem::u8path(
+        "." + game_name + ".previous-" + CSharp::CSharpProject::GenerateTypeGuid());
+    bool moved_previous = false;
+    if (std::filesystem::exists(final_destination, error) && !error)
+    {
+        std::filesystem::rename(final_destination, previous, error);
+        moved_previous = !error;
+    }
+    if (!error) std::filesystem::rename(destination, final_destination, error);
+    if (error)
+    {
+        export_errors.push_back("書き出し結果を配置できません: " + error.message());
+        if (moved_previous)
+        {
+            std::error_code restore_error;
+            std::filesystem::rename(previous, final_destination, restore_error);
+            if (restore_error) export_errors.push_back("前回の書き出し結果はここに保存されています: " + previous.generic_u8string());
+        }
+        export_status = "書き出しに失敗しました";
+        return false;
+    }
+    staging.path.clear();
+    if (moved_previous)
+    {
+        std::filesystem::remove_all(previous, error);
+        if (error) push_editor_log("Warning", "前回の書き出し結果を削除できません: " + previous.generic_u8string());
+    }
+    export_status = "書き出しました: " + final_destination.generic_u8string();
+    ShellExecuteW(nullptr, L"open", final_destination.wstring().c_str(),
         nullptr, nullptr, SW_SHOWNORMAL);
     return true;
+}
+catch (const std::exception& exception)
+{
+    export_errors.push_back(exception.what());
+    export_status = "書き出しに失敗しました";
+    return false;
 }
 
 void framework::draw_export_game_dialog()

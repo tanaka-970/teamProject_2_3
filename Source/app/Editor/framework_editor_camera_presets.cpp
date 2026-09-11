@@ -112,6 +112,7 @@ const ReplayEngine::Editor::EditorCameraPreset& framework::active_editor_camera_
 
 bool framework::switch_editor_camera_preset(const std::string& preset_id)
 {
+    flush_editor_camera_preset_save();
     using namespace ReplayEngine::Editor;
     ensure_editor_camera_presets_loaded();
     for (std::size_t i = 0; i < editor_camera_presets.size(); ++i)
@@ -125,6 +126,16 @@ bool framework::switch_editor_camera_preset(const std::string& preset_id)
         return true;
     }
     return false;
+}
+
+void framework::flush_editor_camera_preset_save()
+{
+    if (!editor_camera_preset_save_pending) return;
+    editor_camera_preset_save_pending = false;
+    const float speed = editor_camera.move_speed;
+    if (!active_editor_camera_preset().Editable()) make_active_editor_camera_preset_personal_copy();
+    editor_camera.move_speed = speed;
+    save_active_editor_camera_preset();
 }
 
 bool framework::save_active_editor_camera_preset()

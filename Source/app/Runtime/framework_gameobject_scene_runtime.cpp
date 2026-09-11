@@ -144,6 +144,11 @@ void framework::update_object_scene(float elapsed_time)
         {
             log_shutdown_reason(line.c_str());
         }
+
+        // Debug.Log の繰り返しをここで締める。
+        // 同じ行が続いている間は数えるだけにしてあるので、
+        // フレームの終わりに 1 回だけまとめて出す。
+        if (object_runtime_log_sink) object_runtime_log_sink->Flush();
     }
 
     // ゲーム時間と実時間をここで一度だけ分ける。
@@ -218,6 +223,28 @@ void framework::update_object_scene(float elapsed_time)
         {
             object_runtime_context->Events().Dispatch(&object_runtime_context->Resolver());
             object_runtime_context->FlushDeferredOperations();
+        }
+
+        // Script へ接触イベントを配り、Coroutine を進める。
+        //
+        // 【なぜ Update ではなくここか】
+        //   接触イベントが購読キューへ入るのは、すぐ上の Dispatch。
+        //   Script の Update で読むと、読めるのは前フレームぶんになり、
+        //   Native Behaviour より 1 フレーム遅れて届いていた。
+        //   同じフレームのこの位置で配れば、その差が無くなる。
+        //
+        //   Scene の走査はすでに終わっているので、ここで Component を
+        //   足したり消したりしても、走査中の配列を壊すことはない。
+        //
+        // 【時間はここで選ばない】
+        //   ここで進むのは Coroutine / Timer / Tween。Update と同じゲーム時間で
+        //   動かないと、Time.timeScale = 0.5 にしても WaitForSeconds だけ等速で
+        //   進み、timeScale = 0 でも止まらない。
+        //   進む時間は Backend が上で渡した RuntimeTime から取る。
+        if (object_script_runtime)
+        {
+            REPLAY_PROFILE_SCOPE("Script/PumpEvents");
+            object_script_runtime->PumpScriptEvents();
         }
 
         // Transform が確定してからカメラを動かす。

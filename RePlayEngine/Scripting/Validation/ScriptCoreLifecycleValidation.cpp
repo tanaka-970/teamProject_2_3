@@ -284,6 +284,29 @@ namespace ReplayEngine::Scripting::Validation
         check.Expect(!fixture.runtime->PlaySessionActive(),
             "Play セッションが終わっている");
 
+        // A packaged game has a DLL and serialized type IDs, but no source catalog.
+        {
+            Fixture packaged;
+            packaged.runtime->Catalog().Remove(MockScriptTypes::DoorControllerTypeID());
+            GameObject* host = packaged.world.CreateGameObject("PackagedScript");
+            ScriptComponent* script = host ? packaged.AddDoor(*host) : nullptr;
+            check.Expect(script != nullptr && !script->Schema(),
+                "Packaged C# starts without an editor-populated schema");
+            packaged.BeginPlaySession();
+            check.Expect(script != nullptr && script->HasInstance(),
+                "Persisted C# type loads from the backend before Awake");
+            check.Expect(packaged.csharp_backend->CountCalls(ScriptCallback::Start) == 1,
+                "Packaged C# Start runs exactly once");
+            packaged.EndPlaySession();
+            check.Expect(packaged.runtime->LastLeakedInstanceCount() == 0,
+                "Packaged C# instance is released at scene unload");
+            host = packaged.world.CreateGameObject("PackagedReplay");
+            script = host ? packaged.AddDoor(*host) : nullptr;
+            packaged.BeginPlaySession();
+            check.Expect(script != nullptr && script->HasInstance() &&
+                packaged.runtime->Catalog().Count() == 2,
+                "Next scene reuses the C# catalog without duplicate registration");
+        }
         return check.Report("script-lifecycle");
     }
 }

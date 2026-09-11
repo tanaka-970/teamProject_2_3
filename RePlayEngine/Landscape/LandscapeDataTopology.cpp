@@ -35,6 +35,7 @@ namespace ReplayEngine::Landscape
         const std::uint32_t a = indices_[offset];
         const std::uint32_t b = indices_[offset + 1];
         const std::uint32_t c = indices_[offset + 2];
+        const std::size_t first_new_face = FaceCount();
         const std::uint32_t ab = static_cast<std::uint32_t>(vertices_.size());
         vertices_.push_back(Midpoint(a, b));
         const std::uint32_t bc = static_cast<std::uint32_t>(vertices_.size());
@@ -47,6 +48,7 @@ namespace ReplayEngine::Landscape
             ab, b, bc,
             ca, bc, c,
             ab, bc, ca });
+        UpdateSubdivisionAdjacency(face_index,a,b,c,ab,first_new_face);
         FinalizeGeometryEdit();
         return true;
     }

@@ -1,4 +1,4 @@
-﻿// PropertyDrawer の責務を 3 つのファイルへ分けている:
+// PropertyDrawer の責務を 3 つのファイルへ分けている:
 //   PropertyDrawer.cpp       … PropertyRegistry の全 Component を回す入口（このファイル）
 //   PropertyDrawerDraw.cpp   … 1 Property の型別描画 switch
 //                              （PropertyDrawer::Draw という単一関数。これ以上は本文を変えずに分割できない）
@@ -51,31 +51,8 @@ namespace
         if (record == nullptr || record->kind != ReplayEngine::Assets::AssetKind::Material)
             return false;
 
-        // Material の実体はディスクにある。Inspector は毎フレーム描かれるので、
-        // 毎回開くと選択しているだけでフレーム時間が跳ねる。更新時刻で持ち越す。
-        struct MaterialShadingCache
-        {
-            std::filesystem::file_time_type stamp;
-            bool unlit;
-        };
-        static std::unordered_map<std::string, MaterialShadingCache> cache;
-
-        std::error_code stamp_error;
-        const std::filesystem::file_time_type stamp =
-            std::filesystem::last_write_time(record->source_path, stamp_error);
-        if (!stamp_error)
-        {
-            const auto found = cache.find(guid);
-            if (found != cache.end() && found->second.stamp == stamp) return found->second.unlit;
-        }
-
-        ReplayEngine::Rendering::MaterialAsset material;
-        std::string error;
-        if (!ReplayEngine::Rendering::MaterialAsset::Load(record->source_path, material, error))
-            return false;
-        const bool unlit = IsUnlitOrFlatFillShadingModel(material.shading_model);
-        if (!stamp_error) cache[guid] = MaterialShadingCache{ stamp, unlit };
-        return unlit;
+        return IsUnlitOrFlatFillShadingModel(
+            ReplayEngine::Rendering::MaterialAsset::LoadedShadingModel(record->source_path));
     }
 
     bool ShouldDisableShadowToggles(const ReplayEngine::Core::Component& component,
@@ -136,7 +113,8 @@ namespace ReplayEngine::Editor
     using namespace Detail;
 
     bool PropertyDrawer::DrawAll(Core::Component& component,
-        const Assets::AssetDatabase* assets, const Scene::Scene* scene)
+        const Assets::AssetDatabase* assets, const Scene::Scene* scene,
+        const std::function<void()>& before_change)
     {
         bool changed = false;
         const auto draw_properties = [&](const std::vector<PropertyDesc>& properties,
@@ -177,7 +155,7 @@ namespace ReplayEngine::Editor
                 {
                     const DisabledScope disabled(material_dynamic_disabled &&
                         IsMaterialDynamicProperty(desc));
-                    if (Draw(desc, component, assets, scene)) changed = true;
+                    if (Draw(desc, component, assets, scene, false, before_change)) changed = true;
                 }
                 else
                 {
@@ -185,7 +163,7 @@ namespace ReplayEngine::Editor
                         ShouldDisableShadowToggles(component, desc, assets);
                     PropertyDesc draw_desc = desc;
                     draw_desc.read_only = draw_desc.read_only || shadow_toggle_disabled;
-                    if (Draw(draw_desc, component, assets, scene)) changed = true;
+                    if (Draw(draw_desc, component, assets, scene, false, before_change)) changed = true;
                     if (shadow_toggle_disabled && desc.name == "receive_shadow")
                         ImGui::TextDisabled(u8"Unlit / Flat Fill は照明と影を使わないため編集できません");
                 }

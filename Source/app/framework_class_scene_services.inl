@@ -1,4 +1,4 @@
-﻿// Scene/Runtime/描画提出/カメラ/衝突/Project Browser 接続。
+// Scene/Runtime/描画提出/カメラ/衝突/Project Browser 接続。
 // framework_class.h の class framework 内部からのみ include する。
 
     // --- GameObject / Component 基盤との接続 -------------------------------
@@ -17,9 +17,24 @@
     void execute_pending_object_scene_action();
     void draw_unsaved_object_scene_prompt();
     bool confirm_object_scene_close();
+
+    // 「終了」の宛先を 3 つに分ける唯一の場所。
+    //
+    // 単体ゲーム       … 編集セッションが無いので即座にプロセスを閉じる。
+    // エディター内 Play … Play を止めて編集シーンへ戻す。アプリは終了しない。
+    // エディター本体   … 未保存確認を通してから閉じる。
+    //
+    // ゲームからの終了要求 (SceneFlow の Quit) は handle_game_quit_request()、
+    // アプリそのものを閉じる操作 (File > Exit / ウィンドウの×) は
+    // request_application_quit() を通す。
+    void handle_game_quit_request(const std::string& reason);
+    void request_application_quit();
     void add_recent_object_scene(const std::filesystem::path& path);
     void register_object_scene_asset();
     void discard_object_scene_autosave();
+    // Play へ入る前に C# の Assembly をソースへ追いつかせる。
+    // 保存直後の F5 が古い Assembly で走らないための唯一の同期点。
+    void ensure_csharp_ready_for_play();
     void enter_object_play_mode(bool show_loading_screen = true);
     void exit_object_play_mode();
     bool complete_object_play_mode_start();
@@ -30,7 +45,45 @@
     //
     // World の実体が入れ替わったら、それに紐づくものを全部張り直す。
     // 呼び出しは毎フレームの安全点 1 か所だけ。
+    // Script の Debug.Log / LogWarning / LogError の受け口。
+    //
+    // RuntimeContext::Log は sink が無いとメッセージを捨てる。
+    // ここを繋ぐまで、ゲーム側が Debug.Log を書いても
+    // Editor Console にも engine ログにも何も出ていなかった。
+    class runtime_log_sink final : public ReplayEngine::Runtime::IRuntimeLogSink
+    {
+    public:
+        explicit runtime_log_sink(framework& owner) noexcept : owner_(owner) {}
+        void Write(ReplayEngine::Runtime::LogLevel level, const std::string& message,
+            const ReplayEngine::Runtime::ObjectHandle& source) override;
+
+        // 溜めた繰り返しを出す。フレームの同期点から毎フレーム呼ばれる。
+        // force でないときは、間隔が空くまで何も出さない。
+        void Flush(bool force = false);
+
+    private:
+        // 同じ内容が続いたぶんは数えるだけにする。
+        //
+        // 【なぜ抑制が要るか】
+        //   Unity では Update の中で Debug.Log を書くのが普通の使い方。
+        //   push_editor_log は 1 行ごとに editor_log.txt を開き直すので、
+        //   毎フレーム呼ばれるとファイルを毎秒 60 回開くことになる。
+        //   ScriptRuntime のエラー抑制と同じ作法にする。
+        //   最初の数回はそのまま出し、以降は一定間隔でまとめる。
+        static constexpr int verbatim_limit = 5;
+        static constexpr std::chrono::milliseconds summary_interval{ 1000 };
+
+        framework& owner_;
+        std::string pending_severity_;
+        std::string pending_message_;
+        int repeat_count_ = 0;
+        int verbatim_count_ = 0;
+        std::chrono::steady_clock::time_point last_summary_{};
+    };
+    std::unique_ptr<runtime_log_sink> object_runtime_log_sink;
+
     void initialize_runtime_services();
+    void log_csharp_startup_state();
     void tick_runtime_scene_flow();
     void rebind_runtime_world_if_changed();
     void update_editor_play_loading();
@@ -180,6 +233,7 @@ private:
     const ReplayEngine::Editor::EditorCameraPreset& active_editor_camera_preset() const;
     bool switch_editor_camera_preset(const std::string& preset_id);
     bool save_active_editor_camera_preset();
+    void flush_editor_camera_preset_save();
     bool make_active_editor_camera_preset_personal_copy();
 
     // 編集カメラ状態の保存・復元。Scene ファイルには一切書き込まない。

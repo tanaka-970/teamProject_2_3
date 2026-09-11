@@ -1710,7 +1710,9 @@
             ImGuiTreeNodeFlags header_flags)
         {
             header_flags |= ImGuiTreeNodeFlags_OpenOnArrow |
-                ImGuiTreeNodeFlags_SpanAvailWidth;
+                ImGuiTreeNodeFlags_OpenOnDoubleClick |
+                ImGuiTreeNodeFlags_SpanAvailWidth |
+                ImGuiTreeNodeFlags_NoTreePushOnOpen;
             if (!has_ui_child)
                 header_flags |= ImGuiTreeNodeFlags_Leaf |
                     ImGuiTreeNodeFlags_NoTreePushOnOpen;
@@ -1787,7 +1789,7 @@
                     ui_hierarchy_drop_request.target = Core::ObjectID::Invalid();
                     ui_hierarchy_drop_request.placement = UIHierarchyDropPlacement::Root;
                 }
-            }, draw_drop);
+            }, draw_drop, true);
 
         if (item.request.Valid() && !ui_hierarchy_drop_request.child.Valid() &&
             item.request.destination < siblings.size())
@@ -1801,6 +1803,7 @@
 
         if (item.opened && has_ui_child)
         {
+            ImGui::TreePush(item_id.c_str());
             std::vector<Core::GameObject*> children;
             for (Core::GameObject* child : object.Children())
             {
@@ -1874,8 +1877,13 @@ void framework::draw_ui_hierarchy()
         any_visible_root = true;
         visible_roots.push_back(root);
     }
+    // Keep the ordinary fold state when a search temporarily reveals descendants.
+    ImGui::PushID("CompactUIHierarchy");
+    ImGui::PushID(UIHierarchyFilterActive(filter));
     for (Core::GameObject* root : visible_roots)
         DrawUINode(object_editor_context, *root, filter, visible_roots, ui_selection_changed);
+    ImGui::PopID();
+    ImGui::PopID();
     // UI 階層で選んだものも Delete の対象にする。
     // framework_class.h の Delete 処理が selected_editor_object を見ているため。
     if (ui_selection_changed) selected_editor_object = editor_selection::game_object;

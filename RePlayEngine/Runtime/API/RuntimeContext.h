@@ -69,6 +69,25 @@ namespace ReplayEngine::Runtime
         ParticleStop = 11,
         ParticleEmit = 12,
         ParticleClear = 13,
+
+        // CharacterMotor の操作。末尾へ足すだけなので ABI は変わらない。
+        //
+        // Move は毎フレーム来るので、確保が起きない float 2 つで渡す。
+        //   a = 進む向きの X / b = 進む向きの Z / integer = 速度倍率 × 1000
+        // Impulse と Teleport はまれにしか来ないので text へ "x,y,z" で渡す。
+        MotorMove = 14,
+        MotorImpulse = 15,
+        MotorTeleport = 16,
+
+        // Character Input への書き込み。AI や replay が人間と同じ経路を通る。
+        //   SetAxes  a = 横 / b = 縦
+        //   SetDash  integer が 0 以外で押しっ放し
+        InputSetAxes = 17,
+        InputSetDash = 18,
+        InputJump = 19,
+
+        // 末尾の番兵。範囲判定はこれを見るので追加時に直し忘れない。
+        Count,
     };
 
     struct PhysicsQueryRequest final
@@ -278,6 +297,11 @@ namespace ReplayEngine::Runtime
         // 名前を一意にするのは呼び出し側の責任。
         ObjectHandle FindByName(const std::string& name) const noexcept;
 
+        // Authoring API 用。Unity の GameObject.Find と同じく、
+        // activeInHierarchy の GameObject だけを対象に、名前または '/' 区切りの
+        // Hierarchy path で検索する。Low-Level FindByName の意味は変えない。
+        ObjectHandle FindActiveByName(const std::string& name) const noexcept;
+
         ObjectHandle ControlledObject() const noexcept;
 
         RuntimeStatus GetName(const ObjectHandle& handle, std::string& out) const;
@@ -341,6 +365,29 @@ namespace ReplayEngine::Runtime
             Core::ComponentTypeID type_id, ComponentHandle& out);
         RuntimeStatus SetComponentEnabled(const ComponentHandle& handle, bool enabled);
         RuntimeStatus IsComponentEnabled(const ComponentHandle& handle, bool& out) const;
+
+        // Component がまだ生きているか。
+        //
+        // GameObject が生きていても、その上の Component だけ壊れていることがある。
+        // Handle の世代照合まで通して判定する。
+        // Script 型を指定して ScriptComponent を足す。
+        //
+        // Managed の MonoBehaviour は Native の Component として入るのではなく、
+        //   GameObject -> ScriptComponent -> Managed instance
+        // という既存の構造のままになる。ここはその ScriptComponent を
+        // 型 GUID 付きで作るだけで、別の Component システムは作らない。
+        RuntimeStatus AddScriptComponent(const ObjectHandle& owner,
+            std::uint64_t type_high, std::uint64_t type_low, ComponentHandle& out);
+
+        RuntimeStatus IsComponentAlive(const ComponentHandle& handle, bool& out) const;
+
+        // 実行時 ColliderID から、その Collider の ComponentHandle を引く。
+        //
+        // 接触イベントは「どの Collider に当たったか」を ID で持っている。
+        // GameObject の最初の Collider で代用すると、頭に当たったのか
+        // 足に当たったのかが区別できない。
+        RuntimeStatus FindColliderComponent(const ObjectHandle& owner,
+            std::uint32_t collider_id, ComponentHandle& out) const;
         RuntimeStatus GetScriptField(const ComponentHandle& handle,
             const std::string& field_name, Reflection::PropertyValue& out) const;
         RuntimeStatus SetScriptField(const ComponentHandle& handle,
@@ -369,6 +416,41 @@ namespace ReplayEngine::Runtime
         //
         // 力は必ず Component の公開 API を通す。
         // PhysicsDynamicsWorld の内部 Body や Solver はスクリプトへ出さない。
+
+        // ---- Landscape --------------------------------------------------
+        //
+        // 地形の高さを Script から読み書きする。
+        // 高さの配列は PropertyRegistry では表せないので、ここは専用の入口にする。
+        // SetHeight は LandscapeData の Revision を上げるだけで、
+        // 描画メッシュと衝突形状は既存の Revision 追従がそのまま作り直す。
+        RuntimeStatus LandscapeInfo(const ComponentHandle& handle,
+            int& out_width, int& out_height, float& out_cell_size) const;
+        RuntimeStatus LandscapeGetHeight(const ComponentHandle& handle,
+            int x, int z, float& out_height) const;
+        RuntimeStatus LandscapeSetHeight(const ComponentHandle& handle,
+            int x, int z, float value);
+        // ワールド座標（地形ローカルの XZ）から双一次補間で高さを取る。
+        RuntimeStatus LandscapeSampleHeight(const ComponentHandle& handle,
+            float local_x, float local_z, float& out_height) const;
+        // 彫刻。既存の LandscapeEditorTool をそのまま 1 ストロークとして使う。
+        //
+        // mode は Landscape::LandscapeBrushMode と同じ並び。
+        //   0=Raise 1=Lower 2=Smooth 3=Flatten 4=Noise 5=Subdivide
+        // direction は Landscape::LandscapeSculptDirection と同じ並び。
+        //   0=LocalY 1=VertexNormal
+        // ここでブラシを作り直さないのは、Editor と同じ形にするため。
+        // 別実装にすると、Editor で作った地形と Script で作った地形が
+        // 同じ操作でも違う形になる。
+        RuntimeStatus LandscapeSculpt(const ComponentHandle& handle,
+            const DirectX::XMFLOAT3& local_center, int mode, int direction,
+            float radius, float strength, float falloff, float flatten_height,
+            float noise_scale, float delta_time);
+
+        // 地形へのレイ。当たった位置と法線を返す。原点と向きは地形ローカル。
+        RuntimeStatus LandscapeRaycast(const ComponentHandle& handle,
+            const DirectX::XMFLOAT3& local_origin, const DirectX::XMFLOAT3& local_direction,
+            float max_distance, DirectX::XMFLOAT3& out_position,
+            DirectX::XMFLOAT3& out_normal, float& out_distance) const;
 
         RuntimeStatus RigidbodyAddForce(const ComponentHandle& handle,
             const DirectX::XMFLOAT3& force);

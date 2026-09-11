@@ -10,6 +10,7 @@
 #include <chrono>
 #include <iterator>
 #include <utility>
+#include "../Shaders/ShaderPack.h"
 
 namespace ReplayEngine::Rendering::DX12
 {
@@ -52,6 +53,7 @@ namespace ReplayEngine::Rendering::DX12
         const std::filesystem::path& library_path) noexcept
     {
         Shutdown();
+        if (ShaderPack::IsStandalone()) { cache_only_ = true; return true; }
         if (library_path.empty()) return false;
         library_ = LoadLibraryW(library_path.wstring().c_str());
         if (library_ == nullptr) return false;
@@ -69,6 +71,7 @@ namespace ReplayEngine::Rendering::DX12
 
     void D3D12ShaderCompiler::Shutdown() noexcept
     {
+        cache_only_ = false;
         compiler_.Reset();
         utils_.Reset();
         create_instance_ = nullptr;
@@ -173,6 +176,8 @@ namespace
         std::wstring_view entry_point, std::wstring_view target_profile,
         const D3D12ShaderCompileOptions& options) const
     {
+        if (ShaderPack::IsStandalone())
+            return ShaderPack::Lookup(source_name, entry_point, target_profile, options);
         D3D12ShaderCompileResult result;
         if (!IsInitialized() || source.empty() || entry_point.empty() ||
             target_profile.empty())
@@ -201,10 +206,11 @@ namespace
                 define.value.size() * sizeof(wchar_t));
         }
         const std::filesystem::path cache_path = ShaderCachePath(cache_key);
-        if (ReadShaderCache(cache_path, result.bytecode))
+        if (!ShaderPack::IsRecordingExport() && ReadShaderCache(cache_path, result.bytecode))
         {
             result.succeeded = true;
             result.status = S_OK;
+            ShaderPack::Record(source_name, entry_point, target_profile, options, result);
             return result;
         }
 
@@ -223,6 +229,7 @@ namespace
             AppendArgument(argument_storage, L"-Qembed_debug");
         }
         AppendArgument(argument_storage, options.optimize ? L"-O3" : L"-Od");
+        if (!options.debug) AppendArgument(argument_storage, L"-Qstrip_debug");
         if (options.warnings_as_errors) AppendArgument(argument_storage, L"-WX");
 
         const std::filesystem::path include_directory = source_name.has_parent_path()
@@ -301,6 +308,7 @@ namespace
         // 診断が出たシェーダはキャッシュしない。読み出しでは診断文を再現できず、
         // 2 回目以降に警告が黙って消えるため。綺麗に通ったものだけ保存する。
         if (result.diagnostics.empty()) WriteShaderCache(cache_path, result.bytecode);
+        ShaderPack::Record(source_name, entry_point, target_profile, options, result);
         return result;
     }
 
@@ -319,6 +327,8 @@ namespace
         std::wstring_view target_profile,
         const D3D12ShaderCompileOptions& options) const
     {
+        if (ShaderPack::IsStandalone())
+            return ShaderPack::Lookup(source_path, entry_point, target_profile, options);
         std::ifstream file(source_path, std::ios::binary);
         if (!file)
         {
@@ -333,6 +343,7 @@ namespace
 
     std::filesystem::path D3D12ShaderCompiler::FindDefaultLibraryPath()
     {
+        if (ShaderPack::IsStandalone()) return {};
         std::vector<std::filesystem::path> candidates;
         const std::filesystem::path relative =
             std::filesystem::path("ThirdParty") / "DXC" / "bin" / "x64" /

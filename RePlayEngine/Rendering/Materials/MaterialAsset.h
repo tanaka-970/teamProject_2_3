@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "../ShaderStack/ShaderLayerStack.h"
 #include "../../Reflection/Property/PropertyBag.h"
@@ -72,6 +72,9 @@ namespace ReplayEngine::Rendering
         float pixelate_grid = 6.0f;
         float pixelate_strength = 1.0f;
 
+        // Published by material load/save/preview; Inspector performs no filesystem polling.
+        static void PublishShadingMetadata(const std::filesystem::path& path, int shading_model);
+        static int LoadedShadingModel(const std::filesystem::path& path);
         static bool Save(const MaterialAsset& material,
             const std::filesystem::path& path, std::string& error);
         static bool Load(const std::filesystem::path& path,

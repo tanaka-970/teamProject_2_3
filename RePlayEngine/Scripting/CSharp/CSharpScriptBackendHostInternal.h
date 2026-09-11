@@ -53,6 +53,7 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         using set_field_fn = int(__cdecl*)(std::uint64_t, const char*, int, const char*);
         using get_field_fn = int(__cdecl*)(std::uint64_t, const char*, char*, int);
         using set_time_fn = int(__cdecl*)(float, float, std::uint64_t);
+        using pump_events_fn = int(__cdecl*)(float);
         using live_instance_count_fn = int(__cdecl*)();
         using last_error_fn = int(__cdecl*)(char*, int, char*, int, int*);
 
@@ -193,6 +194,33 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             DirectX::XMFLOAT3, DirectX::XMFLOAT3, Runtime::ObjectHandle);
         using pending_deferred_count_callback = int(__cdecl*)(std::uint64_t*);
         using has_component_callback = int(__cdecl*)(Runtime::ObjectHandle, std::uint32_t, int*);
+
+        // v17. Landscape。高さの配列は PropertyRegistry で表せないので専用の入口にする。
+        using landscape_info_callback =
+            int(__cdecl*)(Runtime::ComponentHandle, int*, int*, float*);
+        using landscape_get_height_callback =
+            int(__cdecl*)(Runtime::ComponentHandle, int, int, float*);
+        using landscape_set_height_callback =
+            int(__cdecl*)(Runtime::ComponentHandle, int, int, float);
+        using landscape_sample_callback =
+            int(__cdecl*)(Runtime::ComponentHandle, float, float, float*);
+        using landscape_sculpt_callback =
+            int(__cdecl*)(Runtime::ComponentHandle, DirectX::XMFLOAT3, int, int,
+                float, float, float, float, float, float);
+        // v18. Component の生存判定と、ColliderID からの Collider 解決。
+        // v19. 型 GUID を指定して ScriptComponent を足す。
+        using add_script_component_callback =
+            int(__cdecl*)(Runtime::ObjectHandle, std::uint64_t, std::uint64_t,
+                Runtime::ComponentHandle*);
+
+        using component_alive_callback =
+            int(__cdecl*)(Runtime::ComponentHandle, int*);
+        using find_collider_callback =
+            int(__cdecl*)(Runtime::ObjectHandle, std::uint32_t, Runtime::ComponentHandle*);
+
+        using landscape_raycast_callback =
+            int(__cdecl*)(Runtime::ComponentHandle, DirectX::XMFLOAT3, DirectX::XMFLOAT3,
+                float, DirectX::XMFLOAT3*, DirectX::XMFLOAT3*, float*);
         using get_float_value_callback = int(__cdecl*)(float*);
         using get_bool_value_callback = int(__cdecl*)(int*);
 

@@ -53,6 +53,14 @@ void framework::draw_render_stats_overlay()
         ImGui::SameLine();
         ImGui::TextDisabled(u8"OFF時はScope/Queryを発行しません");
 
+        bool vsync = dx12_device_context.PresentSyncInterval() != 0;
+        if (ImGui::Checkbox(u8"垂直同期 (VSync)", &vsync))
+            dx12_device_context.SetPresentSyncInterval(vsync ? 1u : 0u);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(u8"OFF は画面の更新周期による待ちを減らします。消費電力が増える場合があります。");
+        ImGui::SameLine();
+        ImGui::TextDisabled(vsync ? u8"画面の更新周期に同期" : u8"FPS 上限なし");
+
         static float frame_budget_ms = 16.6f;
         ImGui::SetNextItemWidth(90.0f);
         ImGui::InputFloat(u8"Frame Budget ms", &frame_budget_ms, 0.1f, 1.0f, "%.2f");
@@ -90,7 +98,7 @@ void framework::draw_render_stats_overlay()
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip(u8"GBuffer パスだけを視錐台で判定した数です。影のパスは別のカメラなので含みません。まだ実際には捨てていません。");
 
-        // VSync 待ちを除いた実力値。BeginFrame は前フレームの GPU 完了待ちで、仕事ではない。
+        // BeginFrame の待ちを除いた推定値であり、上限解除後の実測 FPS ではない。
         double gpu_wait_ms = 0.0;
         for (const auto& scope : stats.Scopes())
         {
@@ -107,7 +115,7 @@ void framework::draw_render_stats_overlay()
         if (limiting_ms > 0.0)
         {
             ImGui::TextColored(ImVec4(0.55f, 0.85f, 1.0f, 1.0f),
-                u8"上限なし %.1f FPS（CPU実仕事 %.2f ms / GPU待ち %.2f ms）",
+                u8"待ち除外の推定 %.1f FPS（CPU実仕事 %.2f ms / GPU待ち %.2f ms）",
                 1000.0 / limiting_ms, cpu_work_ms, gpu_wait_ms);
         }
         ImGui::TextColored(cpu_over_budget ? ImVec4(1.0f, 0.35f, 0.25f, 1.0f)
@@ -145,12 +153,14 @@ void framework::draw_render_stats_overlay()
             ImGui::TextDisabled(u8"GPU Query pending: %llu frame(s)（CPUは待機しません）",
                 static_cast<unsigned long long>(pending_gpu_frames));
 
-        const auto cpu_history = stats.CpuFrameHistoryStats();
-        const auto gpu_history = stats.GpuFrameHistoryStats();
         if (ImGui::CollapsingHeader(u8"Frame履歴", ImGuiTreeNodeFlags_DefaultOpen))
         {
-            std::vector<float> cpu_values;
-            std::vector<float> gpu_values;
+            const auto cpu_history = stats.CpuFrameHistoryStats();
+            const auto gpu_history = stats.GpuFrameHistoryStats();
+            static std::vector<float> cpu_values;
+            static std::vector<float> gpu_values;
+            cpu_values.clear();
+            gpu_values.clear();
             cpu_values.reserve(stats.History().size());
             gpu_values.reserve(stats.History().size());
             for (const auto& frame : stats.History())
@@ -186,10 +196,6 @@ void framework::draw_render_stats_overlay()
             ImGui::Combo(u8"表示", &scope_view, view_names, 3);
 
             static std::string selected_path;
-            std::unordered_map<std::uint32_t, const ReplayEngine::Rendering::RenderStats::ScopeSnapshot*>
-                by_id;
-            for (const auto& scope : stats.Scopes()) by_id[scope.id] = &scope;
-
             const auto draw_scope_row = [&](const auto& scope, double parent_cpu, double parent_gpu)
             {
                 const double cpu_percent = parent_cpu > 0.0 ? scope.cpu_ms * 100.0 / parent_cpu : 0.0;
@@ -257,6 +263,9 @@ void framework::draw_render_stats_overlay()
             }
             else
             {
+                std::unordered_map<std::uint32_t, const ReplayEngine::Rendering::RenderStats::ScopeSnapshot*>
+                    by_id;
+                for (const auto& scope : stats.Scopes()) by_id[scope.id] = &scope;
                 std::vector<const ReplayEngine::Rendering::RenderStats::ScopeSnapshot*> sorted;
                 for (const auto& scope : stats.Scopes()) sorted.push_back(&scope);
                 // scope_view は static なので捕捉できない（C3495）。直接参照する。

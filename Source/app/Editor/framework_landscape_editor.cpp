@@ -1,4 +1,4 @@
-﻿// Landscape editor の責務を 3 つのファイルへ分けている:
+// Landscape editor の責務を 3 つのファイルへ分けている:
 //   framework_landscape_editor.cpp           … Toolbar と編集状態のリセット（このファイル）
 //   framework_landscape_editor_viewport.cpp … Scene View の Raycast・Hover・編集操作
 //   framework_landscape_editorInternal.h     … 分割後の Landscape helper 共通部
@@ -310,39 +310,21 @@ void framework::draw_landscape_editor_toolbar()
 void framework::reset_landscape_editor_state(bool rollback_stroke)
 {
 #ifdef USE_IMGUI
-    const bool subdivide_stroke = landscape_stroke_transaction &&
-        !landscape_editor_tool.StrokeActive();
     std::unique_ptr<ReplayEngine::Landscape::LandscapeUndoCommand> command;
     if (landscape_editor_tool.StrokeActive())
     {
         if (rollback_stroke) landscape_editor_tool.CancelStroke();
         else command = landscape_editor_tool.EndStroke();
     }
-
-    // ブラシ中に止めた衝突形状の再構築を、選択変更やシーン切替でも必ず解除する。
-    // LandscapeEditorTool が保持する非所有 data pointer も Scene を跨いで残さない。
-    ReplayEngine::Scene::Scene& scene = active_object_scene();
-    for (std::size_t index = 0; index < scene.GameObjectCount(); ++index)
-    {
-        auto* object = scene.GameObjectAt(index);
-        if (object == nullptr || object->PendingDestroy()) continue;
+    auto* object = active_object_scene().FindGameObjectByID(landscape_stroke_object);
+    if (object && !object->PendingDestroy())
         if (auto* collider = object->GetComponent<ReplayEngine::Components::LandscapeColliderComponent>())
             collider->EndInteractiveEdit();
-    }
-    if (landscape_stroke_transaction)
-    {
-        if (subdivide_stroke)
-        {
-            // トポロジー編集は取り消すだけでは復元されないため、変更済みなら中断時も履歴へ確定する。
-            if (landscape_subdivide_stroke_changed) object_editor_context.CommitEdit();
-            else object_editor_context.CancelEdit();
-        }
-        else if (!rollback_stroke && command != nullptr)
-            object_editor_context.CommitLandscapeEdit(landscape_stroke_object, std::move(command));
-        landscape_stroke_transaction = false;
-        landscape_subdivide_stroke_changed = false;
-        landscape_stroke_object = ReplayEngine::Core::ObjectID::Invalid();
-    }
+    if (!rollback_stroke && command)
+        object_editor_context.CommitLandscapeEdit(landscape_stroke_object, std::move(command));
+    landscape_stroke_transaction = false;
+    landscape_subdivide_stroke_changed = false;
+    landscape_stroke_object = ReplayEngine::Core::ObjectID::Invalid();
     landscape_edit_enabled = false;
     landscape_selected_face = no_face;
     landscape_bridge_a0 = landscape_bridge_a1 = no_vertex;

@@ -246,6 +246,18 @@ namespace ReplayEngine::Core::Detail
             PropertyRegistry::Register<LandscapeRendererComponent>(
                 MakeProperty("tint", &LandscapeRendererComponent::tint).Display("色").AsColor());
             PropertyRegistry::Register<LandscapeRendererComponent>(
+                MakeProperty("base_color_texture", &LandscapeRendererComponent::base_color_texture)
+                    .Display(u8"ベースカラーテクスチャ").AsAssetPath().OfAssetType("Image")
+                    .Tooltip(u8"地形へ貼る色テクスチャ。未設定なら色だけで描画する。"));
+            PropertyRegistry::Register<LandscapeRendererComponent>(
+                MakeProperty("uv_tiling", &LandscapeRendererComponent::uv_tiling)
+                    .Display(u8"タイリング").Range(0.0001, 10000.0).Step(0.1)
+                    .Tooltip(u8"地形の UV を拡大してテクスチャを繰り返す倍率。"));
+            PropertyRegistry::Register<LandscapeRendererComponent>(
+                MakeProperty("load_range", &LandscapeRendererComponent::load_range)
+                    .Display(u8"ロード範囲").Range(0.0, 1000000.0).Step(1.0)
+                    .Tooltip(u8"カメラからチャンク境界までのロード距離。0 は無制限。"));
+            PropertyRegistry::Register<LandscapeRendererComponent>(
                 MakeProperty("visible", &LandscapeRendererComponent::visible).Display("表示"));
             PropertyRegistry::Register<LandscapeRendererComponent>(
                 MakeProperty("cast_shadow", &LandscapeRendererComponent::cast_shadow).Display("影を落とす"));

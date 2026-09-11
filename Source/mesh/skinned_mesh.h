@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <cereal/archives/binary.hpp>
 #include <cereal/types/memory.hpp>
 #include <cereal/types/vector.hpp>
@@ -343,6 +343,12 @@ public:
     skinned_mesh(const std::filesystem::path& filename, bool triangulate = false,
         float sampling_rate = 0);
     virtual ~skinned_mesh() = default;
+    const std::vector<std::string>& MaterialSubsetNames() const;
+    void InvalidateMaterialSubsetNames() const { material_subset_names_valid_ = false; }
+private:
+    mutable bool material_subset_names_valid_ = false;
+    mutable std::vector<std::string> material_subset_names_;
+public:
 
     // UNIT24 手順4: skeleton 情報を抽出する関数 [cite: 145-146]
 #if REPLAY_ENABLE_FBX_IMPORTER

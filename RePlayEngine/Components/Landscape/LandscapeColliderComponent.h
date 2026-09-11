@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Physics/ColliderComponent.h"
+#include "../../Landscape/LandscapeChunk.h"
 #include "../../Physics/SphereCast.h"
 #include "../../Physics/CookedMeshCollision.h"
 
@@ -17,6 +18,14 @@ namespace ReplayEngine::Components
     {
         REPLAY_COMPONENT_BODY(LandscapeColliderComponent)
     public:
+        struct CookedChunk
+        {
+            Landscape::LandscapeChunkCoord coord;
+            std::uint64_t source_revision = 0;
+            std::shared_ptr<const Physics::CookedMeshCollisionData> cooked;
+            std::vector<std::uint32_t> face_indices;
+        };
+
         ColliderShape Shape() const noexcept override { return ColliderShape::Landscape; }
         bool ComputeWorldBounds(DirectX::XMFLOAT3& minimum,
             DirectX::XMFLOAT3& maximum) const override;
@@ -32,11 +41,14 @@ namespace ReplayEngine::Components
         bool InteractiveEditActive() const noexcept { return interactive_edit_active_; }
 
         bool ReadyForQuery() const noexcept
-        { return cooked_ != nullptr && cooked_->Valid() && ActiveInHierarchy(); }
+        { return cooked_chunk_count_ != 0 && ActiveInHierarchy(); }
 
-        const std::vector<Physics::Triangle>& Triangles() const noexcept { return triangles_; }
-        const std::shared_ptr<const Physics::CookedMeshCollisionData>& Cooked() const noexcept
-        { return cooked_; }
+        const std::vector<Physics::Triangle>& Triangles() const;
+        const std::shared_ptr<const Physics::CookedMeshCollisionData>& Cooked() const;
+        const std::vector<CookedChunk>& CookedChunks() const noexcept { return cooked_chunks_; }
+        std::size_t CookedChunkCount() const noexcept { return cooked_chunk_count_; }
+        std::size_t LastRecookedChunkCount() const noexcept { return last_recooked_chunk_count_; }
+        std::size_t LastRecookedTriangleCount() const noexcept { return last_recooked_triangle_count_; }
         const DirectX::XMFLOAT4X4& WorldMatrix() const noexcept { return world_; }
         const DirectX::XMFLOAT4X4& InverseWorldMatrix() const noexcept { return inverse_world_; }
         bool NegativeScale() const noexcept { return negative_scale_; }
@@ -50,8 +62,16 @@ namespace ReplayEngine::Components
         bool debug_draw_wireframe = false;
 
     private:
-        std::vector<Physics::Triangle> triangles_;
-        std::shared_ptr<const Physics::CookedMeshCollisionData> cooked_;
+        void RebuildLegacyTriangles() const;
+
+        std::vector<CookedChunk> cooked_chunks_;
+        mutable std::vector<Physics::Triangle> triangles_;
+        mutable std::shared_ptr<const Physics::CookedMeshCollisionData> cooked_;
+        mutable bool legacy_triangles_dirty_ = true;
+        mutable bool legacy_cooked_dirty_ = true;
+        std::size_t cooked_chunk_count_ = 0;
+        std::size_t last_recooked_chunk_count_ = 0;
+        std::size_t last_recooked_triangle_count_ = 0;
         std::uint64_t geometry_revision_ = 0;
         bool cooked_double_sided_ = true;
         float cooked_cell_size_ = 0.0f;
