@@ -2,6 +2,10 @@
 
 void framework::update(float elapsed_time)
 {
+    // ファイル探索は描画の外で、指定変更か明示的な再読込のときだけ行う。
+    const bool icon_atlas_changed = editor_icon_provider.SetAtlasGuid(project_settings.IconAtlasGuid());
+    if (editor_icons_reload_pending && !icon_atlas_changed) editor_icon_provider.Reload();
+    editor_icons_reload_pending = false;
     ReplayEngine::Rendering::Stats().BeginFrame();
     REPLAY_PROFILE_SCOPE("Update");
     // 基準画像を撮る間はワールドを止める。

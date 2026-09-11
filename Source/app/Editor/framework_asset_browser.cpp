@@ -41,10 +41,18 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
         return false;
     }
 
+    ReplayEngine::Core::GameObject* drop_object = drop_target.Valid()
+        ? object_scene.FindGameObjectByID(drop_target) : nullptr;
+    if (drop_target.Valid() && (drop_object == nullptr || drop_object->PendingDestroy()))
+    {
+        object_editor_context.SetStatus("配置先の GameObject が見つかりません");
+        return false;
+    }
+
     if (asset.kind == ReplayEngine::Assets::AssetKind::Material)
     {
         ReplayEngine::Core::GameObject* target = drop_target.Valid()
-            ? object_scene.FindGameObjectByID(drop_target)
+            ? drop_object
             : object_editor_context.Selection().ResolvePrimary(object_scene);
         if (target == nullptr)
         {
@@ -89,7 +97,7 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
         namespace Scripting = ReplayEngine::Scripting;
 
         ReplayEngine::Core::GameObject* target = drop_target.Valid()
-            ? object_scene.FindGameObjectByID(drop_target)
+            ? drop_object
             : object_editor_context.Selection().ResolvePrimary(object_scene);
         if (target == nullptr)
         {
@@ -155,9 +163,22 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
             object_editor_context.SetStatus("Prefab配置失敗: " + error);
             return false;
         }
+        ReplayEngine::Core::GameObject* root_object = object_scene.FindGameObjectByID(root);
+        if (drop_target.Valid() &&
+            (root_object == nullptr || !root_object->SetParent(drop_object, true)))
+        {
+            if (root_object != nullptr)
+            {
+                object_scene.DestroyGameObject(root_object);
+                object_scene.ProcessPendingOperations();
+            }
+            object_editor_context.CancelEdit();
+            object_editor_context.SetStatus("Prefabの親を設定できませんでした");
+            return false;
+        }
         if (drop_world_position != nullptr)
         {
-            if (auto* root_object = object_scene.FindGameObjectByID(root))
+            if (root_object != nullptr)
                 root_object->GetTransform().SetWorldPosition(*drop_world_position);
         }
         object_editor_context.CommitEdit();
@@ -255,6 +276,18 @@ bool framework::place_asset_in_object_scene(const ReplayEngine::Assets::AssetRec
                 ReplayEngine::Components::MeshColliderComponent::MeshSource_Renderer;
             collider->collision_layer = ReplayEngine::Physics::CollisionLayers::Environment;
             collider->is_trigger = false;
+        }
+    }
+
+    if (drop_target.Valid())
+    {
+        if (!object->SetParent(drop_object, true))
+        {
+            object_scene.DestroyGameObject(object);
+            object_scene.ProcessPendingOperations();
+            object_editor_context.CancelEdit();
+            object_editor_context.SetStatus("Assetの親を設定できませんでした");
+            return false;
         }
     }
 

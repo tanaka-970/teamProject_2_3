@@ -52,6 +52,14 @@ namespace ReplayEngine::Assets
             const std::filesystem::path& destination,
             Format format = Format::Auto);
 
+        // ファイルを作らず DDS のバイト列を返す。Sprite Atlas の埋め込み用。
+        static Result CompressRgbaToMemory(const std::uint8_t* rgba, int width, int height,
+            std::vector<std::uint8_t>& out, Format format = Format::Auto);
+
+        // source を読み、DDS のバイト列を返す。destination を持たない Compress。
+        static Result CompressToMemory(const std::filesystem::path& source,
+            std::vector<std::uint8_t>& out, Format format = Format::Auto);
+
         // フォルダ内の画像をまとめて変換する。既に .dds があるものは飛ばす。
         // 画像ごとに独立しているのでParallelLoaderで並列化する。
         struct BatchResult

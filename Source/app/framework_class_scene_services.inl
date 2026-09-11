@@ -129,12 +129,17 @@ private:
     {
         bool include_auxiliary_geometry = true;
         bool include_active_lighting = true;
+        // 単体表示。有効ならこの GameObject と子孫の描画物だけを積む。
+        ReplayEngine::Core::ObjectID isolate_root{};
     };
     bool build_dx12_static_scene(
         ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
         const ReplayEngine::Scene::Scene& scene,
         const ReplayEngine::Rendering::RenderItemList& render_items,
         float elapsed_time, dx12_scene_build_options options = {});
+    // Atlas を更新時刻付きで覚える。毎フレーム同じファイルを読み直さないため。
+    const ReplayEngine::Assets::SpriteAtlasAsset* resolve_sprite_atlas(
+        const std::filesystem::path& path);
     // Canvas/RectTransform の解決結果を、GPU APIを呼ばないDX12 UIコマンドへ変換する。
     bool build_dx12_ui(
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame);
@@ -220,6 +225,9 @@ private:
     // F キーのフォーカス。選択対象の World Bounds を求めて収める。
     // Undo 履歴へは積まない（Scene のデータを変更していないため）。
     void focus_editor_camera_on_selection();
+    // 単体表示の出入り。Scene のデータは変えず、描画とカメラだけを切り替える。
+    void begin_object_isolate();
+    void end_object_isolate();
 
     void draw_editor_camera_settings();
     void draw_editor_camera_preset_manager();
@@ -390,6 +398,7 @@ private:
         const rig_pose_override& primary_now, int operation);
     void begin_rig_pose_edit(std::uint64_t owner, std::string label);
     void commit_rig_pose_edit();
+    void cancel_rig_pose_edit();
     bool undo_rig_pose_edit();
     bool redo_rig_pose_edit();
     // 既存のモデルを地形にする。対象は GameObject で受ける。
@@ -401,6 +410,9 @@ private:
     bool project_world_to_screen(const DirectX::XMMATRIX& view_projection,
         const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
         ImVec2& out) const noexcept;
+    bool project_world_to_screen(const DirectX::XMMATRIX& view_projection,
+        const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
+        ImVec2& out, float& depth) const noexcept;
     void stop_motion_preview();
     void capture_motion_preview_targets();
     void apply_motion_preview_time();

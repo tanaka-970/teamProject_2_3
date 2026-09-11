@@ -1467,9 +1467,32 @@ bool framework::build_dx12_static_scene(
         return bounds;
     };
 
+    // 単体表示の対象。毎フレーム作り直すが、歩くのは部分木だけなので安い。
+    std::unordered_set<std::uint64_t> isolate_ids;
+    if (options.isolate_root.Valid())
+    {
+        if (const ReplayEngine::Core::GameObject* root =
+            scene.FindGameObjectByID(options.isolate_root))
+        {
+            std::vector<const ReplayEngine::Core::GameObject*> pending{ root };
+            while (!pending.empty())
+            {
+                const ReplayEngine::Core::GameObject* current = pending.back();
+                pending.pop_back();
+                if (current == nullptr) continue;
+                isolate_ids.insert(current->ID().Value());
+                for (const ReplayEngine::Core::GameObject* child : current->Children())
+                    pending.push_back(child);
+            }
+        }
+    }
+
     for (const RenderItem& source_item : render_items.Items())
     {
         if (source_item.mesh_asset.empty()) continue;
+        if (!isolate_ids.empty() &&
+            isolate_ids.find(source_item.owner.Value()) == isolate_ids.end())
+            continue;
 
         const RenderItem item = resolve_render_item_material(source_item);
         if (source_item.skinned)

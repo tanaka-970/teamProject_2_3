@@ -232,6 +232,8 @@ void framework::draw_sprite_atlas_editor()
                 begin_sprite_atlas_edit("Atlas画像を変更");
                 sprite_atlas_editor_asset.image_guid = selected->guid;
                 sprite_atlas_editor_asset.embedded_texture_path.clear();
+                // 埋め込みが残ると新しい画像より優先されてしまう。
+                sprite_atlas_editor_asset.embedded_texture_bytes.clear();
                 commit_sprite_atlas_edit();
             }
             ReplayEngine::Editor::EditorHelp::Item("button.sprite_atlas.set_image");
@@ -255,6 +257,8 @@ void framework::draw_sprite_atlas_editor()
                         begin_sprite_atlas_edit("Atlas画像を変更");
                         sprite_atlas_editor_asset.image_guid = record->guid;
                         sprite_atlas_editor_asset.embedded_texture_path.clear();
+                        // 埋め込みが残ると新しい画像より優先されてしまう。
+                        sprite_atlas_editor_asset.embedded_texture_bytes.clear();
                         commit_sprite_atlas_edit();
                     }
                 }
@@ -277,13 +281,37 @@ void framework::draw_sprite_atlas_editor()
     }
     if (atlas_texture_path.empty() && image_record != nullptr)
         atlas_texture_path = image_record->source_path;
-    const ImTextureID atlas_texture_id = atlas_texture_path.empty()
-        ? nullptr
-        : reinterpret_cast<ImTextureID>(dx12_device_context.ImGuiTextureForPath(atlas_texture_path));
+    // v3 の埋め込みが最優先。元画像も隣の DDS も無くて構わない。
+    const auto& embedded_bytes = sprite_atlas_editor_asset.embedded_texture_bytes;
+    const bool use_embedded = !embedded_bytes.empty();
+    const ImTextureID atlas_texture_id = use_embedded
+        ? reinterpret_cast<ImTextureID>(dx12_device_context.ImGuiTextureForBytes(
+            sprite_atlas_editor_guid.empty()
+                ? sprite_atlas_editor_path.generic_u8string() : sprite_atlas_editor_guid,
+            embedded_bytes))
+        : (atlas_texture_path.empty()
+            ? nullptr
+            : reinterpret_cast<ImTextureID>(
+                dx12_device_context.ImGuiTextureForPath(atlas_texture_path)));
 
     float image_width = 1.0f;
     float image_height = 1.0f;
-    if (!atlas_texture_path.empty())
+    if (use_embedded)
+    {
+        // DDS ヘッダの height/width を直接読む。順は height が先。
+        if (embedded_bytes.size() >= 20)
+        {
+            std::uint32_t height = 0, width = 0;
+            std::memcpy(&height, embedded_bytes.data() + 12, sizeof(height));
+            std::memcpy(&width, embedded_bytes.data() + 16, sizeof(width));
+            if (width > 0 && height > 0)
+            {
+                image_width = static_cast<float>(width);
+                image_height = static_cast<float>(height);
+            }
+        }
+    }
+    else if (!atlas_texture_path.empty())
         ReadImageSize(atlas_texture_path, image_width, image_height);
 
     ImGui::Separator();

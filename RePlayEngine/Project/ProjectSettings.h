@@ -3,6 +3,7 @@
 #include <DirectXMath.h>
 
 #include <filesystem>
+#include <map>
 #include <string>
 
 namespace ReplayEngine::Assets
@@ -98,6 +99,35 @@ namespace ReplayEngine::Project
             float taa_sharpness = 0.0f;
             float taa_max_velocity = 48.0f;
         };
+
+        const std::string& IconAtlasGuid() const noexcept { return icon_atlas_guid_; }
+        void SetIconAtlasGuid(std::string guid) { icon_atlas_guid_ = std::move(guid); }
+
+        const std::map<std::string, DirectX::XMFLOAT4>& IconTints() const noexcept { return icon_tints_; }
+        void SetIconTint(const std::string& key, const DirectX::XMFLOAT4& color)
+        {
+            icon_tints_[key] = color;
+        }
+        void ClearIconTint(const std::string& key) { icon_tints_.erase(key); }
+
+        // キーごとに使うアトラスの領域名。空の値は「アイコンを出さない」を意味する。
+        // 未登録のキーは、下の自動一致が有効なときだけ名前で解決される。
+        const std::map<std::string, std::string>& IconRegions() const noexcept
+        {
+            return icon_regions_;
+        }
+        void SetIconRegion(const std::string& key, std::string region)
+        {
+            icon_regions_[key] = std::move(region);
+        }
+        void ClearIconRegion(const std::string& key) { icon_regions_.erase(key); }
+
+        // キーと同じ名前の領域を自動で使うか。既定は false で、明示的に選んだものだけ出す。
+        bool IconAutoMatchByName() const noexcept { return icon_auto_match_by_name_; }
+        void SetIconAutoMatchByName(bool enabled) noexcept
+        {
+            icon_auto_match_by_name_ = enabled;
+        }
 
         const ScreenSpaceSettings& ScreenSpace() const noexcept { return screen_space_; }
         ScreenSpaceSettings& MutableScreenSpace() noexcept { return screen_space_; }
@@ -277,6 +307,10 @@ namespace ReplayEngine::Project
             default_character_prefab_guid_.clear();
             startup_scene_guid_.clear();
             loading_scene_guid_.clear();
+            icon_atlas_guid_.clear();
+            icon_tints_.clear();
+            icon_regions_.clear();
+            icon_auto_match_by_name_ = false;
             scene_flow_guid_.clear();
             localization_table_guid_.clear();
             input_action_asset_guid_.clear();
@@ -293,6 +327,10 @@ namespace ReplayEngine::Project
         std::string default_character_prefab_guid_;
         std::string startup_scene_guid_;
         std::string loading_scene_guid_;
+        std::string icon_atlas_guid_;
+        std::map<std::string, DirectX::XMFLOAT4> icon_tints_;
+        std::map<std::string, std::string> icon_regions_;
+        bool icon_auto_match_by_name_ = false;
         std::string scene_flow_guid_;
         std::string localization_table_guid_;
         std::string input_action_asset_guid_;

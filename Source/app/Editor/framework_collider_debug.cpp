@@ -689,10 +689,19 @@ bool framework::project_world_to_screen(const DirectX::XMMATRIX& view_projection
     const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
     ImVec2& out) const noexcept
 {
+    float depth{};
+    return project_world_to_screen(view_projection, world, origin, size, out, depth);
+}
+
+bool framework::project_world_to_screen(const DirectX::XMMATRIX& view_projection,
+    const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
+    ImVec2& out, float& depth) const noexcept
+{
     using namespace DirectX;
     const XMVECTOR position = XMVectorSet(world.x, world.y, world.z, 1.0f);
     const XMVECTOR clip = XMVector4Transform(position, view_projection);
     const float w = XMVectorGetW(clip);
+    depth = w;
     if (w <= 1.0e-4f) return false;
     const float x = XMVectorGetX(clip) / w;
     const float y = XMVectorGetY(clip) / w;

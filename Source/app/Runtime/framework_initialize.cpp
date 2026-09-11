@@ -140,6 +140,29 @@ bool framework::initialize()
     if (!asset_database.Load(asset_database_error))
         object_editor_context.SetStatus("AssetDatabase: " + asset_database_error);
     record_initialize_stage(0);
+    editor_icon_provider.Configure(&asset_database,
+        [this](const std::filesystem::path& path)
+        { return dx12_device_context.ImGuiTextureForPath(path); }, &project_settings,
+        [this](const std::string& key, const std::vector<std::uint8_t>& bytes)
+        { return dx12_device_context.ImGuiTextureForBytes(key, bytes); });
+    object_hierarchy_panel.SetIconProvider(&editor_icon_provider, &hierarchy_icon_display);
+    object_hierarchy_panel.SetToolbarDrawer([this]
+    {
+        using ReplayEngine::Editor::HierarchyIconDisplay;
+        if (ImGui::SmallButton("表示")) ImGui::OpenPopup("階層アイコン表示");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("種類別アイコンの表示方法");
+        if (ImGui::BeginPopup("階層アイコン表示"))
+        {
+            const char* labels[] = { "常に並べる", "カーソルを乗せた行だけ", "出さない" };
+            for (int index = 0; index < 3; ++index)
+            {
+                const auto mode = static_cast<HierarchyIconDisplay>(index);
+                if (ImGui::Selectable(labels[index], hierarchy_icon_display == mode))
+                    hierarchy_icon_display = mode;
+            }
+            ImGui::EndPopup();
+        }
+    });
 
     if (!standalone_game_mode && !profile_benchmark_mode &&
         automated_smoke_test_frames == 0 && !shutdown_regression_requested &&

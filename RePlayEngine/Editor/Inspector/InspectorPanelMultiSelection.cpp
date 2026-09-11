@@ -276,7 +276,9 @@ namespace ReplayEngine::Editor
         }
         ImGui::SameLine();
 
-        const bool opened = ImGui::CollapsingHeader(title.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+        const bool opened = component_header_drawer_
+            ? component_header_drawer_(*components.front(), title.c_str(), ImGuiTreeNodeFlags_DefaultOpen)
+            : ImGui::CollapsingHeader(title.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
         if (!opened) return;
 
         ImGui::Indent();

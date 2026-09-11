@@ -1469,6 +1469,29 @@ namespace ReplayEngine::Rendering::DX12
         }
     }
 
+    void* D3D12DeviceContext::ImGuiTextureForBytes(const std::string& key,
+        const std::vector<std::uint8_t>& dds_bytes) noexcept
+    {
+        if (!imgui_ready_ || key.empty() || dds_bytes.empty()) return nullptr;
+        // パス版と同じく key で 1 度だけ作る。以後は同じ要求を返す。
+        const auto found = imgui_texture_requests_.find(key);
+        if (found != imgui_texture_requests_.end()) return found->second.get();
+        try
+        {
+            auto request = std::make_unique<ImGuiTextureRequest>();
+            request->key = key;
+            request->dds_bytes = dds_bytes;
+            ImGuiTextureRequest* result = request.get();
+            imgui_texture_requests_.emplace(key, std::move(request));
+            imgui_texture_request_addresses_.insert(result);
+            return result;
+        }
+        catch (...)
+        {
+            return nullptr;
+        }
+    }
+
     void* D3D12DeviceContext::ImGuiTextureForUIPreview() const noexcept
     {
         if (!imgui_ready_ || !ui_preview_target_.srv.IsValid()) return nullptr;
@@ -2193,6 +2216,7 @@ namespace ReplayEngine::Rendering::DX12
             D3D12StaticTextureSource source;
             source.key = request.key;
             source.source_path = request.source_path;
+            source.dds_bytes = request.dds_bytes;
             if (!EnsureStaticTexture(source) &&
                 static_texture_failures_.find(source.key) == static_texture_failures_.end())
                 upload_ok = false;

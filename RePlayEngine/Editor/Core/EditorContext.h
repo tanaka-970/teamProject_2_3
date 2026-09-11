@@ -3,6 +3,7 @@
 #include "../Commands/SceneEditHistory.h"
 #include "../Selection/EditorSelection.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 
@@ -99,6 +100,7 @@ namespace ReplayEngine::Editor
 
         bool Undo();
         bool Redo();
+        std::uint64_t EditSerial() const noexcept { return edit_serial_; }
 
     private:
         Scene::Scene* scene_ = nullptr;
@@ -106,6 +108,7 @@ namespace ReplayEngine::Editor
 
         EditorSelection selection_;
         SceneEditHistory history_;
+        std::uint64_t edit_serial_ = 0;
 
         std::filesystem::path scene_path_;
         std::string status_{ "新規シーン" };

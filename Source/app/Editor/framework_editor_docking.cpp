@@ -251,6 +251,7 @@ void framework::draw_editor()
         }
         draw_scene_view_panel();
         if (show_hierarchy_panel) draw_scene_hierarchy();
+        draw_icon_settings_panel();
         draw_motion_layers();
         draw_motion_preview();
         draw_motion_inspector();
@@ -270,6 +271,7 @@ void framework::draw_editor()
 
     draw_scene_view_panel();
     if (show_hierarchy_panel) draw_scene_hierarchy();
+    draw_icon_settings_panel();
     if (show_inspector_panel) draw_inspector();
     if (show_project_panel) draw_project_panel();
     if (show_console_panel) draw_console_panel();

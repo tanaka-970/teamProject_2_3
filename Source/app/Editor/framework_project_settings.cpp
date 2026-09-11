@@ -12,12 +12,14 @@
 #include "framework.h"
 
 #include "../../RePlayEngine/Project/ProjectSettingsSerializer.h"
+#include "../../RePlayEngine/Object/Registry/ComponentRegistry.h"
 #include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
 
 #include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 namespace
 {
@@ -486,6 +488,8 @@ void framework::draw_project_settings_panel()
         save_project_settings();
     }
 
+
+
     // 保存の結果はここへ出る。失敗した場合も同じ場所に理由が出る。
     ImGui::TextDisabled("%s", project_settings_status.c_str());
 
@@ -565,5 +569,246 @@ void framework::draw_new_object_scene_controls()
             u8"新しい Scene を作成せず、ダイアログを閉じます。");
         ImGui::EndPopup();
     }
+#endif
+}
+
+// 種類別アイコンの設定を独立ウィンドウへ表示する。
+void framework::draw_icon_settings_panel()
+{
+#ifdef USE_IMGUI
+    if (!show_icon_settings_window) return;
+    ImGui::SetNextWindowSize(ImVec2(760.0f, 680.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin(u8"種類別アイコン", &show_icon_settings_window))
+    {
+        ImGui::End();
+        return;
+    }
+
+        ImGui::PushID("ProjectIcons");
+        const auto* atlas = asset_database.FindByGuid(project_settings.IconAtlasGuid());
+        const bool missing = !project_settings.IconAtlasGuid().empty() &&
+            (atlas == nullptr || atlas->kind != ReplayEngine::Assets::AssetKind::SpriteAtlas ||
+                asset_database.IsMissing(project_settings.IconAtlasGuid()));
+        const auto& selected_regions = project_settings.IconRegions();
+        const std::size_t selected_count = static_cast<std::size_t>(std::count_if(
+            selected_regions.begin(), selected_regions.end(), [](const auto& entry)
+            { return !entry.second.empty(); }));
+        if (project_settings.IconAtlasGuid().empty())
+            ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f),
+                "アトラスを指定してください");
+        else if (missing)
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f),
+                "指定したアトラスが見つかりません");
+        else if (project_settings.IconAutoMatchByName())
+            ImGui::Text("名前が一致するアイコンを自動で使います（%zu 件を個別指定）",
+                selected_count);
+        else
+            ImGui::Text("選んだアイコンだけが出ます（%zu 件指定済み）", selected_count);
+        ImGui::Separator();
+        ImGui::TextUnformatted("アイコン用アトラス");
+        const std::string atlas_preview = project_settings.IconAtlasGuid().empty() ? "指定なし"
+            : missing ? "アトラス不明" : atlas->display_name.empty()
+                ? atlas->source_path.filename().u8string() : atlas->display_name;
+        ImGui::SetNextItemWidth(-1.0f);
+        if (ImGui::BeginCombo("##IconAtlas", atlas_preview.c_str()))
+        {
+            std::string selected = project_settings.IconAtlasGuid();
+            if (ImGui::Selectable("指定なし", selected.empty())) selected.clear();
+            for (const auto& candidate : asset_database.Records())
+            {
+                if (candidate.kind != ReplayEngine::Assets::AssetKind::SpriteAtlas ||
+                    asset_database.IsMissing(candidate.guid)) continue;
+                const std::string label = candidate.display_name.empty()
+                    ? candidate.source_path.filename().u8string() : candidate.display_name;
+                ImGui::PushID(candidate.guid.c_str());
+                const bool is_selected = selected == candidate.guid;
+                if (ImGui::Selectable(label.c_str(), is_selected)) selected = candidate.guid;
+                if (is_selected) ImGui::SetItemDefaultFocus();
+                ImGui::PopID();
+            }
+            if (selected != project_settings.IconAtlasGuid())
+            {
+                project_settings.SetIconAtlasGuid(std::move(selected));
+                save_project_settings();
+            }
+            ImGui::EndCombo();
+        }
+        if (atlas != nullptr && !missing)
+            ImGui::TextDisabled("パス: %s", atlas->source_path.generic_u8string().c_str());
+        if (!missing && !editor_icon_provider.AtlasError().empty())
+            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f),
+                "%s", editor_icon_provider.AtlasError().c_str());
+        if (ImGui::Button("アイコンを再読込")) editor_icons_reload_pending = true;
+        // 既定は off。選んだものだけ出す方が、意図しない絵が混ざらない。
+        bool auto_match = project_settings.IconAutoMatchByName();
+        if (ImGui::Checkbox("名前が同じ領域を自動で使う", &auto_match))
+        {
+            project_settings.SetIconAutoMatchByName(auto_match);
+            editor_icon_provider.InvalidateResolved();
+            save_project_settings();
+        }
+        ImGui::TextDisabled("off のときは、下で選んだアイコンだけが出ます");
+
+        ImGui::TextWrapped("乗算色は型名、カテゴリ、スタイルのカテゴリ色の順で決まります。"
+            "オブジェクト種別の既定色は白です。");
+        const auto begin_icon_tint_columns = [](const char* id)
+        {
+            const float gap = ImGui::GetStyle().ItemSpacing.x;
+            const float preview_width = ImGui::GetFrameHeight() + gap * 2.0f;
+            const float reset_width = ImGui::CalcTextSize("既定へ戻す").x
+                + ImGui::GetStyle().FramePadding.x * 2.0f + gap * 2.0f;
+            const float remaining = (std::max)(1.0f,
+                ImGui::GetContentRegionAvail().x - preview_width - reset_width);
+            ImGui::Columns(4, id, false);
+            ImGui::SetColumnWidth(0, remaining * 0.4f);
+            ImGui::SetColumnWidth(1, preview_width);
+            ImGui::SetColumnWidth(2, remaining * 0.6f);
+        };
+        const auto draw_icon_tint_row = [this, auto_match](const std::string& key,
+            const std::string& category, const ReplayEngine::Core::ComponentTypeInfo* info)
+        {
+            ImGui::PushID(key.c_str());
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(key.c_str());
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", key.c_str());
+            ImGui::NextColumn();
+            const ImVec2 preview_position = ImGui::GetCursorScreenPos();
+            const ImVec2 preview_clip_min = ImGui::GetWindowDrawList()->GetClipRectMin();
+            const ImVec2 preview_clip_max = ImGui::GetWindowDrawList()->GetClipRectMax();
+            const float size = ImGui::GetFrameHeight();
+            const auto& chosen = project_settings.IconRegions();
+            const auto picked = chosen.find(key);
+            // 押すとアトラスの絵から選べる。既定は「キーと同じ名前の領域」。
+            if (ImGui::Button("##PickIcon", ImVec2(size, size))) ImGui::OpenPopup("IconPicker");
+            if (!auto_match && picked == chosen.end())
+            {
+                const ImVec2 dots = ImGui::CalcTextSize("...");
+                ImGui::GetWindowDrawList()->AddText(
+                    ImVec2(preview_position.x + (size - dots.x) * 0.5f,
+                        preview_position.y + (size - dots.y) * 0.5f),
+                    ImGui::GetColorU32(ImVec4(0.65f, 0.65f, 0.65f, 0.65f)), "...");
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip(picked == chosen.end()
+                    ? (auto_match ? "押して選ぶ（いまは名前で自動一致）"
+                        : "押して選ぶ（いまは未指定）")
+                    : (picked->second.empty() ? "押して選ぶ（いまは出さない指定）"
+                        : ("押して選ぶ（いま: " + picked->second + "）").c_str()));
+            }
+            if (ImGui::BeginPopup("IconPicker"))
+            {
+                if (ImGui::Button("名前で自動一致へ戻す"))
+                {
+                    project_settings.ClearIconRegion(key);
+                    editor_icon_provider.InvalidateResolved();
+                    save_project_settings();
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("出さない"))
+                {
+                    project_settings.SetIconRegion(key, std::string{});
+                    editor_icon_provider.InvalidateResolved();
+                    save_project_settings();
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::Separator();
+                const std::vector<std::string> names = editor_icon_provider.RegionNames();
+                if (names.empty()) ImGui::TextDisabled("アトラスが未指定です");
+                const float cell = ImGui::GetTextLineHeight() * 2.0f;
+                constexpr int per_row = 10;
+                for (std::size_t index = 0; index < names.size(); ++index)
+                {
+                    ImGui::PushID(static_cast<int>(index));
+                    const auto choice = editor_icon_provider.IconForRegion(names[index]);
+                    const bool clicked = choice.texture != nullptr
+                        ? ImGui::ImageButton(choice.texture, ImVec2(cell, cell),
+                            choice.uv0, choice.uv1, 2)
+                        : ImGui::Button("?", ImVec2(cell, cell));
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", names[index].c_str());
+                    if (clicked)
+                    {
+                        project_settings.SetIconRegion(key, names[index]);
+                        editor_icon_provider.InvalidateResolved();
+                        save_project_settings();
+                        ImGui::CloseCurrentPopup();
+                    }
+                    if ((index + 1) % per_row != 0 && index + 1 < names.size())
+                        ImGui::SameLine();
+                    ImGui::PopID();
+                }
+                ImGui::EndPopup();
+            }
+            ImGui::NextColumn();
+            ImVec4 color = editor_icon_provider.ResolveTint(key, category);
+            ImGui::SetNextItemWidth(-1.0f);
+            if (ImGui::ColorEdit4("##Tint", &color.x, ImGuiColorEditFlags_AlphaPreviewHalf))
+            {
+                project_settings.SetIconTint(key, { color.x, color.y, color.z, color.w });
+                save_project_settings();
+            }
+            ImGui::NextColumn();
+            if (ImGui::Button("既定へ戻す") &&
+                project_settings.IconTints().find(key) != project_settings.IconTints().end())
+            {
+                project_settings.ClearIconTint(key);
+                save_project_settings();
+            }
+            ImGui::NextColumn();
+            const auto icon = info != nullptr ? editor_icon_provider.ResolveComponent(*info)
+                : editor_icon_provider.Resolve(key, category);
+            if (icon.texture != nullptr)
+            {
+                ImDrawList* draw_list = ImGui::GetWindowDrawList();
+                draw_list->PushClipRect(preview_clip_min, preview_clip_max, false);
+                draw_list->AddImage(icon.texture, preview_position,
+                    ImVec2(preview_position.x + size, preview_position.y + size),
+                    icon.uv0, icon.uv1, ImGui::GetColorU32(icon.tint));
+                draw_list->PopClipRect();
+            }
+            ImGui::PopID();
+        };
+
+        ImGui::Separator();
+        ImGui::TextUnformatted("オブジェクト種別");
+        begin_icon_tint_columns("ObjectTints");
+        const char* object_keys[] = { "object.folder", "object.empty", "object.prefab_root",
+            "object.prefab_instance", "object.prefab_missing", "object.controlled", "object.inactive" };
+        for (const char* key : object_keys) draw_icon_tint_row(key, {}, nullptr);
+        ImGui::Columns(1);
+
+        std::vector<std::string> categories;
+        for (const auto& info : ReplayEngine::Core::ComponentRegistry::All())
+            if (std::find(categories.begin(), categories.end(), info.category) == categories.end())
+                categories.push_back(info.category);
+        std::sort(categories.begin(), categories.end());
+        ImGui::Separator();
+        ImGui::TextUnformatted("カテゴリ");
+        begin_icon_tint_columns("CategoryTints");
+        for (const auto& category : categories) draw_icon_tint_row(category, category, nullptr);
+        ImGui::Columns(1);
+
+        ImGui::Separator();
+        ImGui::TextUnformatted("型名");
+        for (const auto& category : categories)
+        {
+            ImGui::PushID(category.c_str());
+            if (ImGui::TreeNode("Types", "%s", category.empty() ? "カテゴリなし" : category.c_str()))
+            {
+                begin_icon_tint_columns("TypeTints");
+                std::vector<const ReplayEngine::Core::ComponentTypeInfo*> types;
+                for (const auto& info : ReplayEngine::Core::ComponentRegistry::All())
+                    if (info.category == category) types.push_back(&info);
+                std::sort(types.begin(), types.end(), [](const auto* left, const auto* right)
+                    { return left->type_name < right->type_name; });
+                for (const auto* info : types) draw_icon_tint_row(info->type_name, category, info);
+                ImGui::Columns(1);
+                ImGui::TreePop();
+            }
+            ImGui::PopID();
+        }
+        ImGui::PopID();
+        ImGui::End();
 #endif
 }

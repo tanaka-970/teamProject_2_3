@@ -5,6 +5,7 @@
 #include "../../Runtime/Scene/SceneFlowAsset.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,7 @@ namespace ReplayEngine::Editor
         bool InTransaction() const noexcept { return in_transaction_; }
         bool CanUndo() const noexcept { return cursor_ > 0; }
         bool CanRedo() const noexcept { return cursor_ < entries_.size(); }
+        std::uint64_t EditSerial() const noexcept { return edit_serial_; }
 
         bool Undo(Motion::MotionAsset& asset, std::string& label);
         bool Redo(Motion::MotionAsset& asset, std::string& label);
@@ -38,6 +40,7 @@ namespace ReplayEngine::Editor
 
         std::vector<Entry> entries_;
         std::size_t cursor_ = 0;
+        std::uint64_t edit_serial_ = 0;
 
         bool in_transaction_ = false;
         std::string pending_label_;
@@ -54,6 +57,7 @@ namespace ReplayEngine::Editor
         bool InTransaction() const noexcept { return in_transaction_; }
         bool CanUndo() const noexcept { return cursor_ > 0; }
         bool CanRedo() const noexcept { return cursor_ < entries_.size(); }
+        std::uint64_t EditSerial() const noexcept { return edit_serial_; }
 
         bool Undo(Motion::CompositionAsset& asset, std::string& label);
         bool Redo(Motion::CompositionAsset& asset, std::string& label);
@@ -71,6 +75,7 @@ namespace ReplayEngine::Editor
         static constexpr std::size_t maximum_entries = 64;
         std::vector<Entry> entries_;
         std::size_t cursor_ = 0;
+        std::uint64_t edit_serial_ = 0;
         bool in_transaction_ = false;
         std::string pending_label_;
         Motion::CompositionAsset pending_before_;

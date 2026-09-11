@@ -10,14 +10,20 @@
 #include "../../RePlayEngine/Components/Landscape/LandscapeComponent.h"
 #include "../../RePlayEngine/Assets/AssetDatabase.h"
 #include "../../RePlayEngine/Editor/ReorderableList.h"
+#include "../../RePlayEngine/Object/Registry/ComponentRegistry.h"
 #include "../../RePlayEngine/Editor/Style/EditorStyle.h"
+#include "../../RePlayEngine/Scene/Serialization/PrefabSerializer.h"
+#include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
 
 #include <array>
 #include <functional>
 #include <algorithm>
 #include <cstddef>
 #include <cstring>
+#include <filesystem>
 #include <string>
+#include <system_error>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -410,6 +416,114 @@ void framework::draw_shader_adjustment_workspace()
     }
 }
 
+void framework::draw_prefab_asset_inspector(const ReplayEngine::Assets::AssetRecord& asset)
+{
+    namespace Serialization = ReplayEngine::Scene::Serialization;
+
+    std::error_code write_time_error;
+    const std::filesystem::file_time_type write_time =
+        std::filesystem::last_write_time(asset.source_path, write_time_error);
+    const bool write_time_valid = !write_time_error;
+    const bool selection_changed = prefab_inspector_guid != asset.guid ||
+        prefab_inspector_path != asset.source_path;
+    const bool source_changed = !selection_changed &&
+        (prefab_inspector_write_time_valid != write_time_valid ||
+            (write_time_valid && prefab_inspector_write_time != write_time));
+    if (selection_changed || source_changed)
+    {
+        prefab_inspector_guid = asset.guid;
+        prefab_inspector_path = asset.source_path;
+        prefab_inspector_write_time = write_time;
+        prefab_inspector_write_time_valid = write_time_valid;
+        prefab_inspector_loaded = false;
+        prefab_inspector_error.clear();
+        prefab_inspector_objects.clear();
+
+        Serialization::SceneData data;
+        if (Serialization::SceneSerializer::LoadFromFile(
+            data, asset.source_path, prefab_inspector_error))
+        {
+            prefab_inspector_objects.reserve(data.objects.size());
+            for (const Serialization::GameObjectData& source : data.objects)
+            {
+                PrefabInspectorObject object;
+                object.id = source.id;
+                object.parent_id = source.parent_id;
+                object.name = source.name;
+                object.component_types.reserve(source.components.size());
+                for (const Serialization::ComponentData& component : source.components)
+                {
+                    object.component_types.push_back(component.type_name.empty()
+                        ? "不明な Component" : component.type_name);
+                }
+                prefab_inspector_objects.push_back(std::move(object));
+            }
+            prefab_inspector_loaded = true;
+        }
+        else if (prefab_inspector_error.empty())
+        {
+            prefab_inspector_error = "ファイル形式を確認してください";
+        }
+    }
+
+    ImGui::TextUnformatted(asset.display_name.empty()
+        ? asset.source_path.filename().u8string().c_str() : asset.display_name.c_str());
+    ImGui::TextDisabled("%s", asset.source_path.generic_u8string().c_str());
+    ImGui::Separator();
+    if (!prefab_inspector_loaded)
+    {
+        ImGui::TextWrapped("Prefab を読み込めません: %s", prefab_inspector_error.c_str());
+        return;
+    }
+
+    ImGui::Text("GameObject: %zu 個", prefab_inspector_objects.size());
+    if (prefab_inspector_objects.empty())
+    {
+        ImGui::TextDisabled("Prefab に GameObject がありません");
+        return;
+    }
+
+    std::unordered_map<ReplayEngine::Core::ObjectID, std::size_t> indices;
+    for (std::size_t index = 0; index < prefab_inspector_objects.size(); ++index)
+        indices.emplace(prefab_inspector_objects[index].id, index);
+    std::vector<std::vector<std::size_t>> children(prefab_inspector_objects.size());
+    std::vector<std::size_t> roots;
+    for (std::size_t index = 0; index < prefab_inspector_objects.size(); ++index)
+    {
+        const auto parent = indices.find(prefab_inspector_objects[index].parent_id);
+        if (!prefab_inspector_objects[index].parent_id.Valid() || parent == indices.end())
+            roots.push_back(index);
+        else if (parent->second != index)
+            children[parent->second].push_back(index);
+    }
+    if (roots.empty())
+    {
+        ImGui::TextUnformatted("Prefab の階層を表示できません");
+        return;
+    }
+
+    const auto draw_object = [&](auto&& self, std::size_t index, int depth) -> void
+    {
+        if (depth > 64 || index >= prefab_inspector_objects.size()) return;
+        const PrefabInspectorObject& object = prefab_inspector_objects[index];
+        ImGui::PushID(static_cast<int>(index));
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_SpanAvailWidth;
+        if (children[index].empty() && object.component_types.empty())
+            flags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+        const bool open = ImGui::TreeNodeEx("##PrefabObject", flags, "%s",
+            object.name.empty() ? "GameObject" : object.name.c_str());
+        if (open && (flags & ImGuiTreeNodeFlags_NoTreePushOnOpen) == 0)
+        {
+            for (const std::string& component : object.component_types)
+                ImGui::BulletText("%s", component.c_str());
+            for (const std::size_t child : children[index]) self(self, child, depth + 1);
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
+    };
+    for (const std::size_t root : roots) draw_object(draw_object, root, 0);
+}
+
 void framework::draw_inspector()
 {
     REPLAY_PROFILE_SCOPE("Editor/Inspector");
@@ -435,6 +549,32 @@ void framework::draw_inspector()
 
     switch (selected_editor_object)
     {
+    case editor_selection::asset:
+    {
+        const ReplayEngine::Assets::AssetRecord* asset = selected_asset_guid.empty()
+            ? nullptr : asset_database.FindByGuid(selected_asset_guid);
+        if (asset == nullptr)
+        {
+            ImGui::TextUnformatted(project_selected_entry_path.empty()
+                ? "Asset が選択されていません"
+                : project_selected_entry_path.filename().u8string().c_str());
+            if (!project_selected_entry_path.empty())
+                ImGui::TextDisabled("%s", project_selected_entry_path.generic_u8string().c_str());
+        }
+        else if (asset->source_path.extension() ==
+            ReplayEngine::Scene::Serialization::PrefabSerializer::file_extension)
+        {
+            draw_prefab_asset_inspector(*asset);
+        }
+        else
+        {
+            ImGui::TextUnformatted(asset->display_name.empty()
+                ? asset->source_path.filename().u8string().c_str() : asset->display_name.c_str());
+            ImGui::TextDisabled("%s", asset->source_path.generic_u8string().c_str());
+        }
+        break;
+    }
+
     case editor_selection::world:
         ImGui::TextUnformatted("ワールド");
         ImGui::Separator();
@@ -481,6 +621,19 @@ void framework::draw_inspector()
         // 表示内容は ComponentRegistry と PropertyRegistry から自動生成される。
         bool show_game_template_components =
             project_settings.ShowGameTemplateComponents();
+        object_inspector_panel.SetComponentHeaderDrawer(
+            [this](const ReplayEngine::Core::Component& component, const char* title, int flags)
+            {
+                if (hierarchy_icon_display == ReplayEngine::Editor::HierarchyIconDisplay::Hidden)
+                    return ImGui::CollapsingHeader(title, flags);
+                const auto* info = ReplayEngine::Core::ComponentRegistry::Find(component.TypeID());
+                const auto icon = info != nullptr ? editor_icon_provider.ResolveComponent(*info)
+                    : editor_icon_provider.Resolve(component.TypeName());
+                std::vector<ReplayEngine::Editor::EditorIconProvider::Icon> icons;
+                if (icon) icons.push_back(icon);
+                return ReplayEngine::Editor::EditorIconProvider::DrawHeader(nullptr, title, flags, icons,
+                    hierarchy_icon_display == ReplayEngine::Editor::HierarchyIconDisplay::Hovered);
+            });
         object_inspector_panel.SetComponentExtraDrawer(
             [this](ReplayEngine::Editor::EditorContext&, ReplayEngine::Core::Component& component)
             { draw_landscape_model_inspector(component); });
