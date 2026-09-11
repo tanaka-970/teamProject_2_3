@@ -593,7 +593,9 @@ float3 Dx12EvaluateGgstLight(float3 baseColor, float3 normal, float3 viewDirecti
     const float3 baseAndSpecular = lerp(litBase, specularColor, highlightFactor);
     const float vertexFactor = adjustedVertexR >= threshold ? 1.0f : 0.0f;
     const float lightFactor = modifiedNoL >= threshold ? 1.0f : 0.0f;
-    return lerp(ggst.shadeColor, baseAndSpecular, min(vertexFactor, lightFactor));
+    // 影側にも albedo を掛ける。単色のままだと影の面積でテクスチャが消える。
+    const float3 shade = baseColor * ggst.shadeColor * lightColor;
+    return lerp(shade, baseAndSpecular, min(vertexFactor, lightFactor));
 }
 
 float3 Dx12EvaluateGgstLight(float3 baseColor, float3 normal, float3 viewDirection,
