@@ -815,11 +815,52 @@ bool framework::build_dx12_static_scene(
         draw.alpha_cutoff = material->alpha_cutoff;
         const BaseTextureBinding binding = base_texture_binding(item);
         const bool flat_fill = item.material_binding.shader == BuiltInShaders::FlatFill;
+        const bool is_ggst = item.material_binding.shader == BuiltInShaders::Ggst;
         // BuiltIn は自前 PSO を持てないので、固有表現は builtin_params で運ぶ。
-        // x=効果ID（1=Pixelate）、y/z/w=その効果の引数。増やすときは ID を足す。
-        const bool is_toon = item.material_binding.shader == BuiltInShaders::Toon ||
-            (uses_deferred_layer && item.lighting_model == ShaderLightingModel::Toon);
-        if (is_toon && !item.pixelate_enabled)
+        // x=効果ID（1=Pixelate / 2=Toon / 3=GGST）、y/z/w=その効果の引数。
+        const bool is_toon = !is_ggst && (item.material_binding.shader == BuiltInShaders::Toon ||
+            (uses_deferred_layer && item.lighting_model == ShaderLightingModel::Toon));
+        if (is_ggst && !item.pixelate_enabled)
+        {
+            const auto property_float = [material](const char* name, float fallback)
+            {
+                const auto* value = material->properties.Find(name);
+                return value != nullptr ? value->AsFloat(fallback) : fallback;
+            };
+            const auto property_bool = [material](const char* name, bool fallback)
+            {
+                const auto* value = material->properties.Find(name);
+                return value != nullptr ? value->AsBool(fallback) : fallback;
+            };
+            const auto property_color = [material](const char* name,
+                const DirectX::XMFLOAT4& fallback)
+            {
+                const auto* value = material->properties.Find(name);
+                return value != nullptr ? value->AsVector4() : fallback;
+            };
+            const DirectX::XMFLOAT4 shade = property_color(
+                "prop.ShadeColor", { 0.12f, 0.18f, 0.24f, 1.0f });
+            draw.builtin_params = { 3.0f,
+                std::clamp(property_float("prop.ShadingThreshold", 0.5f), 0.0f, 1.0f),
+                std::clamp(property_float("prop.ShadingOffset", 0.0f), -1.0f, 1.0f),
+                std::clamp(property_float("prop.SpecularSize", 0.2f), 0.0f, 1.0f) };
+            draw.builtin_params1 = {
+                std::clamp(shade.x, 0.0f, 1.0f), std::clamp(shade.y, 0.0f, 1.0f),
+                std::clamp(shade.z, 0.0f, 1.0f), std::clamp(shade.w, 0.0f, 1.0f) };
+            draw.builtin_params2 = {
+                property_bool("prop.FaceLighting", false) ? 1.0f : 0.0f,
+                std::clamp(property_float("prop.FaceBoneIndex", 0.0f), 0.0f, 1023.0f),
+                property_bool("prop.FlipFaceRight", false) ? 1.0f : 0.0f,
+                property_bool("prop.FlipFaceFront", false) ? 1.0f : 0.0f };
+            draw.ggst_face_bone_index = static_cast<std::int32_t>(
+                std::lround(draw.builtin_params2.y));
+            if (const auto* name = material->properties.Find("prop.FaceBoneName"))
+            {
+                if (name->Type() == ReplayEngine::Reflection::PropertyType::String)
+                    draw.ggst_face_bone_name = name->AsString();
+            }
+        }
+        else if (is_toon && !item.pixelate_enabled)
         {
             const auto property_float = [material](const char* name, float fallback)
             {
@@ -890,11 +931,13 @@ bool framework::build_dx12_static_scene(
         {
             D3D12StaticMaterialTexture mapped;
             mapped.slot = texture.slot;
-            // BuiltIn Toon の RampMap だけ宣言順(t41)ではなく Bridge の固定 slot へ載せ替える。
+            // BuiltIn の特殊Textureは宣言順ではなく固定Bridge slotへ載せ替える。
             std::uint32_t bridge_slot = 0;
-            if (is_toon && texture.property_name == "RampMap" &&
-                ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
-                    texture.property_name, bridge_slot))
+            const bool fixed_bridge_texture =
+                (is_toon && texture.property_name == "RampMap") ||
+                (is_ggst && texture.property_name == "IlmMap");
+            if (fixed_bridge_texture && ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
+                texture.property_name, bridge_slot))
                 mapped.slot = bridge_slot;
             mapped.texture_key = add_asset_texture(texture.asset_guid);
             if (mapped.texture_key.empty())
@@ -1866,6 +1909,62 @@ bool framework::build_dx12_static_scene(
                             draw.double_sided = item.double_sided;
                         }
                     }
+                    if (draw.builtin_params.x >= 2.5f && draw.builtin_params.x < 3.5f &&
+                        draw.builtin_params2.x >= 0.5f && !mesh.bind_pose.bones.empty())
+                    {
+                        std::size_t face_bone = static_cast<std::size_t>((std::max)(0,
+                            draw.ggst_face_bone_index));
+                        if (!draw.ggst_face_bone_name.empty())
+                        {
+                            const auto named = std::find_if(mesh.bind_pose.bones.begin(),
+                                mesh.bind_pose.bones.end(), [&draw](const skeleton::bone& bone)
+                                {
+                                    return bone.name == draw.ggst_face_bone_name;
+                                });
+                            if (named != mesh.bind_pose.bones.end())
+                                face_bone = static_cast<std::size_t>(
+                                    std::distance(mesh.bind_pose.bones.begin(), named));
+                        }
+                        face_bone = (std::min)(face_bone, mesh.bind_pose.bones.size() - 1u);
+                        draw.ggst_face_bone_index = static_cast<std::int32_t>(face_bone);
+                        draw.builtin_params2.y = static_cast<float>(face_bone);
+
+                        const skeleton::bone& bone = mesh.bind_pose.bones[face_bone];
+                        DirectX::XMMATRIX bone_global = DirectX::XMMatrixIdentity();
+                        if (bone_globals_ready && face_bone < bone_globals.size())
+                        {
+                            bone_global = DirectX::XMLoadFloat4x4(&bone_globals[face_bone]);
+                        }
+                        else if (keyframe != nullptr && bone.node_index >= 0 &&
+                            static_cast<std::size_t>(bone.node_index) < keyframe->nodes.size())
+                        {
+                            bone_global = DirectX::XMLoadFloat4x4(&keyframe->nodes[
+                                static_cast<std::size_t>(bone.node_index)].global_transform);
+                        }
+                        else
+                        {
+                            bone_global = DirectX::XMMatrixInverse(nullptr,
+                                DirectX::XMLoadFloat4x4(&bone.offset_transform));
+                        }
+
+                        DirectX::XMMATRIX mesh_global =
+                            DirectX::XMLoadFloat4x4(&mesh.default_global_transform);
+                        if (keyframe != nullptr && mesh.node_index >= 0 &&
+                            static_cast<std::size_t>(mesh.node_index) < keyframe->nodes.size())
+                        {
+                            mesh_global = DirectX::XMLoadFloat4x4(&keyframe->nodes[
+                                static_cast<std::size_t>(mesh.node_index)].global_transform);
+                        }
+                        const DirectX::XMMATRIX bone_in_mesh = bone_global *
+                            DirectX::XMMatrixInverse(nullptr, mesh_global);
+                        DirectX::XMStoreFloat3(&draw.ggst_face_right,
+                            DirectX::XMVector3Normalize(DirectX::XMVector3TransformNormal(
+                                DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f), bone_in_mesh)));
+                        DirectX::XMStoreFloat3(&draw.ggst_face_front,
+                            DirectX::XMVector3Normalize(DirectX::XMVector3TransformNormal(
+                                DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), bone_in_mesh)));
+                    }
+
                     skinned_draw.motion_key = std::to_string(source_item.owner.Value()) + ":" +
                         mesh_key + ":" + std::to_string(start);
                     resolve_normal_adjust(source_item, draw, &mesh, keyframe);

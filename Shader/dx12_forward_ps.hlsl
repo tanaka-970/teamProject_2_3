@@ -10,7 +10,7 @@ cbuffer MaterialCB : register(b2)
     float4 renderParams;  // alpha mode、lighting model、receive shadow、texture semantic mask
     float4 builtinParams;
     float4 builtinParams1;
-    float4 builtinParams2; // GGST.x=顔ライティング有効
+    float4 builtinParams2; // GGST.x=顔ライティング、y=顔ボーンID、z/w=軸反転
     float4 builtinParams3;
 };
 

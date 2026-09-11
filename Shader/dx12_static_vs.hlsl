@@ -3,6 +3,8 @@ cbuffer ObjectCB : register(b0)
     row_major float4x4 world;
     row_major float4x4 previousWorld;
     float4 morph;
+    float4 faceRightLocal;
+    float4 faceFrontLocal;
 };
 cbuffer SceneCB : register(b1)
 {
@@ -36,8 +38,10 @@ VSOut main(VSIn input)
     o.normal = normalize(mul(float4(input.normal, 0.0f), world).xyz);
     // static_mesh の既存 ABI は tangent を持たない。PS 側で安定した basis を構築する。
     o.tangent = 0.0f.xxxx;
-    o.faceRight = normalize(mul(float4(1.0f, 0.0f, 0.0f, 0.0f), world).xyz);
-    o.faceFront = normalize(mul(float4(0.0f, 0.0f, 1.0f, 0.0f), world).xyz);
+    const float faceRightSign = morph.z >= 0.5f ? -1.0f : 1.0f;
+    const float faceFrontSign = morph.w >= 0.5f ? -1.0f : 1.0f;
+    o.faceRight = normalize(mul(float4(faceRightLocal.xyz * faceRightSign, 0.0f), world).xyz);
+    o.faceFront = normalize(mul(float4(faceFrontLocal.xyz * faceFrontSign, 0.0f), world).xyz);
     o.uv = input.uv;
     o.vertexColor = input.vertexColor;
     return o;

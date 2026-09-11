@@ -187,10 +187,15 @@ namespace ReplayEngine::Rendering::DX12
         DirectX::XMFLOAT4 builtin_params{ 0.0f, 0.0f, 0.0f, 0.0f };
         // 追加色枠。ToonはShadowTint、GGSTはShadeColorをrgbへ入れる。
         DirectX::XMFLOAT4 builtin_params1{ 0.0f, 0.0f, 0.0f, 0.0f };
-        // Toonはrgb=RimColor/w=SpecularPower、GGSTはx=顔ライティング有効。
+        // Toonはrgb=RimColor/w=SpecularPower、GGSTはx=顔ライティング、y=顔ボーンID、z/w=軸反転。
         DirectX::XMFLOAT4 builtin_params2{ 0.0f, 0.0f, 0.0f, 1.0f };
         // Toon の追加枠。rgb=SpecularTint、w=予約。
         DirectX::XMFLOAT4 builtin_params3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        // GGST 顔ライティング用。名前は提出時にSkeletonへ解決し、basisはmesh localで運ぶ。
+        std::string ggst_face_bone_name;
+        std::int32_t ggst_face_bone_index = -1;
+        DirectX::XMFLOAT3 ggst_face_right{ 1.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 ggst_face_front{ 0.0f, 0.0f, 1.0f };
         DirectX::XMFLOAT4 normal_adjust_center{ 0.0f, 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT4 normal_adjust_params{ 0.0f, 0.0f, 0.0f, 0.0f };
         std::uint32_t start_index = 0;

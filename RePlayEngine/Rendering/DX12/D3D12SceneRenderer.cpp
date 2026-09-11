@@ -44,7 +44,7 @@ namespace ReplayEngine::Rendering::DX12
         constexpr UINT kScene3DLightingSrvRangeCount = 17;
         constexpr float kScene3DOutlineDepthOffsetDistance = 0.01f;
         constexpr std::uint32_t kScene3DGgstIlmMaterialSlot = 47u;
-        constexpr std::uint32_t kScene3DMaterialIlmSemanticBit = 1u << 8;
+        constexpr std::uint32_t kScene3DMaterialRampSemanticBit = 1u << 7;
         static_assert(kScene3DGBufferCount <= D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT);
         constexpr DXGI_FORMAT kScene3DDepthResourceFormat = DXGI_FORMAT_R32_TYPELESS;
         constexpr DXGI_FORMAT kScene3DDepthDsvFormat = DXGI_FORMAT_D32_FLOAT;
@@ -82,6 +82,8 @@ namespace ReplayEngine::Rendering::DX12
             DirectX::XMFLOAT4X4 world{};
             DirectX::XMFLOAT4X4 previous_world{};
             DirectX::XMFLOAT4 morph{};
+            DirectX::XMFLOAT4 face_right{ 1, 0, 0, 0 };
+            DirectX::XMFLOAT4 face_front{ 0, 0, 1, 0 };
         };
 
         struct Scene3DSceneConstants final
@@ -112,7 +114,7 @@ namespace ReplayEngine::Rendering::DX12
             DirectX::XMFLOAT4 builtin_params{};
             // 追加色枠。ToonはShadowTint、GGSTはShadeColorをrgbへ入れる。
             DirectX::XMFLOAT4 builtin_params1{};
-            // Toonはrgb=RimColor/w=SpecularPower、GGSTはx=顔ライティング有効。
+            // Toonはrgb=RimColor/w=SpecularPower、GGSTはx=顔ライティング、y=顔ボーンID、z/w=軸反転。
             DirectX::XMFLOAT4 builtin_params2{ 0, 0, 0, 1 };
             // Toon の追加枠。rgb=SpecularTint、w=Model Effect の Deferred 整合フラグ。
             DirectX::XMFLOAT4 builtin_params3{};
@@ -2616,10 +2618,23 @@ namespace ReplayEngine::Rendering::DX12
             D3D12_GPU_VIRTUAL_ADDRESS previous_bones, float morph_weight,
             bool match_deferred_material) noexcept -> bool
         {
+            DirectX::XMFLOAT4 builtin_params = draw.builtin_params;
+            DirectX::XMFLOAT4 builtin_params1 = draw.builtin_params1;
+            DirectX::XMFLOAT4 builtin_params2 = draw.builtin_params2;
+            DirectX::XMFLOAT4 builtin_params3 = draw.builtin_params3;
+            const DirectX::XMFLOAT4 material_base_color = draw.base_color;
+            const float material_alpha_cutoff = draw.alpha_cutoff;
+            const bool ggst_face_basis = builtin_params.x >= 2.5f && builtin_params.x < 3.5f;
             Scene3DObjectConstants object{};
             object.world = draw.world;
             object.previous_world = previous_world;
-            object.morph = { morph_weight, 0, 0, 0 };
+            object.morph = { morph_weight, 0.0f,
+                ggst_face_basis ? builtin_params2.z : 0.0f,
+                ggst_face_basis ? builtin_params2.w : 0.0f };
+            object.face_right = { draw.ggst_face_right.x, draw.ggst_face_right.y,
+                draw.ggst_face_right.z, 0.0f };
+            object.face_front = { draw.ggst_face_front.x, draw.ggst_face_front.y,
+                draw.ggst_face_front.z, 0.0f };
             D3D12_GPU_VIRTUAL_ADDRESS object_gpu = 0;
             if (!allocate_cb(&object, sizeof(object), object_gpu)) return false;
             const StaticTextureResource* normal = material_texture_for(draw, 41u, "__dx12_bump");
@@ -2628,45 +2643,25 @@ namespace ReplayEngine::Rendering::DX12
             const StaticTextureResource* emissive = material_texture_for(draw, 44u, "__dx12_black");
             const StaticTextureResource* occlusion = material_texture_for(draw, 45u, "__dx12_white");
             const StaticTextureResource* ramp = material_texture_for(draw, 46u, "__dx12_white");
-            const StaticTextureResource* ilm = nullptr;
-            bool has_ilm = false;
-            for (const D3D12StaticMaterialTexture& mapped : draw.material_textures)
-            {
-                if (mapped.slot != kScene3DGgstIlmMaterialSlot) continue;
-                const auto found = texture_cache_.find(mapped.texture_key);
-                if (found != texture_cache_.end())
-                {
-                    ilm = &found->second;
-                    has_ilm = true;
-                }
-                break;
-            }
-            const bool is_ggst = draw.builtin_params.x >= 2.5f && draw.builtin_params.x < 3.5f;
-            if (!has_ilm && is_ggst &&
-                (draw.material_texture_semantic_mask & (1u << 7)) != 0u)
-            {
-                ilm = ramp;
-                has_ilm = ramp != nullptr;
-            }
-            if (ilm == nullptr) ilm = material_texture_for(draw, kScene3DGgstIlmMaterialSlot, "__dx12_white");
+            const StaticTextureResource* ilm = material_texture_for(
+                draw, kScene3DGgstIlmMaterialSlot, "__dx12_white");
             if (normal == nullptr || metallic == nullptr || roughness == nullptr ||
                 emissive == nullptr || occlusion == nullptr || ramp == nullptr || ilm == nullptr)
                 return false;
-            std::uint32_t semantic_mask = draw.material_texture_semantic_mask;
-            if (has_ilm) semantic_mask |= kScene3DMaterialIlmSemanticBit;
+            const std::uint32_t semantic_mask = draw.material_texture_semantic_mask;
             Scene3DMaterialConstants material{};
-            material.base_color = draw.base_color;
-            material.builtin_params = draw.builtin_params;
-            material.builtin_params1 = draw.builtin_params1;
-            material.builtin_params2 = draw.builtin_params2;
-            material.builtin_params3 = draw.builtin_params3;
+            material.base_color = material_base_color;
+            material.builtin_params = builtin_params;
+            material.builtin_params1 = builtin_params1;
+            material.builtin_params2 = builtin_params2;
+            material.builtin_params3 = builtin_params3;
             material.builtin_params3.w = match_deferred_material ? 1.0f : 0.0f;
             material.normal_adjust_center = draw.normal_adjust_center;
             material.normal_adjust_params = draw.normal_adjust_params;
             material.emissive_strength = {
                 draw.emissive.x, draw.emissive.y, draw.emissive.z, draw.emissive_strength };
             material.surface_params = {
-                draw.metallic, draw.roughness, draw.ambient_occlusion, draw.alpha_cutoff };
+                draw.metallic, draw.roughness, draw.ambient_occlusion, material_alpha_cutoff };
             material.render_params = {
                 static_cast<float>(static_cast<std::uint32_t>(draw.alpha_mode)),
                 static_cast<float>(draw.lighting_model), draw.receive_shadow ? 1.0f : 0.0f,

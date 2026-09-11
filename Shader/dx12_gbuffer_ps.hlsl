@@ -10,7 +10,7 @@ cbuffer MaterialCB : register(b2)
     float4 renderParams;  // alpha mode、lighting model、receive shadow、texture semantic mask
     float4 builtinParams;  // BuiltIn固有表現。x=効果ID、y/z/w=引数
     float4 builtinParams1; // Toon=ShadowTint、GGST=ShadeColorをrgbへ入れる
-    float4 builtinParams2; // Toon=RimColor/SpecularPower、GGST.x=顔ライティング有効
+    float4 builtinParams2; // Toon=RimColor/SpecularPower、GGST.x=顔ライティング、y=顔ボーンID、z/w=軸反転
     float4 builtinParams3; // Toon。rgb=SpecularTint、w=予約
 };
 

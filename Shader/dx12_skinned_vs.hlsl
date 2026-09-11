@@ -3,6 +3,8 @@ cbuffer ObjectCB : register(b0)
     row_major float4x4 world;
     row_major float4x4 previousWorld;
     float4 morph;
+    float4 faceRightLocal;
+    float4 faceFrontLocal;
 };
 cbuffer SceneCB : register(b1)
 {
@@ -72,10 +74,10 @@ VSOut main(VSIn input)
     o.worldPosition = wp.xyz;
     o.normal = normalize(mul(float4(skinnedNormal, 0.0f), world).xyz);
     o.tangent = float4(normalize(mul(float4(skinnedTangent, 0.0f), world).xyz), input.tangent.w);
-    const float3 faceRight = mul(float4(1.0f, 0.0f, 0.0f, 0.0f), currentBones[0].value).xyz;
-    const float3 faceFront = mul(float4(0.0f, 0.0f, 1.0f, 0.0f), currentBones[0].value).xyz;
-    o.faceRight = normalize(mul(float4(faceRight, 0.0f), world).xyz);
-    o.faceFront = normalize(mul(float4(faceFront, 0.0f), world).xyz);
+    const float faceRightSign = morph.z >= 0.5f ? -1.0f : 1.0f;
+    const float faceFrontSign = morph.w >= 0.5f ? -1.0f : 1.0f;
+    o.faceRight = normalize(mul(float4(faceRightLocal.xyz * faceRightSign, 0.0f), world).xyz);
+    o.faceFront = normalize(mul(float4(faceFrontLocal.xyz * faceFrontSign, 0.0f), world).xyz);
     o.uv = input.uv;
     o.vertexColor = input.vertexColor;
     return o;
