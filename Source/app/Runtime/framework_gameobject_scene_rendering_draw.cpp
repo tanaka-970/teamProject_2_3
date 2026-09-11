@@ -2212,6 +2212,9 @@ bool framework::build_dx12_static_scene(
         }
     }
 
+    submit_vertex_paint(submission, render_items,
+        options.include_auxiliary_geometry && &scene == &active_object_scene());
+
     // 描画へ出なかった owner の骨を残さない。単体表示で隠したモデルが選択候補に残る。
     if (rig_capture_enabled && options.include_auxiliary_geometry)
         for (auto it = object_rig_debug_bones.begin(); it != object_rig_debug_bones.end(); )

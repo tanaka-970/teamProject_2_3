@@ -204,8 +204,7 @@ PSOut main(PSIn input)
     const float2 currentNdc = input.currentClip.xy / max(abs(input.currentClip.w), 1.0e-5f);
     const float2 previousNdc = input.previousClip.xy / max(abs(input.previousClip.w), 1.0e-5f);
     output.velocity = (currentNdc - previousNdc) * float2(0.5f, -0.5f);
-#if REPLAY_VERTEX_COLOR_DEBUG
-    output.toon = input.vertexColor;
-#endif
+    if (debugFlags.y != 0u)
+        output.toon = ReplayVertexColorPreview(input.vertexColor, debugFlags.y);
     return output;
 }

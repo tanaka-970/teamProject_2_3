@@ -342,8 +342,18 @@ namespace ReplayEngine::Rendering::DX12
         bool final_pass_enabled = true;
     };
 
+    struct D3D12VertexColorUpdate final
+    {
+        std::string key;
+        std::shared_ptr<const Assets::VertexColorAsset> asset;
+        std::uint32_t mesh_index = 0;
+        std::uint64_t revision = 0;
+        bool skinned = false;
+    };
     struct D3D12StaticSceneSubmission final
     {
+        std::vector<D3D12VertexColorUpdate> vertex_color_updates;
+        std::uint32_t vertex_color_debug_channel = 0;
         std::vector<D3D12StaticMeshSource> mesh_sources;
         std::vector<D3D12SkinnedMeshSource> skinned_mesh_sources;
         std::vector<D3D12StaticTextureSource> texture_sources;
@@ -1083,6 +1093,7 @@ namespace ReplayEngine::Rendering::DX12
         void ReleaseBackBufferCapture() noexcept;
         std::uint64_t SignalQueue() noexcept;
         void ReclaimDeferredDescriptors() noexcept;
+        bool UpdateVertexColors(const D3D12VertexColorUpdate& update) noexcept;
         void RetireStaticMesh(std::unique_ptr<D3D12MeshBuffer> mesh) noexcept;
         void ReleaseRetiredStaticMeshes(std::uint64_t completed_fence_value) noexcept;
         void ReportDeviceRemoved(HRESULT trigger) noexcept;

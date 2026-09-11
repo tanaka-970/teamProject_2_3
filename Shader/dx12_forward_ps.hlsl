@@ -110,9 +110,8 @@ float3 ResolveNormal(PSIn input, uint semanticMask)
 
 float4 main(PSIn input) : SV_Target0
 {
-#if REPLAY_VERTEX_COLOR_DEBUG
-    return input.vertexColor;
-#endif
+    if (debugFlags.y != 0u)
+        return ReplayVertexColorPreview(input.vertexColor, debugFlags.y);
     const uint semanticMask = (uint)round(max(renderParams.w, 0.0f));
     float4 albedo = baseTexture.Sample(materialSampler, input.uv) * baseColor;
     if (renderParams.x > 0.5f && renderParams.x < 1.5f)

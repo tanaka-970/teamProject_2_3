@@ -605,6 +605,7 @@ std::string framework::action_shortcut(std::string_view name) const
 
 framework::editor_history_target framework::resolve_editor_history(bool undo, bool menu_context) const
 {
+    if (vertex_paint_active()) return editor_history_target::scene;
     if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus)
         return editor_history_target::atlas;
 
@@ -640,6 +641,7 @@ framework::editor_history_target framework::resolve_editor_history(bool undo, bo
 
 bool framework::can_edit_history(editor_history_target target, bool undo)
 {
+    if (vertex_paint_stroke) return true;
     if (gizmo_gesture_active()) return true;
     switch (target)
     {
@@ -668,6 +670,11 @@ bool framework::can_edit_history(editor_history_target target, bool undo)
 
 bool framework::execute_editor_history(editor_history_target target, bool undo)
 {
+    if (vertex_paint_stroke)
+    {
+        finish_vertex_paint_stroke(true);
+        return true;
+    }
     if (gizmo_gesture_active())
     {
         cancel_gizmo_gesture();

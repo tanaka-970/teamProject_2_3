@@ -2710,4 +2710,10 @@
       <Filter>Shader</Filter>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="RePlayEngine\VertexPaint\VertexColorPaint.h" />
+    <ClInclude Include="Source\app\framework_class_vertex_paint.inl" />
+    <ClCompile Include="RePlayEngine\VertexPaint\VertexColorPaint.cpp" />
+    <ClCompile Include="Source\app\Editor\framework_vertex_paint.cpp" />
+  </ItemGroup>
 </Project>

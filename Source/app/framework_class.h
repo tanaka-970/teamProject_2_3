@@ -51,6 +51,7 @@
 #include "../../RePlayEngine/Components/Rendering/LineRendererComponent.h"
 #include "../../RePlayEngine/Physics/MeshCollisionCooker.h"
 #include "../../RePlayEngine/Landscape/LandscapeBrush.h"
+#include "../../RePlayEngine/VertexPaint/VertexColorPaint.h"
 #include "../../RePlayEngine/Landscape/LandscapeEditorTool.h"
 
 // --- GameObject / Component 基盤 -------------------------------------------

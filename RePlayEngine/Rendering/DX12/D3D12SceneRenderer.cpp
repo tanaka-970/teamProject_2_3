@@ -2061,6 +2061,8 @@ namespace ReplayEngine::Rendering::DX12
         {
             if (!EnsureSkinnedMesh(source)) upload_ok = false;
         }
+        for (const auto& update : submission.vertex_color_updates)
+            if (!UpdateVertexColors(update)) upload_ok = false;
         for (const D3D12StaticTextureSource& source : submission.texture_sources)
         {
             if (!source.key.empty() && texture_cache_.find(source.key) == texture_cache_.end() &&
@@ -2189,6 +2191,8 @@ namespace ReplayEngine::Rendering::DX12
             if (!EnsureSkinnedMesh(source))
                 upload_ok = false;
         }
+        for (const auto& update : submission.vertex_color_updates)
+            if (!UpdateVertexColors(update)) upload_ok = false;
         for (const D3D12StaticTextureSource& source : submission.texture_sources)
         {
             if (!source.key.empty() && texture_cache_.find(source.key) == texture_cache_.end() &&
@@ -2463,7 +2467,7 @@ namespace ReplayEngine::Rendering::DX12
         light.shadow_flags = {
             directional_shadow_available ? 1u : 0u,
             local_shadow_available ? 1u : 0u, 0u, 0u };
-        light.debug_flags = { submission.post_process.deferred_debug_mode, 0u, 0u, 0u };
+        light.debug_flags = { submission.post_process.deferred_debug_mode, submission.vertex_color_debug_channel, 0u, 0u };
         D3D12_GPU_VIRTUAL_ADDRESS light_gpu = 0;
         if (!allocate_cb(&light, sizeof(light), light_gpu)) return false;
 
@@ -3888,7 +3892,7 @@ namespace ReplayEngine::Rendering::DX12
             0.0f };
         post.debug_options = {
             static_cast<float>(submission.post_process.render_output),
-            static_cast<float>(submission.post_process.deferred_debug_mode), 0.0f, 0.0f };
+            static_cast<float>(submission.post_process.deferred_debug_mode), static_cast<float>(submission.vertex_color_debug_channel), 0.0f };
         post.view = current_frame_constants_.view;
         post.projection = current_frame_constants_.projection;
         post.inverse_projection = current_frame_constants_.inv_projection;

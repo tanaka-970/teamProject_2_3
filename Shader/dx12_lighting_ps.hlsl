@@ -39,9 +39,8 @@ float4 main(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_Target0
 {
     float depth = gDepth.SampleLevel(pointSampler, uv, 0).r;
     clip(0.999999f - depth);
-#if REPLAY_VERTEX_COLOR_DEBUG
-    return gToon.SampleLevel(pointSampler, uv, 0);
-#endif
+    if (debugFlags.y != 0u)
+        return gToon.SampleLevel(pointSampler, uv, 0);
     float4 base = gBase.SampleLevel(pointSampler, uv, 0);
     const float4 emissiveValue = gEmissive.SampleLevel(pointSampler, uv, 0);
     float3 emissive = emissiveValue.rgb;

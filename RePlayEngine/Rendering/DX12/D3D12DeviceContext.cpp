@@ -3401,6 +3401,25 @@ namespace ReplayEngine::Rendering::DX12
         static_mesh_bounds_cache_.erase(key);
     }
 
+    bool D3D12DeviceContext::UpdateVertexColors(const D3D12VertexColorUpdate& update) noexcept
+    {
+        auto& cache = update.skinned ? skinned_mesh_cache_ : static_mesh_cache_;
+        const auto found = cache.find(update.key);
+        if (found == cache.end() || !update.asset) return true;
+        if (found->second->ColorRevision() == update.revision) return true;
+        const auto& blocks = update.asset->meshes;
+        const auto block = std::find_if(blocks.begin(), blocks.end(),
+            [&](const Assets::VertexColorMeshBlock& b) { return b.mesh_index == update.mesh_index; });
+        if (block == blocks.end() || block->colors.size() > UINT32_MAX) return false;
+        auto replacement = std::make_unique<D3D12MeshBuffer>();
+        if (!replacement->UploadColorsSharingGeometry(device_.Get(), upload_context_, *found->second,
+            block->colors.data(), static_cast<std::uint32_t>(block->colors.size()), update.revision)) return false;
+        replacement->SetDebugName(update.key);
+        RetireStaticMesh(std::move(found->second));
+        found->second = std::move(replacement);
+        return true;
+    }
+
     // 置換で外した静的メッシュは、次に Signal する Fence を越えるまで解放しない。
     void D3D12DeviceContext::RetireStaticMesh(std::unique_ptr<D3D12MeshBuffer> mesh) noexcept
     {

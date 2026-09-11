@@ -68,6 +68,7 @@ void framework::handle_viewport_selection()
         framework& editor;
         ~selection_sync() { editor.sync_rig_selection(); }
     } sync_on_exit{ *this };
+    if (handle_vertex_paint_viewport()) return;
     if (!edit_mode_active || !game_scene) return;
     // UIワークスペースではScene ViewもUI専用の直接編集面として扱う。
     // UI枠のドラッグを3Dの矩形選択が同時に拾い、選択解除するのを防ぐ。

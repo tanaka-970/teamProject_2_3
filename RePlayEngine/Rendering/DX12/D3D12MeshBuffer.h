@@ -25,6 +25,10 @@ namespace ReplayEngine::Rendering::DX12
             std::uint32_t vertex_stride, const void* indices,
             std::uint32_t index_size, DXGI_FORMAT index_format,
             const Assets::VertexColorRgba8* colors = nullptr) noexcept;
+        bool UploadColorsSharingGeometry(ID3D12Device* device, D3D12UploadContext& uploader,
+            const D3D12MeshBuffer& previous, const Assets::VertexColorRgba8* colors,
+            std::uint32_t count, std::uint64_t revision) noexcept;
+        std::uint64_t ColorRevision() const noexcept { return color_revision_; }
         void Reset() noexcept;
         bool UploadVerticesSharingIndices(ID3D12Device* device, D3D12UploadContext& uploader,
             const D3D12MeshBuffer& previous, const void* vertices,
@@ -55,5 +59,6 @@ namespace ReplayEngine::Rendering::DX12
         D3D12_VERTEX_BUFFER_VIEW vertex_view_{};
         D3D12_INDEX_BUFFER_VIEW index_view_{};
         std::uint32_t index_count_ = 0;
+        std::uint64_t color_revision_ = 0;
     };
 }

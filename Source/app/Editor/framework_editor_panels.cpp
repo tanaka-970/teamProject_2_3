@@ -938,6 +938,7 @@ void framework::draw_workspace_panel()
         break;
     case editor_workspace::modeling:
         ImGui::TextUnformatted("モデリングWorkspace");
+        draw_vertex_paint_panel();
         ImGui::TextDisabled("形状編集用のテーブルです。配置操作は配置Workspaceへ分離しています。");
         if (ImGui::Button("選択GameObjectを編集")) selected_editor_object = editor_selection::game_object;
         ReplayEngine::Editor::EditorHelp::Item("button.workspace.edit_game_object",

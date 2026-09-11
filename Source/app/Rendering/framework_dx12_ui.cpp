@@ -2605,6 +2605,7 @@ bool framework::build_dx12_scene_effects(
 
     if (!dx12_device_context.CacheMeshLocalBounds(static_scene)) return false;
     submission.Clear();
+    if (static_scene.vertex_color_debug_channel != 0) return true;
     std::unordered_set<std::string> texture_keys;
     const auto register_effect_texture = [&](const Assets::AssetRecord* record)
         -> std::string

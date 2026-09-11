@@ -12,6 +12,8 @@
 
 void framework::draw_editor()
 {
+    if (vertex_paint_stroke && (!vertex_paint_active() || !ImGui::IsMouseDown(ImGuiMouseButton_Left)))
+        finish_vertex_paint_stroke(false);
     object_inspector_panel.FinishPropertyEdit(object_editor_context);
     motion_rig_panel_visible = false;
     editor_session_active = true;

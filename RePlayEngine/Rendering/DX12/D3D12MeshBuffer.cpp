@@ -53,6 +53,7 @@ namespace ReplayEngine::Rendering::DX12
             vertex_stride != previous.vertex_view_.StrideInBytes) return false;
         if (!D3D12ResourceFactory::CreateVertexBuffer(device, uploader, vertices,
             vertex_size, vertex_stride, vertex_buffer_, vertex_view_)) return false;
+        color_revision_ = previous.color_revision_;
         color_buffer_ = previous.color_buffer_;
         color_view_ = previous.color_view_;
         index_buffer_ = previous.index_buffer_;
@@ -61,6 +62,22 @@ namespace ReplayEngine::Rendering::DX12
         return true;
     }
 
+    bool D3D12MeshBuffer::UploadColorsSharingGeometry(ID3D12Device* device,
+        D3D12UploadContext& uploader, const D3D12MeshBuffer& previous,
+        const Assets::VertexColorRgba8* colors, std::uint32_t count, std::uint64_t revision) noexcept
+    {
+        if (!previous.IsValid() || !colors || count == 0 || count > UINT32_MAX / 4u ||
+            count * 4u != previous.color_view_.SizeInBytes) return false;
+        if (!D3D12ResourceFactory::CreateVertexBuffer(device, uploader, colors,
+            count * 4u, 4u, color_buffer_, color_view_)) return false;
+        vertex_buffer_ = previous.vertex_buffer_;
+        vertex_view_ = previous.vertex_view_;
+        index_buffer_ = previous.index_buffer_;
+        index_view_ = previous.index_view_;
+        index_count_ = previous.index_count_;
+        color_revision_ = revision;
+        return true;
+    }
     void D3D12MeshBuffer::SetDebugName(std::string_view key) noexcept
     {
         SetD3D12ObjectNameUtf8(vertex_buffer_.Get(), L"Mesh.VB", key);
@@ -77,5 +94,6 @@ namespace ReplayEngine::Rendering::DX12
         vertex_view_ = {};
         index_view_ = {};
         index_count_ = 0;
+        color_revision_ = 0;
     }
 }

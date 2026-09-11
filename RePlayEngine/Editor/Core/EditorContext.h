@@ -96,6 +96,7 @@ namespace ReplayEngine::Editor
         void CommitEdit();
         void CommitLandscapeEdit(Core::ObjectID object,
             std::unique_ptr<Landscape::LandscapeUndoCommand> command);
+        void CommitVertexColorEdit(std::unique_ptr<VertexPaint::ColorEdit> command);
         void CancelEdit() noexcept;
 
         bool Undo();

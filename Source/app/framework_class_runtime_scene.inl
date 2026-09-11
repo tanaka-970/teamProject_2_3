@@ -187,6 +187,7 @@
     ReplayEngine::Editor::InspectorPanel    object_inspector_panel;
     ReplayEngine::Editor::ValidationPanel   object_validation_panel;
     ReplayEngine::Rendering::RenderItemList object_render_items;
+#include "framework_class_vertex_paint.inl"
     ReplayEngine::UI::FontAtlas             ui_font_atlas;
     bool ui_pointer_down_last{ false };
     float ui_mouse_wheel_delta{ 0.0f };
