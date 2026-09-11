@@ -337,6 +337,7 @@
     };
     std::unordered_map<std::uint64_t, std::vector<rig_debug_bone>> object_rig_debug_bones;
     // 主の骨。複数選択でも常に rig_selected_bones に含まれる。
+    std::uint64_t   rig_selected_owner{ 0 };
     std::string      rig_selected_bone;
     std::vector<std::string> rig_selected_bones;
 
@@ -373,7 +374,16 @@
         std::unordered_map<std::string, rig_pose_override>> object_rig_pose;
     // ギズモを掴んでいる間の控え。主の変化量を他の骨へ配るのに使う。
     bool             rig_gizmo_dragging{ false };
+    std::uint64_t    rig_gizmo_owner{ 0 };
+    int              rig_gizmo_operation{ 0 };
+    int              object_gizmo_operation{ 0 };
+    bool             rig_gizmo_local_space{ false };
+    bool             object_gizmo_local_space{ false };
+    std::string      rig_gizmo_primary;
+    std::vector<std::string> rig_gizmo_selection;
     std::unordered_map<std::string, rig_pose_override> rig_gizmo_start_pose;
+    std::unordered_map<std::string, DirectX::XMFLOAT4X4> rig_gizmo_start_world_matrices;
+    bool             rig_gizmo_primary_inherited{ false };
     DirectX::XMFLOAT4 rig_gizmo_start_rotation{ 0.0f, 0.0f, 0.0f, 1.0f };
     DirectX::XMFLOAT4X4 rig_gizmo_start_matrix{};
     DirectX::XMFLOAT4X4 rig_gizmo_matrix{};

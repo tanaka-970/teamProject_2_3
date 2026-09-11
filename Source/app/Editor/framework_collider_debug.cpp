@@ -316,19 +316,8 @@ void framework::draw_collider_debug_overlay()
             rig_bone_total += bones.size();
             for (const rig_debug_bone& bone : bones)
             {
-                if (rig_max_depth > 0)
-                {
-                    // 根から数えた深さで間引く。指や髪まで出ると密になるため。
-                    int depth = 0;
-                    int walk = bone.parent;
-                    while (walk >= 0 && static_cast<std::size_t>(walk) < bones.size() &&
-                        depth <= rig_max_depth)
-                    {
-                        ++depth;
-                        walk = bones[static_cast<std::size_t>(walk)].parent;
-                    }
-                    if (depth > rig_max_depth) continue;
-                }
+                // 根から数えた深さで間引く。指や髪まで出ると密になるため。
+                if (!rig_bone_within_depth(bones, bone)) continue;
                 const bool picked = std::find(rig_selected_bones.begin(),
                     rig_selected_bones.end(), bone.name) != rig_selected_bones.end();
                 ImVec2 joint{};

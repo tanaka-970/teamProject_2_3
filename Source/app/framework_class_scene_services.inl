@@ -391,11 +391,19 @@ private:
     void draw_motion_timeline();
     void draw_motion_graph_editor();
     void draw_motion_rig();
+    float rig_gizmo_size_clip_space = 0.06f;
     bool draw_bone_transform_gizmo();
-    void select_rig_bone(const std::string& name, bool additive);
+    bool effective_gizmo_local_space() const;
+    bool active_rig_gizmo_target() const;
+    void sync_rig_selection();
+    bool gizmo_gesture_active() const;
+    void cancel_gizmo_gesture();
+    void select_rig_bone(std::uint64_t owner, const std::string& name, bool additive);
+    bool rig_bone_within_depth(const std::vector<rig_debug_bone>& bones,
+        const rig_debug_bone& bone) const;
     void apply_rig_pose_to_selection(std::uint64_t owner,
         const std::vector<rig_debug_bone>& bones, const rig_pose_override& primary_start,
-        const rig_pose_override& primary_now, int operation);
+        const rig_pose_override& primary_now, int operation, bool local_space);
     void begin_rig_pose_edit(std::uint64_t owner, std::string label);
     void commit_rig_pose_edit();
     void cancel_rig_pose_edit();

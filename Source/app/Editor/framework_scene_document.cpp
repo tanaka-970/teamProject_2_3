@@ -62,6 +62,12 @@ namespace
 
 void framework::handle_viewport_selection()
 {
+    sync_rig_selection();
+    struct selection_sync
+    {
+        framework& editor;
+        ~selection_sync() { editor.sync_rig_selection(); }
+    } sync_on_exit{ *this };
     if (!edit_mode_active || !game_scene) return;
     // UIワークスペースではScene ViewもUI専用の直接編集面として扱う。
     // UI枠のドラッグを3Dの矩形選択が同時に拾い、選択解除するのを防ぐ。
@@ -127,6 +133,8 @@ void framework::handle_viewport_selection()
         {
             for (const rig_debug_bone& bone : rig.second)
             {
+                // 出していない骨は掴ませない。隠した骨にクリックを取られる。
+                if (!rig_bone_within_depth(rig.second, bone)) continue;
                 ImVec2 screen{};
                 float depth{};
                 if (!project_world_to_screen(rig_view_projection, bone.world,
@@ -136,11 +144,12 @@ void framework::handle_viewport_selection()
                 const float dy = screen.y - mouse.y;
                 const float distance = std::sqrt(dx * dx + dy * dy);
                 if (!std::isfinite(distance) || !std::isfinite(depth) || distance >= pick_radius) continue;
-                // 奥行きがほぼ同じ候補だけ、画面上で近い骨を優先する。
-                const float depth_tolerance = 1.0e-4f * (std::max)(1.0f, (std::max)(depth, best_depth));
-                if (best_name != nullptr && (depth > best_depth + depth_tolerance ||
-                    (std::abs(depth - best_depth) <= depth_tolerance && distance >= best_distance))) continue;
-                best_distance = distance;
+                // 画面上の近さが主。ほぼ同じ距離のときだけ手前の骨を採る。
+                constexpr float tie_pixels = 2.0f;
+                if (best_name != nullptr && (distance > best_distance + tie_pixels ||
+                    (distance >= best_distance - tie_pixels && depth >= best_depth))) continue;
+                // 基準は最小距離のまま。同点で採った候補で緩めていくと際限がない。
+                best_distance = (std::min)(best_distance, distance);
                 best_depth = depth;
                 best_name = &bone.name;
                 best_owner = rig.first;
@@ -148,9 +157,7 @@ void framework::handle_viewport_selection()
         }
         if (best_name != nullptr)
         {
-            select_rig_bone(*best_name, ImGui::GetIO().KeyCtrl);
-            object_editor_context.Selection().Select(
-                ReplayEngine::Core::ObjectID{ best_owner });
+            select_rig_bone(best_owner, *best_name, ImGui::GetIO().KeyCtrl);
             viewport_drag_selecting = false;
             return;
         }

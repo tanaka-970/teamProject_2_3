@@ -8,4 +8,9 @@ namespace ReplayEngine::Editor
     {
         snap_step_ = (std::max)(value, 0.001f);
     }
+
+    void TransformGizmo::SetRotateSnapStep(float value) noexcept
+    {
+        rotate_snap_step_ = (std::max)(value, 0.001f);
+    }
 }

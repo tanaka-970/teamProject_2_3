@@ -1487,6 +1487,12 @@ bool framework::build_dx12_static_scene(
         }
     }
 
+    // 骨の一覧は owner ごとに1つ。メッシュを跨いでも作り直さず統合する。
+    const bool rig_capture_enabled = show_rig_debug_draw ||
+        (show_motion_rig_panel && motion_rig_panel_visible &&
+            active_editor_workspace == editor_workspace::motion);
+    std::unordered_set<std::uint64_t> rig_owners_captured;
+
     for (const RenderItem& source_item : render_items.Items())
     {
         if (source_item.mesh_asset.empty()) continue;
@@ -1657,28 +1663,47 @@ bool framework::build_dx12_static_scene(
                     }
                 }
 
-                if ((show_rig_debug_draw || (show_motion_rig_panel && motion_rig_panel_visible &&
-                    active_editor_workspace == editor_workspace::motion)) && bone_globals_ready)
+                if (rig_capture_enabled && bone_globals_ready)
                 {
                     // 上で組んだ行列をそのまま使う。ポーズも表示へ反映される。
                     const DirectX::XMMATRIX object_world =
                         DirectX::XMLoadFloat4x4(&item.world);
                     std::vector<rig_debug_bone>& bones =
                         object_rig_debug_bones[source_item.owner.Value()];
-                    bones.clear();
-                    bones.reserve(mesh.bind_pose.bones.size());
+                    if (rig_owners_captured.insert(source_item.owner.Value()).second)
+                        bones.clear();
+                    // メッシュごとに骨集合が違うモデルがある。名前で突き合わせて足す。
+                    std::vector<int> merged_index(mesh.bind_pose.bones.size(), -1);
                     for (std::size_t index = 0; index < mesh.bind_pose.bones.size(); ++index)
                     {
                         const skeleton::bone& bone = mesh.bind_pose.bones[index];
-                        rig_debug_bone entry{};
-                        entry.name = bone.name;
-                        entry.parent = static_cast<int>(bone.parent_index);
+                        int slot = -1;
+                        for (std::size_t i = 0; i < bones.size(); ++i)
+                            if (bones[i].name == bone.name) { slot = static_cast<int>(i); break; }
+                        if (slot < 0)
+                        {
+                            slot = static_cast<int>(bones.size());
+                            bones.push_back(rig_debug_bone{});
+                        }
+                        rig_debug_bone& entry = bones[static_cast<std::size_t>(slot)];
                         const DirectX::XMMATRIX global =
                             DirectX::XMLoadFloat4x4(&bone_globals[index]);
                         const DirectX::XMMATRIX bone_world = global * object_world;
+                        entry.name = bone.name;
                         DirectX::XMStoreFloat3(&entry.world, bone_world.r[3]);
                         DirectX::XMStoreFloat4x4(&entry.world_matrix, bone_world);
-                        bones.push_back(std::move(entry));
+                        merged_index[index] = slot;
+                    }
+                    // 親は統合後の番号へ振り直す。メッシュ内の番号のままだと別の骨を指す。
+                    for (std::size_t index = 0; index < mesh.bind_pose.bones.size(); ++index)
+                    {
+                        const int slot = merged_index[index];
+                        if (slot < 0) continue;
+                        const int parent =
+                            static_cast<int>(mesh.bind_pose.bones[index].parent_index);
+                        bones[static_cast<std::size_t>(slot)].parent =
+                            parent >= 0 && static_cast<std::size_t>(parent) < merged_index.size()
+                            ? merged_index[static_cast<std::size_t>(parent)] : -1;
                     }
                 }
 
@@ -2139,6 +2164,12 @@ bool framework::build_dx12_static_scene(
             }
         }
     }
+
+    // 描画へ出なかった owner の骨を残さない。単体表示で隠したモデルが選択候補に残る。
+    if (rig_capture_enabled && options.include_auxiliary_geometry)
+        for (auto it = object_rig_debug_bones.begin(); it != object_rig_debug_bones.end(); )
+            it = rig_owners_captured.count(it->first) == 0
+                ? object_rig_debug_bones.erase(it) : std::next(it);
 
     if (options.include_auxiliary_geometry && editor_mode && !object_scene_play_mode)
     {

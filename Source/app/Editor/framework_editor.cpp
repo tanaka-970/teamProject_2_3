@@ -626,8 +626,7 @@ framework::editor_history_target framework::resolve_editor_history(bool undo, bo
 
     const bool rig_available = undo ? rig_pose_history_cursor > 0
         : rig_pose_history_cursor < rig_pose_history.size();
-    if (rig_available && !rig_selected_bone.empty() &&
-        (show_rig_debug_draw || show_motion_rig_panel))
+    if (rig_available)
     {
         const std::uint64_t other_serial = motion_workspace
             ? (motion_composition_loaded ? composition_edit_history.EditSerial()
@@ -641,6 +640,7 @@ framework::editor_history_target framework::resolve_editor_history(bool undo, bo
 
 bool framework::can_edit_history(editor_history_target target, bool undo)
 {
+    if (gizmo_gesture_active()) return true;
     switch (target)
     {
     case editor_history_target::atlas:
@@ -668,6 +668,11 @@ bool framework::can_edit_history(editor_history_target target, bool undo)
 
 bool framework::execute_editor_history(editor_history_target target, bool undo)
 {
+    if (gizmo_gesture_active())
+    {
+        cancel_gizmo_gesture();
+        return true;
+    }
     switch (target)
     {
     case editor_history_target::atlas:
@@ -697,6 +702,7 @@ bool framework::execute_editor_history(editor_history_target target, bool undo)
 
 void framework::draw_editor_main_menu()
 {
+    sync_rig_selection();
     if (editor_style_history.InTransaction() && !ImGui::IsAnyItemActive())
     {
         editor_style_history.Commit(capture_editor_style_snapshot());
