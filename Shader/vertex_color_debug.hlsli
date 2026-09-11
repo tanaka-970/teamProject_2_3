@@ -1,0 +1,5 @@
+#ifndef REPLAY_VERTEX_COLOR_DEBUG_HLSLI
+#define REPLAY_VERTEX_COLOR_DEBUG_HLSLI
+// １にして再起動すると頂点カラーを表示する。
+#define REPLAY_VERTEX_COLOR_DEBUG 0
+#endif

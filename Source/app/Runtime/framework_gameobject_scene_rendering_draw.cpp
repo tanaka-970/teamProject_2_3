@@ -961,9 +961,44 @@ bool framework::build_dx12_static_scene(
         return source_item.material_slots[subset_index];
     };
 
-    const auto make_mesh_source = [&submission, &mesh_source_keys, this](
+    const auto load_vertex_colors = [](RenderItem& item, const std::filesystem::path& model_path,
+        const auto& meshes)
+    {
+        if (item.vertex_colors || model_path.empty()) return;
+        const auto path = ReplayEngine::Assets::VertexColorAsset::SidecarPath(model_path);
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec) || ec) return;
+        std::vector<ReplayEngine::Assets::VertexColorFingerprint> expected;
+        expected.reserve(meshes.size());
+        for (const auto& mesh : meshes)
+        {
+            if (mesh.vertices.size() > UINT32_MAX || mesh.indices.size() > UINT32_MAX) return;
+            expected.push_back(ReplayEngine::Assets::VertexColorAsset::Fingerprint(
+                mesh.vertices.empty() ? nullptr : &mesh.vertices.front().position,
+                static_cast<std::uint32_t>(mesh.vertices.size()), sizeof(mesh.vertices.front()),
+                static_cast<std::uint32_t>(mesh.indices.size())));
+        }
+        auto asset = std::make_shared<ReplayEngine::Assets::VertexColorAsset>();
+        std::string error;
+        if (ReplayEngine::Assets::VertexColorAsset::LoadFromFile(path, expected, *asset, error))
+            item.vertex_colors = std::move(asset);
+    };
+    const auto copy_vertex_colors = [](auto& source, const RenderItem* item,
+        std::uint32_t mesh_index)
+    {
+        if (item == nullptr || !item->vertex_colors || source.vertices.empty() ||
+            source.vertices.size() > UINT32_MAX || source.indices.size() > UINT32_MAX) return;
+        const auto fingerprint = ReplayEngine::Assets::VertexColorAsset::Fingerprint(
+            &source.vertices.front().position, static_cast<std::uint32_t>(source.vertices.size()),
+            sizeof(source.vertices.front()), static_cast<std::uint32_t>(source.indices.size()));
+        if (const auto* block = item->vertex_colors->FindMesh(mesh_index, fingerprint))
+            source.vertex_colors = block->colors;
+    };
+
+    const auto make_mesh_source = [&submission, &mesh_source_keys, &copy_vertex_colors, this](
         const std::string& key, auto vertex_begin, auto vertex_end,
-        const std::vector<std::uint32_t>& indices)
+        const std::vector<std::uint32_t>& indices,
+        const RenderItem* item = nullptr, std::uint32_t mesh_index = 0)
     {
         // 視錐台カリング用の境界。メッシュごとに一度だけ求めて残す。
         if (static_mesh_bounds_cache.find(key) == static_mesh_bounds_cache.end())
@@ -987,6 +1022,7 @@ bool framework::build_dx12_static_scene(
                 source.vertices.push_back(vertex);
             }
             source.indices = indices;
+            copy_vertex_colors(source, item, mesh_index);
             submission.mesh_sources.push_back(std::move(source));
         }
         catch (...)
@@ -996,8 +1032,8 @@ bool framework::build_dx12_static_scene(
     };
 
     std::unordered_set<std::string> skinned_mesh_source_keys;
-    const auto make_skinned_mesh_source = [&submission, &skinned_mesh_source_keys](
-        const std::string& key, const skinned_mesh::mesh& mesh)
+    const auto make_skinned_mesh_source = [&submission, &skinned_mesh_source_keys, &copy_vertex_colors](
+        const std::string& key, const skinned_mesh::mesh& mesh, const RenderItem& item, std::uint32_t mesh_index)
     {
         if (!skinned_mesh_source_keys.insert(key).second) return;
         REPLAY_PROFILE_SCOPE("Item/MakeSkinnedSource");
@@ -1022,6 +1058,7 @@ bool framework::build_dx12_static_scene(
                 source.vertices.push_back(vertex);
             }
             source.indices = mesh.indices;
+            copy_vertex_colors(source, &item, mesh_index);
             submission.skinned_mesh_sources.push_back(std::move(source));
         }
         catch (...)
@@ -1500,7 +1537,7 @@ bool framework::build_dx12_static_scene(
             isolate_ids.find(source_item.owner.Value()) == isolate_ids.end())
             continue;
 
-        const RenderItem item = resolve_render_item_material(source_item);
+        RenderItem item = resolve_render_item_material(source_item);
         if (source_item.skinned)
         {
             skinned_mesh* mesh_asset = resolve_object_mesh(item.mesh_asset);
@@ -1525,7 +1562,10 @@ bool framework::build_dx12_static_scene(
                 D3D12MeshLocalBounds cached_bounds;
                 if (!dx12_device_context.HasSkinnedMesh(mesh_key) ||
                     !dx12_device_context.GetSkinnedMeshLocalBounds(mesh_key, cached_bounds))
-                    make_skinned_mesh_source(mesh_key, mesh);
+                {
+                    load_vertex_colors(item, model_source, mesh_asset->meshes);
+                    make_skinned_mesh_source(mesh_key, mesh, item, static_cast<std::uint32_t>(mesh_index));
+                }
 
                 DirectX::XMFLOAT4X4 mesh_world =
                     multiply_world(mesh.default_global_transform, item.world);
@@ -1944,6 +1984,10 @@ bool framework::build_dx12_static_scene(
             if (geometry_missing)
             {
                 if (!gltf->ExportStaticPrimitives(exported)) continue;
+                std::filesystem::path model_source;
+                std::string model_reason;
+                (void)resolve_model_source(item.mesh_asset, model_source, model_reason);
+                load_vertex_colors(item, model_source, exported);
                 for (std::size_t primitive_index = 0;
                     primitive_index < exported.size(); ++primitive_index)
                 {
@@ -1952,7 +1996,7 @@ bool framework::build_dx12_static_scene(
                     if (!dx12_device_context.HasStaticMesh(key))
                         make_mesh_source(key, exported[primitive_index].vertices.begin(),
                             exported[primitive_index].vertices.end(),
-                            exported[primitive_index].indices);
+                            exported[primitive_index].indices, &item, static_cast<std::uint32_t>(primitive_index));
                 }
             }
 
@@ -2036,8 +2080,11 @@ bool framework::build_dx12_static_scene(
             const std::string mesh_key = item.mesh_asset + "#mesh:" +
                 std::to_string(mesh_index);
             if (!dx12_device_context.HasStaticMesh(mesh_key))
+            {
+                load_vertex_colors(item, model_source, mesh_asset->meshes);
                 make_mesh_source(mesh_key, mesh.vertices.begin(), mesh.vertices.end(),
-                    mesh.indices);
+                    mesh.indices, &item, static_cast<std::uint32_t>(mesh_index));
+            }
 
             const DirectX::XMFLOAT4X4 mesh_world =
                 multiply_world(mesh.default_global_transform, item.world);

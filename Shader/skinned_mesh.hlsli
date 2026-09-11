@@ -23,6 +23,7 @@ struct VS_OUT
 	// SV_POSITIONはラスタライズ後の値になるため、別に持つ必要がある。
 	float4 current_clip : TEXCOORD1;
 	float4 previous_clip : TEXCOORD2;
+	float4 vertex_color : COLOR1;
 };
 
 static const int MAX_BONES = 256;

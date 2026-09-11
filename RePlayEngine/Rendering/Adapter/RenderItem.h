@@ -10,6 +10,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <memory>
+#include "../../Assets/VertexColorAsset.h"
 #include <vector>
 
 namespace ReplayEngine::Components
@@ -35,6 +37,9 @@ namespace ReplayEngine::Rendering
 
         // AssetDatabase の GUID。空なら描画しない。
         std::string mesh_asset;
+
+        // モデルの指紋を照合済みの頂点カラーを描画提出まで共有する。
+        std::shared_ptr<const Assets::VertexColorAsset> vertex_colors;
 
         // MaterialAssetのAssetGUID。空ならRendererのプロパティだけを使う。
         std::string material_asset;

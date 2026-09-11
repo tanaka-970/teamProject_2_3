@@ -1,4 +1,5 @@
 #include "dx12_lighting_common.hlsli"
+#include "vertex_color_debug.hlsli"
 #include "gbuffer_common.hlsli"
 
 Texture2D gBase : register(t0);
@@ -38,6 +39,9 @@ float4 main(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_Target0
 {
     float depth = gDepth.SampleLevel(pointSampler, uv, 0).r;
     clip(0.999999f - depth);
+#if REPLAY_VERTEX_COLOR_DEBUG
+    return gToon.SampleLevel(pointSampler, uv, 0);
+#endif
     float4 base = gBase.SampleLevel(pointSampler, uv, 0);
     const float4 emissiveValue = gEmissive.SampleLevel(pointSampler, uv, 0);
     float3 emissive = emissiveValue.rgb;

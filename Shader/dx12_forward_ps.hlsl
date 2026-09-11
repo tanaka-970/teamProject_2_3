@@ -1,3 +1,5 @@
+#include "vertex_color_debug.hlsli"
+
 cbuffer MaterialCB : register(b2)
 {
     float4 baseColor;
@@ -33,6 +35,7 @@ struct PSIn
     float4 currentClip : TEXCOORD3;
     float4 previousClip : TEXCOORD4;
     float4 tangent : TEXCOORD5;
+    float4 vertexColor : COLOR0;
 };
 
 static const uint MATERIAL_NORMAL_MAP = 1u << 1;
@@ -107,6 +110,9 @@ float3 ResolveNormal(PSIn input, uint semanticMask)
 
 float4 main(PSIn input) : SV_Target0
 {
+#if REPLAY_VERTEX_COLOR_DEBUG
+    return input.vertexColor;
+#endif
     const uint semanticMask = (uint)round(max(renderParams.w, 0.0f));
     float4 albedo = baseTexture.Sample(materialSampler, input.uv) * baseColor;
     if (renderParams.x > 0.5f && renderParams.x < 1.5f)

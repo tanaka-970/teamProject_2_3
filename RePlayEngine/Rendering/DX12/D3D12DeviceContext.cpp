@@ -2275,6 +2275,8 @@ namespace ReplayEngine::Rendering::DX12
                 D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24,
                 D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 1, 0,
+                D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
         for (std::uint32_t sided = 0; sided < 2; ++sided)
@@ -2631,7 +2633,8 @@ namespace ReplayEngine::Rendering::DX12
         if (!mesh->Upload(device_.Get(), upload_context_, source.vertices.data(),
             static_cast<std::uint32_t>(vertex_bytes), sizeof(D3D12StaticVertex),
             source.indices.data(), static_cast<std::uint32_t>(index_bytes),
-            DXGI_FORMAT_R32_UINT))
+            DXGI_FORMAT_R32_UINT, source.vertex_colors.size() == source.vertices.size()
+                ? source.vertex_colors.data() : nullptr))
             return false;
         mesh->SetDebugName(source.key);
         try
@@ -3271,9 +3274,10 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootDescriptorTable(15, static_samplers_[2].gpu);   // s2
 
             const D3D12_VERTEX_BUFFER_VIEW vertex_view = mesh_it->second->VertexView();
+            const D3D12_VERTEX_BUFFER_VIEW views[] = { vertex_view, mesh_it->second->ColorView() };
             const D3D12_INDEX_BUFFER_VIEW index_view = mesh_it->second->IndexView();
             command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-            command_list_->IASetVertexBuffers(0, 1, &vertex_view);
+            command_list_->IASetVertexBuffers(0, 2, views);
             command_list_->IASetIndexBuffer(&index_view);
             const std::uint32_t available = mesh_it->second->IndexCount();
             const std::uint32_t start = (std::min)(draw.start_index, available);

@@ -10,6 +10,7 @@
 #include "D3D12FrameConstants.h"
 #include "D3D12FrameResource.h"
 #include "D3D12MeshBuffer.h"
+#include "../../Assets/VertexColorAsset.h"
 #include "D3D12RenderItemBatch.h"
 #include "D3D12ResourceStateTracker.h"
 #include "D3D12ScreenBounds.h"
@@ -61,6 +62,7 @@ namespace ReplayEngine::Rendering::DX12
         std::string key;
         std::vector<D3D12StaticVertex> vertices;
         std::vector<std::uint32_t> indices;
+        std::vector<Assets::VertexColorRgba8> vertex_colors;
         // 同じFrame slotの動的Line/Trailを再アップロードするときだけ置換する。
         // BeginFrameが該当slotのFenceを待った後なので、GPU使用中のResourceを解放しない。
         bool replace_existing = false;
@@ -233,6 +235,7 @@ namespace ReplayEngine::Rendering::DX12
         std::string key;
         std::vector<D3D12SkinnedVertex> vertices;
         std::vector<std::uint32_t> indices;
+        std::vector<Assets::VertexColorRgba8> vertex_colors;
     };
 
     struct D3D12SkinnedDrawItem final

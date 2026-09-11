@@ -1,3 +1,5 @@
+#include "vertex_color_debug.hlsli"
+
 cbuffer MaterialCB : register(b2)
 {
     float4 baseColor;
@@ -67,6 +69,7 @@ struct PSIn
     float4 currentClip : TEXCOORD3;
     float4 previousClip : TEXCOORD4;
     float4 tangent : TEXCOORD5;
+    float4 vertexColor : COLOR0;
 };
 struct PSOut
 {
@@ -201,5 +204,8 @@ PSOut main(PSIn input)
     const float2 currentNdc = input.currentClip.xy / max(abs(input.currentClip.w), 1.0e-5f);
     const float2 previousNdc = input.previousClip.xy / max(abs(input.previousClip.w), 1.0e-5f);
     output.velocity = (currentNdc - previousNdc) * float2(0.5f, -0.5f);
+#if REPLAY_VERTEX_COLOR_DEBUG
+    output.toon = input.vertexColor;
+#endif
     return output;
 }

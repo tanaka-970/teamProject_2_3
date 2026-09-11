@@ -7,11 +7,11 @@ namespace ReplayEngine::Rendering::DX12
         D3D12UploadContext& uploader, const void* vertices,
         std::uint32_t vertex_size, std::uint32_t vertex_stride,
         const void* indices, std::uint32_t index_size,
-        DXGI_FORMAT index_format) noexcept
+        DXGI_FORMAT index_format, const Assets::VertexColorRgba8* colors) noexcept
     {
         Reset();
         if (vertices == nullptr || indices == nullptr || vertex_size == 0 ||
-            vertex_stride == 0 || index_size == 0)
+            vertex_stride == 0 || index_size == 0 || vertex_size % vertex_stride != 0)
             return false;
         const std::uint32_t index_stride = index_format == DXGI_FORMAT_R16_UINT
             ? 2u : index_format == DXGI_FORMAT_R32_UINT ? 4u : 0u;
@@ -26,6 +26,21 @@ namespace ReplayEngine::Rendering::DX12
             Reset();
             return false;
         }
+        try
+        {
+            const std::uint32_t count = vertex_size / vertex_stride;
+            if (count > UINT32_MAX / sizeof(Assets::VertexColorRgba8)) { Reset(); return false; }
+            std::vector<Assets::VertexColorRgba8> white;
+            if (colors == nullptr)
+            {
+                white.resize(count);
+                colors = white.data();
+            }
+            if (!D3D12ResourceFactory::CreateVertexBuffer(device, uploader, colors,
+                count * 4u, 4u,
+                color_buffer_, color_view_)) { Reset(); return false; }
+        }
+        catch (...) { Reset(); return false; }
         index_count_ = index_size / index_stride;
         return true;
     }
@@ -34,9 +49,12 @@ namespace ReplayEngine::Rendering::DX12
         D3D12UploadContext& uploader, const D3D12MeshBuffer& previous,
         const void* vertices, std::uint32_t vertex_size, std::uint32_t vertex_stride) noexcept
     {
-        if (!previous.IsValid() || vertex_size != previous.vertex_view_.SizeInBytes) return false;
+        if (!previous.IsValid() || vertex_size != previous.vertex_view_.SizeInBytes ||
+            vertex_stride != previous.vertex_view_.StrideInBytes) return false;
         if (!D3D12ResourceFactory::CreateVertexBuffer(device, uploader, vertices,
             vertex_size, vertex_stride, vertex_buffer_, vertex_view_)) return false;
+        color_buffer_ = previous.color_buffer_;
+        color_view_ = previous.color_view_;
         index_buffer_ = previous.index_buffer_;
         index_view_ = previous.index_view_;
         index_count_ = previous.index_count_;
@@ -47,12 +65,15 @@ namespace ReplayEngine::Rendering::DX12
     {
         SetD3D12ObjectNameUtf8(vertex_buffer_.Get(), L"Mesh.VB", key);
         SetD3D12ObjectNameUtf8(index_buffer_.Get(), L"Mesh.IB", key);
+        SetD3D12ObjectNameUtf8(color_buffer_.Get(), L"Mesh.ColorVB", key);
     }
 
     void D3D12MeshBuffer::Reset() noexcept
     {
         vertex_buffer_.Reset();
         index_buffer_.Reset();
+        color_buffer_.Reset();
+        color_view_ = {};
         vertex_view_ = {};
         index_view_ = {};
         index_count_ = 0;

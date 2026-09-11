@@ -22,6 +22,7 @@ struct VSIn
     uint4 indices : BLENDINDICES;
     float3 morphPosition : MORPHPOSITION;
     float3 morphNormal : MORPHNORMAL;
+    float4 vertexColor : COLOR0;
 };
 struct VSOut
 {
@@ -32,6 +33,7 @@ struct VSOut
     float4 currentClip : TEXCOORD3;
     float4 previousClip : TEXCOORD4;
     float4 tangent : TEXCOORD5;
+    float4 vertexColor : COLOR0;
 };
 float4 SkinCurrentPosition(float3 p, float4 w, uint4 i)
 {
@@ -69,5 +71,6 @@ VSOut main(VSIn input)
     o.normal = normalize(mul(float4(skinnedNormal, 0.0f), world).xyz);
     o.tangent = float4(normalize(mul(float4(skinnedTangent, 0.0f), world).xyz), input.tangent.w);
     o.uv = input.uv;
+    o.vertexColor = input.vertexColor;
     return o;
 }

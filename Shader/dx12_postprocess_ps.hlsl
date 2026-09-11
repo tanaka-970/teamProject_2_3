@@ -269,8 +269,13 @@ float3 temporalResolve(float2 uv, float3 color)
     return max(resolved, 0.0f);
 }
 
+#include "vertex_color_debug.hlsli"
+
 float4 temporal_input_main(PixelInput input) : SV_TARGET
 {
+#if REPLAY_VERTEX_COLOR_DEBUG
+    return sceneTexture.SampleLevel(pointSampler, input.uv, 0);
+#endif
     float3 color = sampleScene(input.uv);
     if (finalPassEnabled > 0.5f)
     {
@@ -283,6 +288,9 @@ float4 temporal_input_main(PixelInput input) : SV_TARGET
 
 float4 taa_resolve_main(PixelInput input) : SV_TARGET
 {
+#if REPLAY_VERTEX_COLOR_DEBUG
+    return sceneTexture.SampleLevel(pointSampler, input.uv, 0);
+#endif
     float3 color = sampleScene(input.uv);
     if (finalPassEnabled > 0.5f) color = temporalResolve(input.uv, color);
     return float4(max(color, 0.0f), 1.0f);
@@ -301,6 +309,9 @@ float3 acesToneMap(float3 color)
 
 float4 main(PixelInput input) : SV_TARGET
 {
+#if REPLAY_VERTEX_COLOR_DEBUG
+    return sceneTexture.SampleLevel(pointSampler, input.uv, 0);
+#endif
     const uint output = (uint)(debugOptions.x + 0.5f);
     if (output != 0u)
     {

@@ -898,6 +898,7 @@
     <ClCompile Include="RePlayEngine\Components\UI\RectTransformComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIImageComponent.cpp" />
     <ClCompile Include="RePlayEngine\Assets\SpriteAtlasAsset.cpp" />
+    <ClCompile Include="RePlayEngine\Assets\VertexColorAsset.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIPuppetDeformComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIShapeComponent.cpp" />
     <ClCompile Include="RePlayEngine\Components\UI\UIShapeImageComponent.cpp" />
@@ -917,6 +918,7 @@
     <ClInclude Include="RePlayEngine\Components\UI\UIShapeComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIShapeImageComponent.h" />
     <ClInclude Include="RePlayEngine\Assets\SpriteAtlasAsset.h" />
+    <ClInclude Include="RePlayEngine\Assets\VertexColorAsset.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UITextComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIButtonComponent.h" />
     <ClInclude Include="RePlayEngine\Components\UI\UIMaskComponent.h" />

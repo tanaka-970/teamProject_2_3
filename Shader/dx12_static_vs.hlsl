@@ -9,7 +9,7 @@ cbuffer SceneCB : register(b1)
     row_major float4x4 viewProjection;
     row_major float4x4 previousViewProjection;
 };
-struct VSIn { float3 position : POSITION; float3 normal : NORMAL; float2 uv : TEXCOORD0; };
+struct VSIn { float3 position : POSITION; float3 normal : NORMAL; float2 uv : TEXCOORD0; float4 vertexColor : COLOR0; };
 struct VSOut
 {
     float4 position : SV_POSITION;
@@ -19,6 +19,7 @@ struct VSOut
     float4 currentClip : TEXCOORD3;
     float4 previousClip : TEXCOORD4;
     float4 tangent : TEXCOORD5;
+    float4 vertexColor : COLOR0;
 };
 VSOut main(VSIn input)
 {
@@ -34,5 +35,6 @@ VSOut main(VSIn input)
     // static_mesh の既存 ABI は tangent を持たない。PS 側で安定した basis を構築する。
     o.tangent = 0.0f.xxxx;
     o.uv = input.uv;
+    o.vertexColor = input.vertexColor;
     return o;
 }

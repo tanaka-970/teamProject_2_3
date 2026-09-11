@@ -660,6 +660,7 @@ namespace ReplayEngine::Rendering::DX12
             { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
         D3D12_INPUT_ELEMENT_DESC skinned_input[] =
         {
@@ -671,6 +672,7 @@ namespace ReplayEngine::Rendering::DX12
             { "BLENDINDICES", 0, DXGI_FORMAT_R32G32B32A32_UINT, 0, 64, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "MORPHPOSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 80, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "MORPHNORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 92, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
         const auto create_geometry_pso = [this](bool skinned, bool transparent,
@@ -2016,7 +2018,8 @@ namespace ReplayEngine::Rendering::DX12
         const std::uint32_t index_bytes = static_cast<std::uint32_t>(
             source.indices.size() * sizeof(std::uint32_t));
         if (!mesh->Upload(device_.Get(), upload_context_, source.vertices.data(), vertex_bytes,
-            sizeof(D3D12SkinnedVertex), source.indices.data(), index_bytes, DXGI_FORMAT_R32_UINT))
+            sizeof(D3D12SkinnedVertex), source.indices.data(), index_bytes, DXGI_FORMAT_R32_UINT,
+            source.vertex_colors.size() == source.vertices.size() ? source.vertex_colors.data() : nullptr))
             return false;
         mesh->SetDebugName(source.key);
         skinned_mesh_cache_.emplace(source.key, std::move(mesh));
@@ -2556,6 +2559,7 @@ namespace ReplayEngine::Rendering::DX12
             const D3D12StaticDrawItem& draw)
         {
             const D3D12_VERTEX_BUFFER_VIEW vb = mesh.VertexView();
+            const D3D12_VERTEX_BUFFER_VIEW views[] = { vb, mesh.ColorView() };
             const D3D12_INDEX_BUFFER_VIEW ib = mesh.IndexView();
             const std::uint32_t available = mesh.IndexCount();
             const std::uint32_t start = (std::min)(draw.start_index, available);
@@ -2570,7 +2574,7 @@ namespace ReplayEngine::Rendering::DX12
                         draw.material_bounds.minimum, draw.material_bounds.maximum, draw.world);
                 if (frustum_culling_enabled_ && !visible) return;
                 command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-                command_list_->IASetVertexBuffers(0, 1, &vb);
+                command_list_->IASetVertexBuffers(0, 2, views);
                 command_list_->IASetIndexBuffer(&ib);
                 command_list_->DrawIndexedInstanced(count, 1, start, 0, 0);
                 ++last_scene_draw_call_count_;
