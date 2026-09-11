@@ -42,7 +42,7 @@ struct ImDrawData;
 namespace ReplayEngine::Rendering::DX12
 {
     // Deferred GBuffer の枚数はここだけで決める。RT を足すときはこの値を増やす。
-    inline constexpr std::uint32_t kScene3DGBufferCount = 6;
+    inline constexpr std::uint32_t kScene3DGBufferCount = 8;
     inline constexpr std::size_t kScene3DLayerPipelineCount = 12;
 
     struct D3D12StaticVertex final
@@ -183,11 +183,11 @@ namespace ReplayEngine::Rendering::DX12
         // ResolvedMaterialBinding::TextureSemantic の bit mask。
         // slot番号だけで Toon RampMap 等を NormalMap と誤認しないために使う。
         std::uint32_t material_texture_semantic_mask = 0;
-        // BuiltIn シェーダの固有表現。x=効果ID、y/z/w=引数。0 なら何もしない。
+        // BuiltIn固有表現。GGSTはx=3、y=Threshold、z=Offset、w=SpecularSize。
         DirectX::XMFLOAT4 builtin_params{ 0.0f, 0.0f, 0.0f, 0.0f };
-        // Toon の追加枠。rgb=ShadowTint、w=RimPower。既定は効果オフ。
+        // 追加色枠。ToonはShadowTint、GGSTはShadeColorをrgbへ入れる。
         DirectX::XMFLOAT4 builtin_params1{ 0.0f, 0.0f, 0.0f, 0.0f };
-        // Toon の追加枠。rgb=RimColor、w=SpecularPower。
+        // Toonはrgb=RimColor/w=SpecularPower、GGSTはx=顔ライティング有効。
         DirectX::XMFLOAT4 builtin_params2{ 0.0f, 0.0f, 0.0f, 1.0f };
         // Toon の追加枠。rgb=SpecularTint、w=予約。
         DirectX::XMFLOAT4 builtin_params3{ 0.0f, 0.0f, 0.0f, 0.0f };

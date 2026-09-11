@@ -31,15 +31,21 @@ namespace ReplayEngine::Rendering::DX12
             DXGI_FORMAT_R8G8B8A8_UNORM,     // Metallic/Roughness/AO/モデル
             DXGI_FORMAT_R16G16_FLOAT,       // モーションベクター
             DXGI_FORMAT_R16G16B16A16_UNORM, // Toonの色3つと指数2つをbit packして運ぶ
+            DXGI_FORMAT_R8G8B8A8_UNORM,      // 頂点カラーRGBAを生のまま運ぶ
+            DXGI_FORMAT_R16G16B16A16_UNORM,  // GGST顔ライティング用のRight/Frontを圧縮して運ぶ
         };
 
         // ライティングパスの root parameter 番号。GBuffer 0..4 は既存の t0..t4 を動かさず、
         // 追加分は影配列の t6/t7 を避けて t8 以降へ置く。
         constexpr UINT kScene3DLightingGBufferRootSlot[kScene3DGBufferCount] =
         {
-            1, 2, 3, 4, 5, 9,
+            1, 2, 3, 4, 5, 9, 16, 17,
         };
-        constexpr UINT kScene3DLightingSrvRangeCount = 15;
+        constexpr UINT kScene3DLightingSrvRangeCount = 17;
+        constexpr float kScene3DOutlineDepthOffsetDistance = 0.01f;
+        constexpr std::uint32_t kScene3DGgstIlmMaterialSlot = 47u;
+        constexpr std::uint32_t kScene3DMaterialIlmSemanticBit = 1u << 8;
+        static_assert(kScene3DGBufferCount <= D3D12_SIMULTANEOUS_RENDER_TARGET_COUNT);
         constexpr DXGI_FORMAT kScene3DDepthResourceFormat = DXGI_FORMAT_R32_TYPELESS;
         constexpr DXGI_FORMAT kScene3DDepthDsvFormat = DXGI_FORMAT_D32_FLOAT;
         constexpr DXGI_FORMAT kScene3DDepthSrvFormat = DXGI_FORMAT_R32_FLOAT;
@@ -82,12 +88,15 @@ namespace ReplayEngine::Rendering::DX12
         {
             DirectX::XMFLOAT4X4 view_projection{};
             DirectX::XMFLOAT4X4 previous_view_projection{};
+            DirectX::XMFLOAT4 camera_position{};
+            DirectX::XMFLOAT4 outline_params{ 1, 0, 0, 0 };
         };
 
         struct Scene3DLayerConstants final
         {
             DirectX::XMFLOAT4 color{ 1, 1, 1, 1 };
             DirectX::XMFLOAT4 params{};
+            DirectX::XMFLOAT4 params2{};
         };
 
         struct Scene3DMaterialConstants final
@@ -98,12 +107,12 @@ namespace ReplayEngine::Rendering::DX12
             DirectX::XMFLOAT4 normal_adjust_params{};
             DirectX::XMFLOAT4 surface_params{ 0, 0.55f, 1, 0.5f };
             DirectX::XMFLOAT4 render_params{};
-            // BuiltIn シェーダ用の汎用枠。x=効果ID、y/z/w はその効果の引数。
+            // BuiltIn汎用枠。GGSTはx=3、y=Threshold、z=Offset、w=SpecularSize。
             // BuiltIn は自前 PSO を持てないため、固有表現はここへ載せる。
             DirectX::XMFLOAT4 builtin_params{};
-            // Toon の追加枠。rgb=ShadowTint、w=RimPower。既定は効果オフ。
+            // 追加色枠。ToonはShadowTint、GGSTはShadeColorをrgbへ入れる。
             DirectX::XMFLOAT4 builtin_params1{};
-            // Toon の追加枠。rgb=RimColor、w=SpecularPower。
+            // Toonはrgb=RimColor/w=SpecularPower、GGSTはx=顔ライティング有効。
             DirectX::XMFLOAT4 builtin_params2{ 0, 0, 0, 1 };
             // Toon の追加枠。rgb=SpecularTint、w=Model Effect の Deferred 整合フラグ。
             DirectX::XMFLOAT4 builtin_params3{};
@@ -497,14 +506,14 @@ namespace ReplayEngine::Rendering::DX12
         device_->CreateShaderResourceView(nullptr, &null_ibl_srv,
             scene3d_null_ibl_specular_srv_.cpu);
 
-        // t0..t5はMaterial Map、t6はCSM、t7はLocal Shadow Atlas、t10はToon RampMap、t11はScene Color。
+        // t0..t5はMaterial Map、t6はCSM、t7はLocal Shadow Atlas、t10はToon RampMap、t12はGGST ILM。
         // Slot番号ではなく draw.material_texture_semantic_mask で意味を判定する。
-        // t8/t9 は Bone Palette の root SRV が使うので RampMap は t10 へ置く。
-        constexpr UINT kScene3DGeometrySrvRangeCount = 14;
+        // t8/t9 は Bone Palette の root SRV が使うので追加テクスチャは t10 以降へ置く。
+        constexpr UINT kScene3DGeometrySrvRangeCount = 15;
         const UINT geometry_registers[kScene3DGeometrySrvRangeCount] =
-            { 0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 33, 34, 36, 37 };
+            { 0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 33, 34, 36, 37, 12 };
         const UINT geometry_table_slots[kScene3DGeometrySrvRangeCount] =
-            { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20 };
+            { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20, 21 };
         D3D12_DESCRIPTOR_RANGE geometry_ranges[kScene3DGeometrySrvRangeCount]{};
         for (UINT i = 0; i < static_cast<UINT>(std::size(geometry_ranges)); ++i)
         {
@@ -512,7 +521,7 @@ namespace ReplayEngine::Rendering::DX12
             geometry_ranges[i].NumDescriptors = 1;
             geometry_ranges[i].BaseShaderRegister = geometry_registers[i];
         }
-        D3D12_ROOT_PARAMETER geometry_parameters[21]{};
+        D3D12_ROOT_PARAMETER geometry_parameters[22]{};
         for (UINT i = 0; i < 4; ++i)
         {
             geometry_parameters[i].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -586,7 +595,7 @@ namespace ReplayEngine::Rendering::DX12
             return fail("Scene3D.GeometryRootSignature");
 
         const UINT lighting_registers[kScene3DLightingSrvRangeCount] =
-            { 0, 1, 2, 3, 4, 5, 6, 7, 8, 33, 34, 35, 36, 37, 38 };
+            { 0, 1, 2, 3, 4, 5, 6, 7, 8, 33, 34, 35, 36, 37, 38, 9, 10 };
         D3D12_DESCRIPTOR_RANGE lighting_ranges[kScene3DLightingSrvRangeCount]{};
         D3D12_ROOT_PARAMETER lighting_parameters[kScene3DLightingSrvRangeCount + 1]{};
         lighting_parameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -2263,6 +2272,9 @@ namespace ReplayEngine::Rendering::DX12
         Scene3DSceneConstants scene{};
         scene.view_projection = current_frame_constants_.view_projection;
         scene.previous_view_projection = current_frame_constants_.prev_view_projection;
+        scene.camera_position = current_frame_constants_.camera_position;
+        const float projection_y = std::abs(current_frame_constants_.projection._22);
+        scene.outline_params.x = projection_y > 1.0e-6f ? 1.0f / projection_y : 1.0f;
         D3D12_GPU_VIRTUAL_ADDRESS scene_gpu = 0;
         if (!allocate_cb(&scene, sizeof(scene), scene_gpu)) return scene3d_fail("scene constants upload");
 
@@ -2610,6 +2622,38 @@ namespace ReplayEngine::Rendering::DX12
             object.morph = { morph_weight, 0, 0, 0 };
             D3D12_GPU_VIRTUAL_ADDRESS object_gpu = 0;
             if (!allocate_cb(&object, sizeof(object), object_gpu)) return false;
+            const StaticTextureResource* normal = material_texture_for(draw, 41u, "__dx12_bump");
+            const StaticTextureResource* metallic = material_texture_for(draw, 42u, "__dx12_white");
+            const StaticTextureResource* roughness = material_texture_for(draw, 43u, "__dx12_white");
+            const StaticTextureResource* emissive = material_texture_for(draw, 44u, "__dx12_black");
+            const StaticTextureResource* occlusion = material_texture_for(draw, 45u, "__dx12_white");
+            const StaticTextureResource* ramp = material_texture_for(draw, 46u, "__dx12_white");
+            const StaticTextureResource* ilm = nullptr;
+            bool has_ilm = false;
+            for (const D3D12StaticMaterialTexture& mapped : draw.material_textures)
+            {
+                if (mapped.slot != kScene3DGgstIlmMaterialSlot) continue;
+                const auto found = texture_cache_.find(mapped.texture_key);
+                if (found != texture_cache_.end())
+                {
+                    ilm = &found->second;
+                    has_ilm = true;
+                }
+                break;
+            }
+            const bool is_ggst = draw.builtin_params.x >= 2.5f && draw.builtin_params.x < 3.5f;
+            if (!has_ilm && is_ggst &&
+                (draw.material_texture_semantic_mask & (1u << 7)) != 0u)
+            {
+                ilm = ramp;
+                has_ilm = ramp != nullptr;
+            }
+            if (ilm == nullptr) ilm = material_texture_for(draw, kScene3DGgstIlmMaterialSlot, "__dx12_white");
+            if (normal == nullptr || metallic == nullptr || roughness == nullptr ||
+                emissive == nullptr || occlusion == nullptr || ramp == nullptr || ilm == nullptr)
+                return false;
+            std::uint32_t semantic_mask = draw.material_texture_semantic_mask;
+            if (has_ilm) semantic_mask |= kScene3DMaterialIlmSemanticBit;
             Scene3DMaterialConstants material{};
             material.base_color = draw.base_color;
             material.builtin_params = draw.builtin_params;
@@ -2626,7 +2670,7 @@ namespace ReplayEngine::Rendering::DX12
             material.render_params = {
                 static_cast<float>(static_cast<std::uint32_t>(draw.alpha_mode)),
                 static_cast<float>(draw.lighting_model), draw.receive_shadow ? 1.0f : 0.0f,
-                static_cast<float>(draw.material_texture_semantic_mask) };
+                static_cast<float>(semantic_mask) };
             D3D12_GPU_VIRTUAL_ADDRESS material_gpu = 0;
             if (!allocate_cb(&material, sizeof(material), material_gpu)) return false;
             command_list_->SetGraphicsRootConstantBufferView(0, object_gpu);
@@ -2637,15 +2681,6 @@ namespace ReplayEngine::Rendering::DX12
                 current_bones ? current_bones : identity_bone_gpu);
             command_list_->SetGraphicsRootShaderResourceView(5,
                 previous_bones ? previous_bones : identity_bone_gpu);
-            const StaticTextureResource* normal = material_texture_for(draw, 41u, "__dx12_bump");
-            const StaticTextureResource* metallic = material_texture_for(draw, 42u, "__dx12_white");
-            const StaticTextureResource* roughness = material_texture_for(draw, 43u, "__dx12_white");
-            const StaticTextureResource* emissive = material_texture_for(draw, 44u, "__dx12_black");
-            const StaticTextureResource* occlusion = material_texture_for(draw, 45u, "__dx12_white");
-            const StaticTextureResource* ramp = material_texture_for(draw, 46u, "__dx12_white");
-            if (normal == nullptr || metallic == nullptr || roughness == nullptr ||
-                emissive == nullptr || occlusion == nullptr || ramp == nullptr)
-                return false;
             const StaticTextureResource* base = texture_for(draw);
             command_list_->SetGraphicsRootDescriptorTable(6, base->srgb_srv.IsValid()
                 ? base->srgb_srv.gpu : base->srv.gpu);                                     // t0
@@ -2658,6 +2693,7 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootDescriptorTable(12, directional_shadow_srv);      // t6
             command_list_->SetGraphicsRootDescriptorTable(13, local_shadow_srv);            // t7
             command_list_->SetGraphicsRootDescriptorTable(14, ramp->srv.gpu);               // t10
+            command_list_->SetGraphicsRootDescriptorTable(21, ilm->srv.gpu);                 // t12
             command_list_->SetGraphicsRootDescriptorTable(17, ibl_diffuse_srv);             // t33
             command_list_->SetGraphicsRootDescriptorTable(18, ibl_specular_srv);            // t34
             command_list_->SetGraphicsRootDescriptorTable(19, ibl_diffuse_srv2);            // t36
@@ -2678,7 +2714,9 @@ namespace ReplayEngine::Rendering::DX12
             Scene3DLayerConstants layer{};
             layer.color = pass.color;
             layer.params = { pass.width, pass.opacity,
-                static_cast<float>(static_cast<std::uint32_t>(pass.blend)), 0.0f };
+                static_cast<float>(static_cast<std::uint32_t>(pass.blend)),
+                kScene3DOutlineDepthOffsetDistance };
+            layer.params2.x = static_cast<float>(static_cast<std::uint32_t>(pass.kind));
             D3D12_GPU_VIRTUAL_ADDRESS layer_gpu = 0;
             if (!allocate_cb(&layer, sizeof(layer), layer_gpu)) return false;
             command_list_->SetGraphicsRootConstantBufferView(0, object_gpu);

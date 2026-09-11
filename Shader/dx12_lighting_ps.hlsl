@@ -8,9 +8,13 @@ Texture2D gNormalDepth : register(t2);
 Texture2D gMaterial : register(t3);
 Texture2D gVelocity : register(t4);
 Texture2D gDepth : register(t5);
-// 追加GBufferは影配列の t6/t7 を動かさないため t8 へ置く。
+// 追加GBufferは影配列の t6/t7 を動かさないため t8 以降へ置く。
 Texture2D gToon : register(t8);
+Texture2D gVertexColor : register(t9);
+Texture2D gFaceBasis : register(t10);
 SamplerState pointSampler : register(s0);
+
+static const uint BUILTIN_EFFECT_GGST = 3u;
 
 // GBuffer 側の Dx12PackColor565 と対になる復号。
 float3 Dx12UnpackColor565(float packed)
@@ -27,6 +31,16 @@ float2 Dx12UnpackTwoBytes(float packed)
     return float2(((code >> 8) & 255u) / 255.0f, (code & 255u) / 255.0f);
 }
 
+
+float3 Dx12DecodeOctahedral(float2 encoded)
+{
+    const float2 f = encoded * 2.0f - 1.0f;
+    float3 n = float3(f.x, f.y, 1.0f - abs(f.x) - abs(f.y));
+    if (n.z < 0.0f)
+        n.xy = (1.0f - abs(n.yx)) * sign(n.xy);
+    return normalize(n);
+}
+
 float3 ReconstructWorld(float2 uv, float depth)
 {
     const float2 ndc = float2(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f);
@@ -39,14 +53,16 @@ float4 main(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_Target0
 {
     float depth = gDepth.SampleLevel(pointSampler, uv, 0).r;
     clip(0.999999f - depth);
+    float4 vertexColor = gVertexColor.SampleLevel(pointSampler, uv, 0);
     if (debugFlags.y != 0u)
-        return gToon.SampleLevel(pointSampler, uv, 0);
+        return ReplayVertexColorPreview(vertexColor, debugFlags.y);
     float4 base = gBase.SampleLevel(pointSampler, uv, 0);
     const float4 emissiveValue = gEmissive.SampleLevel(pointSampler, uv, 0);
     float3 emissive = emissiveValue.rgb;
     float4 normalValue = gNormalDepth.SampleLevel(pointSampler, uv, 0);
     float4 material = gMaterial.SampleLevel(pointSampler, uv, 0);
     float4 pixelateSettings = gToon.SampleLevel(pointSampler, uv, 0);
+    float4 faceBasisValue = gFaceBasis.SampleLevel(pointSampler, uv, 0);
     if (HasPixelateSettings(emissiveValue))
     {
         uint gbufferWidth;
@@ -67,6 +83,8 @@ float4 main(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_Target0
         material = gMaterial.Load(int3(sampledPosition, 0));
         depth = gDepth.Load(int3(sampledPosition, 0)).r;
         pixelateSettings = gToon.Load(int3(sampledPosition, 0));
+        vertexColor = gVertexColor.Load(int3(sampledPosition, 0));
+        faceBasisValue = gFaceBasis.Load(int3(sampledPosition, 0));
         uv = (float2(sampledPosition) + 0.5f) / float2(renderSize);
         if (pixelateSettings.y < 0.5f)
             base.rgb = originalBase;
@@ -90,9 +108,20 @@ float4 main(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_Target0
     const float ambientOcclusion = saturate(material.r);
     const float roughness = clamp(material.g, 0.045f, 1.0f);
     const float metallic = saturate(material.b);
-    // Toon のときだけ material.a に階調数が入っている（GBuffer 側で符号化）。
+    const uint toonCode = (uint)round(material.a * 255.0f);
+    const bool isGgst = lightingModel == 1u && !pixelatePayload &&
+        toonCode == BUILTIN_EFFECT_GGST;
+    Dx12GgstSurface ggst = Dx12DefaultGgstSurface();
     Dx12ToonSurface toon = Dx12DefaultToonSurface();
-    if (lightingModel == 1u && !pixelatePayload)
+    if (isGgst)
+    {
+        const float4 packed = gToon.SampleLevel(pointSampler, uv, 0);
+        ggst.shadeColor = Dx12UnpackColor565(packed.x);
+        ggst.shadingThreshold = saturate(packed.y);
+        ggst.shadingOffset = saturate(packed.z);
+        ggst.specularSize = saturate(packed.w);
+    }
+    else if (lightingModel == 1u && !pixelatePayload)
     {
         const float4 packed = gToon.SampleLevel(pointSampler, uv, 0);
         const float2 powers = Dx12UnpackTwoBytes(packed.w);
@@ -101,14 +130,21 @@ float4 main(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_Target0
         toon.specularTint = Dx12UnpackColor565(packed.z);
         toon.rimPower = powers.x * 8.0f;
         toon.specularPower = 1.0f + powers.y * 127.0f;
-        const uint toonCode = (uint)round(material.a * 255.0f);
         const bool normalized = toonCode >= 128u;
         toon.steps = (float)((toonCode - (normalized ? 128u : 0u)) / 4u);
         toon.normalizedRamp = normalized ? 1.0f : 0.0f;
     }
-    const float3 lit = Dx12EvaluateLighting(worldPosition, normal, base.rgb,
-        metallic, roughness, ambientOcclusion, lightingModel, receiveShadow,
-        position.xy, toon);
+    const bool ggstFaceLighting = isGgst && dot(faceBasisValue, faceBasisValue) > 1.0e-6f;
+    const float3 ggstFaceRight = ggstFaceLighting ?
+        Dx12DecodeOctahedral(faceBasisValue.xy) : float3(1.0f, 0.0f, 0.0f);
+    const float3 ggstFaceFront = ggstFaceLighting ?
+        Dx12DecodeOctahedral(faceBasisValue.zw) : float3(0.0f, 0.0f, 1.0f);
+    const float3 lit = isGgst ?
+        Dx12EvaluateLightingGgst(worldPosition, normal, base.rgb, vertexColor.r,
+            material.rgb, ggstFaceLighting, ggstFaceRight, ggstFaceFront,
+            receiveShadow, position.xy, ggst) :
+        Dx12EvaluateLighting(worldPosition, normal, base.rgb, metallic, roughness,
+            ambientOcclusion, lightingModel, receiveShadow, position.xy, toon);
     // Scene TargetはHDRリニア値を保持し、最終表示パスで一度だけ変換する。
     return float4(lit + emissive, 1.0f);
 }

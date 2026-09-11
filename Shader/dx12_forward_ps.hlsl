@@ -10,7 +10,7 @@ cbuffer MaterialCB : register(b2)
     float4 renderParams;  // alpha mode、lighting model、receive shadow、texture semantic mask
     float4 builtinParams;
     float4 builtinParams1;
-    float4 builtinParams2;
+    float4 builtinParams2; // GGST.x=顔ライティング有効
     float4 builtinParams3;
 };
 
@@ -24,6 +24,7 @@ Texture2D roughnessTexture : register(t3);
 Texture2D emissiveTexture : register(t4);
 Texture2D occlusionTexture : register(t5);
 Texture2D rampTexture : register(t10);
+Texture2D ilmTexture : register(t12);
 SamplerState materialSampler : register(s0);
 
 struct PSIn
@@ -35,6 +36,8 @@ struct PSIn
     float4 currentClip : TEXCOORD3;
     float4 previousClip : TEXCOORD4;
     float4 tangent : TEXCOORD5;
+    float3 faceRight : TEXCOORD6;
+    float3 faceFront : TEXCOORD7;
     float4 vertexColor : COLOR0;
 };
 
@@ -45,7 +48,9 @@ static const uint MATERIAL_EMISSIVE_MAP = 1u << 4;
 static const uint MATERIAL_OCCLUSION_MAP = 1u << 5;
 static const uint MATERIAL_PACKED_ORM_MAP = 1u << 6;
 static const uint MATERIAL_RAMP_MAP = 1u << 7;
+static const uint MATERIAL_ILM_MAP = 1u << 8;
 static const uint BUILTIN_EFFECT_TOON = 2u;
+static const uint BUILTIN_EFFECT_GGST = 3u;
 
 float3 QuantizeColor565(float3 color)
 {
@@ -56,6 +61,11 @@ float3 QuantizeColor565(float3 color)
 float QuantizeUnorm8(float value)
 {
     return floor(saturate(value) * 255.0f + 0.5f) / 255.0f;
+}
+
+float QuantizeUnorm16(float value)
+{
+    return floor(saturate(value) * 65535.0f + 0.5f) / 65535.0f;
 }
 
 Dx12ToonSurface ResolveDeferredToonSurface()
@@ -77,6 +87,16 @@ Dx12ToonSurface ResolveDeferredToonSurface()
     toon.specularPower = 1.0f + QuantizeUnorm8(
         (builtinParams2.w - 1.0f) / 127.0f) * 127.0f;
     return toon;
+}
+
+Dx12GgstSurface ResolveDeferredGgstSurface()
+{
+    Dx12GgstSurface ggst = Dx12DefaultGgstSurface();
+    ggst.shadeColor = QuantizeColor565(builtinParams1.rgb);
+    ggst.shadingThreshold = QuantizeUnorm16(builtinParams.y);
+    ggst.shadingOffset = QuantizeUnorm16(builtinParams.z);
+    ggst.specularSize = QuantizeUnorm16(builtinParams.w);
+    return ggst;
 }
 
 float3 ResolveNormal(PSIn input, uint semanticMask)
@@ -140,9 +160,11 @@ float4 main(PSIn input) : SV_Target0
     }
 
     const float3 worldNormal = ResolveNormal(input, semanticMask);
-    const uint lightingModel = (uint)round(max(renderParams.y, 0.0f));
+    const uint builtinEffect = (uint)round(max(builtinParams.x, 0.0f));
+    const bool isGgst = builtinEffect == BUILTIN_EFFECT_GGST;
+    const uint lightingModel = isGgst ? 1u : (uint)round(max(renderParams.y, 0.0f));
     const bool receiveShadow = renderParams.z >= 0.5f;
-    const bool matchDeferredToon = builtinParams3.w >= 0.5f && lightingModel == 1u;
+    const bool matchDeferredToon = builtinParams3.w >= 0.5f && lightingModel == 1u && !isGgst;
     if (matchDeferredToon && (semanticMask & MATERIAL_RAMP_MAP) != 0u)
     {
         const bool hasToonParams = (uint)(builtinParams.x + 0.5f) == BUILTIN_EFFECT_TOON;
@@ -159,9 +181,17 @@ float4 main(PSIn input) : SV_Target0
     }
     Dx12ToonSurface toon = Dx12DefaultToonSurface();
     if (matchDeferredToon) toon = ResolveDeferredToonSurface();
-    const float3 lit = Dx12EvaluateLighting(input.worldPosition, worldNormal, albedo.rgb,
-        metallic, roughness, ambientOcclusion, lightingModel, receiveShadow,
-        input.position.xy, toon);
+    const Dx12GgstSurface ggst = ResolveDeferredGgstSurface();
+    const float3 ggstIlm = (semanticMask & MATERIAL_ILM_MAP) != 0u ?
+        ilmTexture.Sample(materialSampler, input.uv).rgb : float3(1.0f, 0.5f, 1.0f);
+    const bool ggstFaceLighting = isGgst && builtinParams2.x >= 0.5f;
+    const float3 lit = isGgst ?
+        Dx12EvaluateLightingGgst(input.worldPosition, worldNormal, albedo.rgb,
+            input.vertexColor.r, ggstIlm, ggstFaceLighting, input.faceRight, input.faceFront,
+            receiveShadow, input.position.xy, ggst) :
+        Dx12EvaluateLighting(input.worldPosition, worldNormal, albedo.rgb,
+            metallic, roughness, ambientOcclusion, lightingModel, receiveShadow,
+            input.position.xy, toon);
 
     float3 emissive = emissiveStrength.rgb * emissiveStrength.a;
     if ((semanticMask & MATERIAL_EMISSIVE_MAP) != 0u)

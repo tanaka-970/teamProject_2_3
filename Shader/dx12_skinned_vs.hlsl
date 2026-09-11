@@ -33,6 +33,8 @@ struct VSOut
     float4 currentClip : TEXCOORD3;
     float4 previousClip : TEXCOORD4;
     float4 tangent : TEXCOORD5;
+    float3 faceRight : TEXCOORD6;
+    float3 faceFront : TEXCOORD7;
     float4 vertexColor : COLOR0;
 };
 float4 SkinCurrentPosition(float3 p, float4 w, uint4 i)
@@ -70,6 +72,10 @@ VSOut main(VSIn input)
     o.worldPosition = wp.xyz;
     o.normal = normalize(mul(float4(skinnedNormal, 0.0f), world).xyz);
     o.tangent = float4(normalize(mul(float4(skinnedTangent, 0.0f), world).xyz), input.tangent.w);
+    const float3 faceRight = mul(float4(1.0f, 0.0f, 0.0f, 0.0f), currentBones[0].value).xyz;
+    const float3 faceFront = mul(float4(0.0f, 0.0f, 1.0f, 0.0f), currentBones[0].value).xyz;
+    o.faceRight = normalize(mul(float4(faceRight, 0.0f), world).xyz);
+    o.faceFront = normalize(mul(float4(faceFront, 0.0f), world).xyz);
     o.uv = input.uv;
     o.vertexColor = input.vertexColor;
     return o;

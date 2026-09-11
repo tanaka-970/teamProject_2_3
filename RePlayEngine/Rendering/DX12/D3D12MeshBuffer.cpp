@@ -30,11 +30,11 @@ namespace ReplayEngine::Rendering::DX12
         {
             const std::uint32_t count = vertex_size / vertex_stride;
             if (count > UINT32_MAX / sizeof(Assets::VertexColorRgba8)) { Reset(); return false; }
-            std::vector<Assets::VertexColorRgba8> white;
+            std::vector<Assets::VertexColorRgba8> defaults;
             if (colors == nullptr)
             {
-                white.resize(count);
-                colors = white.data();
+                defaults.assign(count, Assets::VertexColorRgba8{ 255, 0, 0, 128 });
+                colors = defaults.data();
             }
             if (!D3D12ResourceFactory::CreateVertexBuffer(device, uploader, colors,
                 count * 4u, 4u,
