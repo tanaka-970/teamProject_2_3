@@ -22,62 +22,68 @@ namespace ReplayEngine::Editor
         bytes_texture_resolver_ = std::move(bytes_resolver);
     }
 
-    bool EditorIconProvider::SetAtlasGuid(const std::string& guid)
+    bool EditorIconProvider::SetAtlasGuids(const std::vector<std::string>& guids)
     {
-        if (atlas_guid_ == guid) return false;
-        atlas_guid_ = guid;
+        if (atlas_guids_ == guids) return false;
+        atlas_guids_ = guids;
         Reload();
         return true;
     }
 
     void EditorIconProvider::Reload()
     {
-        atlas_ = {};
-        atlas_image_path_.clear();
+        atlases_.clear();
         atlas_error_.clear();
         files_.clear();
         resolved_.clear();
-        if (!atlas_guid_.empty())
+        for (const std::string& guid : atlas_guids_)
         {
-            const auto* record = database_ != nullptr ? database_->FindByGuid(atlas_guid_) : nullptr;
+            if (guid.empty()) continue;
+            const auto* record = database_ != nullptr ? database_->FindByGuid(guid) : nullptr;
             if (record == nullptr || record->kind != Assets::AssetKind::SpriteAtlas)
-                atlas_error_ = "指定したアトラスが見つかりません";
-            else
             {
-                const auto& path = record->cache_path.empty() ? record->source_path : record->cache_path;
-                std::string error;
-                if (!Assets::SpriteAtlasAsset::LoadFromFile(path, atlas_, error))
-                    atlas_error_ = "アトラスを読み込めません: " + error;
-                else if (!atlas_.embedded_texture_bytes.empty())
+                if (atlas_error_.empty()) atlas_error_ = "指定したアトラスが見つかりません";
+                continue;
+            }
+            const auto& path = record->cache_path.empty() ? record->source_path : record->cache_path;
+            LoadedAtlas loaded;
+            loaded.guid = guid;
+            std::string error;
+            if (!Assets::SpriteAtlasAsset::LoadFromFile(path, loaded.atlas, error))
+            {
+                if (atlas_error_.empty()) atlas_error_ = "アトラスを読み込めません: " + error;
+                continue;
+            }
+            // v3 の埋め込みがあれば元画像も隣の DDS も要らない。
+            if (loaded.atlas.embedded_texture_bytes.empty())
+            {
+                std::error_code image_error;
+                if (!loaded.atlas.embedded_texture_path.empty())
                 {
-                    // v3 の埋め込み。元画像も隣の DDS も要らない。
+                    const auto embedded = path.parent_path() /
+                        std::filesystem::u8path(loaded.atlas.embedded_texture_path).filename();
+                    if (std::filesystem::is_regular_file(embedded, image_error))
+                        loaded.image_path = embedded;
                 }
-                else
+                if (loaded.image_path.empty() && database_ != nullptr)
                 {
-                    std::error_code image_error;
-                    if (!atlas_.embedded_texture_path.empty())
+                    const auto* image = database_->FindByGuid(loaded.atlas.image_guid);
+                    if (image != nullptr)
                     {
-                        const auto embedded = path.parent_path() /
-                            std::filesystem::u8path(atlas_.embedded_texture_path).filename();
-                        if (std::filesystem::is_regular_file(embedded, image_error))
-                            atlas_image_path_ = embedded;
+                        const auto& image_path = image->cache_path.empty()
+                            ? image->source_path : image->cache_path;
+                        image_error.clear();
+                        if (std::filesystem::is_regular_file(image_path, image_error))
+                            loaded.image_path = image_path;
                     }
-                    if (atlas_image_path_.empty())
-                    {
-                        const auto* image = database_->FindByGuid(atlas_.image_guid);
-                        if (image != nullptr)
-                        {
-                            const auto& image_path = image->cache_path.empty()
-                                ? image->source_path : image->cache_path;
-                            image_error.clear();
-                            if (std::filesystem::is_regular_file(image_path, image_error))
-                                atlas_image_path_ = image_path;
-                        }
-                    }
-                    if (atlas_image_path_.empty())
-                        atlas_error_ = "アトラスの画像が見つかりません";
+                }
+                if (loaded.image_path.empty())
+                {
+                    if (atlas_error_.empty()) atlas_error_ = "アトラスの画像が見つかりません";
+                    continue;
                 }
             }
+            atlases_.push_back(std::move(loaded));
         }
 
         // 一覧を再読込時に確定し、描画中は未発見のキーもファイル探索しない。
@@ -120,6 +126,7 @@ namespace ReplayEngine::Editor
         {
             Source source;
             // 利用者が選んだ領域を最優先。空の指定は「出さない」の意味。
+            const LoadedAtlas* owner = nullptr;
             const Assets::SpriteAtlasRegion* region = nullptr;
             bool suppressed = false;
             bool chosen = false;
@@ -130,22 +137,23 @@ namespace ReplayEngine::Editor
                 if (picked != overrides.end())
                 {
                     chosen = true;
-                    if (picked->second.empty()) suppressed = true;
-                    else region = atlas_.FindRegion(picked->second);
+                    if (picked->second.region.empty()) suppressed = true;
+                    else region = FindRegion(picked->second.region,
+                        picked->second.atlas_guid, owner);
                 }
             }
             // 名前での自動一致は既定で行わない。設定で有効にしたときだけ引く。
             if (!chosen && settings_ != nullptr && settings_->IconAutoMatchByName())
-                region = atlas_.FindRegion(key);
-            const bool embedded = !atlas_.embedded_texture_bytes.empty();
+                region = FindRegion(key, {}, owner);
             if (suppressed)
             {
                 // 何も入れない。以降の名前一致も PNG 探索も行わない。
             }
-            else if (region != nullptr && (embedded || !atlas_image_path_.empty()))
+            else if (region != nullptr && owner != nullptr)
             {
-                source.from_embedded = embedded;
-                if (!embedded) source.path = atlas_image_path_;
+                source.from_embedded = !owner->atlas.embedded_texture_bytes.empty();
+                source.atlas_guid = owner->guid;
+                if (!source.from_embedded) source.path = owner->image_path;
                 source.uv0 = { region->uv_rect.x, region->uv_rect.y };
                 source.uv1 = { region->uv_rect.x + region->uv_rect.z,
                     region->uv_rect.y + region->uv_rect.w };
@@ -167,27 +175,66 @@ namespace ReplayEngine::Editor
         icon.uv1 = source.uv1;
         if (source.from_embedded)
         {
-            if (bytes_texture_resolver_)
-                icon.texture = bytes_texture_resolver_(atlas_guid_, atlas_.embedded_texture_bytes);
+            const LoadedAtlas* owner = FindAtlas(source.atlas_guid);
+            if (owner != nullptr && bytes_texture_resolver_)
+                icon.texture = bytes_texture_resolver_(owner->guid,
+                    owner->atlas.embedded_texture_bytes);
         }
         else if (texture_resolver_) icon.texture = texture_resolver_(source.path);
         return icon;
     }
 
-    std::vector<std::string> EditorIconProvider::RegionNames() const
+    const EditorIconProvider::LoadedAtlas* EditorIconProvider::FindAtlas(
+        const std::string& guid) const
     {
-        std::vector<std::string> names;
-        names.reserve(atlas_.regions.size());
-        for (const auto& region : atlas_.regions) names.push_back(region.name);
+        for (const auto& loaded : atlases_)
+            if (loaded.guid == guid) return &loaded;
+        return nullptr;
+    }
+
+    const Assets::SpriteAtlasRegion* EditorIconProvider::FindRegion(
+        const std::string& region_name, const std::string& atlas_guid,
+        const LoadedAtlas*& owner) const
+    {
+        owner = nullptr;
+        if (region_name.empty()) return nullptr;
+        // アトラスの指定があればその 1 枚だけ。無ければ並び順で最初に見つかったもの。
+        for (const auto& loaded : atlases_)
+        {
+            if (!atlas_guid.empty() && loaded.guid != atlas_guid) continue;
+            if (const auto* region = loaded.atlas.FindRegion(region_name))
+            {
+                owner = &loaded;
+                return region;
+            }
+        }
+        return nullptr;
+    }
+
+    std::size_t EditorIconProvider::RegionCount() const noexcept
+    {
+        std::size_t count = 0;
+        for (const auto& loaded : atlases_) count += loaded.atlas.regions.size();
+        return count;
+    }
+
+    std::vector<EditorIconProvider::RegionRef> EditorIconProvider::RegionNames() const
+    {
+        std::vector<RegionRef> names;
+        for (const auto& loaded : atlases_)
+            for (const auto& region : loaded.atlas.regions)
+                names.push_back(RegionRef{ loaded.guid, region.name });
         return names;
     }
 
-    EditorIconProvider::Icon EditorIconProvider::IconForRegion(const std::string& region_name)
+    EditorIconProvider::Icon EditorIconProvider::IconForRegion(const std::string& region_name,
+        const std::string& atlas_guid)
     {
-        const auto* region = atlas_.FindRegion(region_name);
-        if (region == nullptr) return {};
-        const bool embedded = !atlas_.embedded_texture_bytes.empty();
-        if (!embedded && atlas_image_path_.empty()) return {};
+        const LoadedAtlas* owner = nullptr;
+        const auto* region = FindRegion(region_name, atlas_guid, owner);
+        if (region == nullptr || owner == nullptr) return {};
+        const bool embedded = !owner->atlas.embedded_texture_bytes.empty();
+        if (!embedded && owner->image_path.empty()) return {};
         Icon icon;
         icon.available = true;
         icon.uv0 = { region->uv_rect.x, region->uv_rect.y };
@@ -196,9 +243,10 @@ namespace ReplayEngine::Editor
         if (embedded)
         {
             if (bytes_texture_resolver_)
-                icon.texture = bytes_texture_resolver_(atlas_guid_, atlas_.embedded_texture_bytes);
+                icon.texture = bytes_texture_resolver_(owner->guid,
+                    owner->atlas.embedded_texture_bytes);
         }
-        else if (texture_resolver_) icon.texture = texture_resolver_(atlas_image_path_);
+        else if (texture_resolver_) icon.texture = texture_resolver_(owner->image_path);
         return icon;
     }
 

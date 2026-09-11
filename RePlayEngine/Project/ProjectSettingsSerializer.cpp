@@ -49,7 +49,9 @@ namespace ReplayEngine::Project
 
         // v10 で追加。空 GUID は「未設定」として書き出す。
         stream << "LOADING_SCENE " << std::quoted(settings.LoadingSceneGuid()) << '\n';
-        stream << "ICON_ATLAS " << std::quoted(settings.IconAtlasGuid()) << '\n';
+        // アイコン用アトラスは最大 4 枚。1 枚につき 1 行で並べる。
+        for (const auto& atlas_guid : settings.IconAtlasGuids())
+            stream << "ICON_ATLAS " << std::quoted(atlas_guid) << '\n';
 
         const auto previous_precision = stream.precision();
         stream << std::setprecision(std::numeric_limits<float>::max_digits10);
@@ -65,7 +67,8 @@ namespace ReplayEngine::Project
         for (const auto& entry : settings.IconRegions())
         {
             stream << "ICON_REGION " << std::quoted(entry.first) << ' '
-                << std::quoted(entry.second) << '\n';
+                << std::quoted(entry.second.region) << ' '
+                << std::quoted(entry.second.atlas_guid) << '\n';
         }
 
         // v3 で追加。Active Scene Flow も GUID だけを保存する。
@@ -229,8 +232,9 @@ namespace ReplayEngine::Project
                 std::istringstream value_stream(line);
                 value_stream.imbue(std::locale::classic());
                 std::string guid;
+                // 行が並ぶぶんだけ積む。上限を超えた分は AddIconAtlasGuid が捨てる。
                 if (value_stream >> std::quoted(guid))
-                    settings.SetIconAtlasGuid(std::move(guid));
+                    settings.AddIconAtlasGuid(std::move(guid));
             }
             else if (keyword == "ICON_TINT")
             {
@@ -256,8 +260,13 @@ namespace ReplayEngine::Project
                 value_stream.imbue(std::locale::classic());
                 std::string key;
                 std::string region;
+                // 3 つ目のアトラス GUID は後から足したので、無い行も読めるようにする。
+                std::string atlas_guid;
                 if ((value_stream >> std::quoted(key) >> std::quoted(region)) && !key.empty())
-                    settings.SetIconRegion(key, std::move(region));
+                {
+                    value_stream >> std::quoted(atlas_guid);
+                    settings.SetIconRegion(key, std::move(region), std::move(atlas_guid));
+                }
             }
             else if (keyword == "SCENE_FLOW")
             {

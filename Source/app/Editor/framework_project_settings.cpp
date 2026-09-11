@@ -585,59 +585,114 @@ void framework::draw_icon_settings_panel()
     }
 
         ImGui::PushID("ProjectIcons");
-        const auto* atlas = asset_database.FindByGuid(project_settings.IconAtlasGuid());
-        const bool missing = !project_settings.IconAtlasGuid().empty() &&
-            (atlas == nullptr || atlas->kind != ReplayEngine::Assets::AssetKind::SpriteAtlas ||
-                asset_database.IsMissing(project_settings.IconAtlasGuid()));
+        const auto& atlas_guids = project_settings.IconAtlasGuids();
         const auto& selected_regions = project_settings.IconRegions();
         const std::size_t selected_count = static_cast<std::size_t>(std::count_if(
             selected_regions.begin(), selected_regions.end(), [](const auto& entry)
-            { return !entry.second.empty(); }));
-        if (project_settings.IconAtlasGuid().empty())
+            { return !entry.second.region.empty(); }));
+        if (atlas_guids.empty())
             ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.3f, 1.0f),
                 "アトラスを指定してください");
-        else if (missing)
-            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f),
-                "指定したアトラスが見つかりません");
         else if (project_settings.IconAutoMatchByName())
             ImGui::Text("名前が一致するアイコンを自動で使います（%zu 件を個別指定）",
                 selected_count);
         else
             ImGui::Text("選んだアイコンだけが出ます（%zu 件指定済み）", selected_count);
-        ImGui::Separator();
-        ImGui::TextUnformatted("アイコン用アトラス");
-        const std::string atlas_preview = project_settings.IconAtlasGuid().empty() ? "指定なし"
-            : missing ? "アトラス不明" : atlas->display_name.empty()
-                ? atlas->source_path.filename().u8string() : atlas->display_name;
-        ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::BeginCombo("##IconAtlas", atlas_preview.c_str()))
-        {
-            std::string selected = project_settings.IconAtlasGuid();
-            if (ImGui::Selectable("指定なし", selected.empty())) selected.clear();
-            for (const auto& candidate : asset_database.Records())
-            {
-                if (candidate.kind != ReplayEngine::Assets::AssetKind::SpriteAtlas ||
-                    asset_database.IsMissing(candidate.guid)) continue;
-                const std::string label = candidate.display_name.empty()
-                    ? candidate.source_path.filename().u8string() : candidate.display_name;
-                ImGui::PushID(candidate.guid.c_str());
-                const bool is_selected = selected == candidate.guid;
-                if (ImGui::Selectable(label.c_str(), is_selected)) selected = candidate.guid;
-                if (is_selected) ImGui::SetItemDefaultFocus();
-                ImGui::PopID();
-            }
-            if (selected != project_settings.IconAtlasGuid())
-            {
-                project_settings.SetIconAtlasGuid(std::move(selected));
-                save_project_settings();
-            }
-            ImGui::EndCombo();
-        }
-        if (atlas != nullptr && !missing)
-            ImGui::TextDisabled("パス: %s", atlas->source_path.generic_u8string().c_str());
-        if (!missing && !editor_icon_provider.AtlasError().empty())
+        // 設定の中身ではなく、アトラスを実際に読めたかを出す。出ない原因の切り分け用。
+        if (!editor_icon_provider.AtlasError().empty())
             ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.3f, 1.0f),
                 "%s", editor_icon_provider.AtlasError().c_str());
+        else if (!atlas_guids.empty())
+            ImGui::TextDisabled("読み込み済み: アトラス %zu 枚 / 領域 %zu 件",
+                editor_icon_provider.LoadedAtlasCount(), editor_icon_provider.RegionCount());
+        ImGui::Separator();
+        ImGui::Text("アイコン用アトラス（最大 %zu 枚）",
+            ReplayEngine::Project::ProjectSettings::maximum_icon_atlas_count);
+        ImGui::TextDisabled("上にあるものが優先されます。名前が重なったときの順番です");
+        {
+            // 枠ごとに 1 行。差し替えと削除をその場でできるようにする。
+            std::vector<std::string> updated = atlas_guids;
+            bool atlas_changed = false;
+            for (std::size_t slot = 0; slot < updated.size(); ++slot)
+            {
+                ImGui::PushID(static_cast<int>(slot));
+                const auto* record = asset_database.FindByGuid(updated[slot]);
+                const bool slot_missing = record == nullptr ||
+                    record->kind != ReplayEngine::Assets::AssetKind::SpriteAtlas ||
+                    asset_database.IsMissing(updated[slot]);
+                const std::string preview = slot_missing ? "アトラス不明"
+                    : (record->display_name.empty()
+                        ? record->source_path.filename().u8string() : record->display_name);
+                ImGui::SetNextItemWidth(-120.0f);
+                if (ImGui::BeginCombo("##IconAtlasSlot", preview.c_str()))
+                {
+                    for (const auto& candidate : asset_database.Records())
+                    {
+                        if (candidate.kind != ReplayEngine::Assets::AssetKind::SpriteAtlas ||
+                            asset_database.IsMissing(candidate.guid)) continue;
+                        const std::string label = candidate.display_name.empty()
+                            ? candidate.source_path.filename().u8string() : candidate.display_name;
+                        ImGui::PushID(candidate.guid.c_str());
+                        const bool is_selected = updated[slot] == candidate.guid;
+                        if (ImGui::Selectable(label.c_str(), is_selected))
+                        {
+                            updated[slot] = candidate.guid;
+                            atlas_changed = true;
+                        }
+                        if (is_selected) ImGui::SetItemDefaultFocus();
+                        ImGui::PopID();
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("外す"))
+                {
+                    updated.erase(updated.begin() + static_cast<std::ptrdiff_t>(slot));
+                    atlas_changed = true;
+                    ImGui::PopID();
+                    break;
+                }
+                if (!slot_missing)
+                {
+                    ImGui::TextDisabled("  %s", record->source_path.generic_u8string().c_str());
+                }
+                ImGui::PopID();
+            }
+            if (updated.size() <
+                ReplayEngine::Project::ProjectSettings::maximum_icon_atlas_count)
+            {
+                if (ImGui::Button("アトラスを追加")) ImGui::OpenPopup("AddIconAtlas");
+                if (ImGui::BeginPopup("AddIconAtlas"))
+                {
+                    bool any = false;
+                    for (const auto& candidate : asset_database.Records())
+                    {
+                        if (candidate.kind != ReplayEngine::Assets::AssetKind::SpriteAtlas ||
+                            asset_database.IsMissing(candidate.guid)) continue;
+                        if (std::find(updated.begin(), updated.end(), candidate.guid) !=
+                            updated.end()) continue;
+                        any = true;
+                        const std::string label = candidate.display_name.empty()
+                            ? candidate.source_path.filename().u8string() : candidate.display_name;
+                        ImGui::PushID(candidate.guid.c_str());
+                        if (ImGui::Selectable(label.c_str()))
+                        {
+                            updated.push_back(candidate.guid);
+                            atlas_changed = true;
+                            ImGui::CloseCurrentPopup();
+                        }
+                        ImGui::PopID();
+                    }
+                    if (!any) ImGui::TextDisabled("追加できるアトラスがありません");
+                    ImGui::EndPopup();
+                }
+            }
+            if (atlas_changed)
+            {
+                project_settings.SetIconAtlasGuids(std::move(updated));
+                save_project_settings();
+            }
+        }
         if (ImGui::Button("アイコンを再読込")) editor_icons_reload_pending = true;
         // 既定は off。選んだものだけ出す方が、意図しない絵が混ざらない。
         bool auto_match = project_settings.IconAutoMatchByName();
@@ -673,13 +728,21 @@ void framework::draw_icon_settings_panel()
             if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", key.c_str());
             ImGui::NextColumn();
             const ImVec2 preview_position = ImGui::GetCursorScreenPos();
-            const ImVec2 preview_clip_min = ImGui::GetWindowDrawList()->GetClipRectMin();
-            const ImVec2 preview_clip_max = ImGui::GetWindowDrawList()->GetClipRectMax();
             const float size = ImGui::GetFrameHeight();
             const auto& chosen = project_settings.IconRegions();
             const auto picked = chosen.find(key);
             // 押すとアトラスの絵から選べる。既定は「キーと同じ名前の領域」。
             if (ImGui::Button("##PickIcon", ImVec2(size, size))) ImGui::OpenPopup("IconPicker");
+            // Columns は列ごとに別チャンネルへ描くので、必ずこの列にいる間に重ねる。
+            {
+                const auto preview = info != nullptr
+                    ? editor_icon_provider.ResolveComponent(*info)
+                    : editor_icon_provider.Resolve(key, category);
+                if (preview.texture != nullptr)
+                    ImGui::GetWindowDrawList()->AddImage(preview.texture, preview_position,
+                        ImVec2(preview_position.x + size, preview_position.y + size),
+                        preview.uv0, preview.uv1, ImGui::GetColorU32(preview.tint));
+            }
             if (!auto_match && picked == chosen.end())
             {
                 const ImVec2 dots = ImGui::CalcTextSize("...");
@@ -693,8 +756,8 @@ void framework::draw_icon_settings_panel()
                 ImGui::SetTooltip(picked == chosen.end()
                     ? (auto_match ? "押して選ぶ（いまは名前で自動一致）"
                         : "押して選ぶ（いまは未指定）")
-                    : (picked->second.empty() ? "押して選ぶ（いまは出さない指定）"
-                        : ("押して選ぶ（いま: " + picked->second + "）").c_str()));
+                    : (picked->second.region.empty() ? "押して選ぶ（いまは出さない指定）"
+                        : ("押して選ぶ（いま: " + picked->second.region + "）").c_str()));
             }
             if (ImGui::BeginPopup("IconPicker"))
             {
@@ -714,22 +777,24 @@ void framework::draw_icon_settings_panel()
                     ImGui::CloseCurrentPopup();
                 }
                 ImGui::Separator();
-                const std::vector<std::string> names = editor_icon_provider.RegionNames();
+                const auto names = editor_icon_provider.RegionNames();
                 if (names.empty()) ImGui::TextDisabled("アトラスが未指定です");
                 const float cell = ImGui::GetTextLineHeight() * 2.0f;
                 constexpr int per_row = 10;
                 for (std::size_t index = 0; index < names.size(); ++index)
                 {
                     ImGui::PushID(static_cast<int>(index));
-                    const auto choice = editor_icon_provider.IconForRegion(names[index]);
+                    const auto choice = editor_icon_provider.IconForRegion(
+                        names[index].name, names[index].atlas_guid);
                     const bool clicked = choice.texture != nullptr
                         ? ImGui::ImageButton(choice.texture, ImVec2(cell, cell),
                             choice.uv0, choice.uv1, 2)
                         : ImGui::Button("?", ImVec2(cell, cell));
-                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", names[index].c_str());
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", names[index].name.c_str());
                     if (clicked)
                     {
-                        project_settings.SetIconRegion(key, names[index]);
+                        project_settings.SetIconRegion(key, names[index].name,
+                            names[index].atlas_guid);
                         editor_icon_provider.InvalidateResolved();
                         save_project_settings();
                         ImGui::CloseCurrentPopup();
@@ -756,17 +821,6 @@ void framework::draw_icon_settings_panel()
                 save_project_settings();
             }
             ImGui::NextColumn();
-            const auto icon = info != nullptr ? editor_icon_provider.ResolveComponent(*info)
-                : editor_icon_provider.Resolve(key, category);
-            if (icon.texture != nullptr)
-            {
-                ImDrawList* draw_list = ImGui::GetWindowDrawList();
-                draw_list->PushClipRect(preview_clip_min, preview_clip_max, false);
-                draw_list->AddImage(icon.texture, preview_position,
-                    ImVec2(preview_position.x + size, preview_position.y + size),
-                    icon.uv0, icon.uv1, ImGui::GetColorU32(icon.tint));
-                draw_list->PopClipRect();
-            }
             ImGui::PopID();
         };
 
