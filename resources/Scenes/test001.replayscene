@@ -197,7 +197,7 @@ OBJECT
     PROPERTY "material.emissive_strength" float 0
     PROPERTY "material.double_sided" bool 0
     PROPERTY "material_slots[0].name" string "MIKU-V6_face_Albedo"
-    PROPERTY "material_slots[0].asset" asset ""
+    PROPERTY "material_slots[0].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
     PROPERTY "material_slots[0].base_color_texture" asset ""
     PROPERTY "material_slots[0].normal_texture" asset ""
     PROPERTY "material_slots[0].orm_texture" asset ""
