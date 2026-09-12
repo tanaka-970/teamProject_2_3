@@ -111,6 +111,29 @@ namespace
         return true;
     }
 
+    bool ReadUsefulColorRgba8(const tinygltf::Model& model,
+        const tinygltf::Primitive& primitive, const char* attribute_name,
+        std::size_t vertex_count,
+        std::vector<ReplayEngine::Assets::VertexColorRgba8>& output)
+    {
+        output.clear();
+        const auto found = primitive.attributes.find(attribute_name);
+        if (found == primitive.attributes.end()) return false;
+        std::vector<ReplayEngine::Assets::VertexColorRgba8> candidate;
+        if (!ReadColorRgba8(model, found->second, candidate) ||
+            candidate.size() != vertex_count || candidate.size() < 2) return false;
+        const auto& first = candidate.front();
+        const bool varies = std::any_of(candidate.begin() + 1, candidate.end(),
+            [&first](const auto& value)
+            {
+                return value.r != first.r || value.g != first.g ||
+                    value.b != first.b || value.a != first.a;
+            });
+        if (!varies) return false;
+        output = std::move(candidate);
+        return true;
+    }
+
     bool ReadIndices(const tinygltf::Model& model, int accessor_index, std::vector<uint32_t>& output)
     {
         if (accessor_index < 0 || accessor_index >= static_cast<int>(model.accessors.size())) return false;
@@ -423,10 +446,10 @@ bool gltf_model::Load(const std::string& filename)
             if (!ReadFloatVector(model, position_it->second, 3, positions)) continue;
             const auto normal_it = source.attributes.find("NORMAL");
             const auto texcoord_it = source.attributes.find("TEXCOORD_0");
-            const auto color_it = source.attributes.find("COLOR_0");
             const bool has_normals = normal_it != source.attributes.end() && ReadFloatVector(model, normal_it->second, 3, normals);
             if (texcoord_it != source.attributes.end()) ReadFloatVector(model, texcoord_it->second, 2, texcoords);
-            if (color_it != source.attributes.end()) ReadColorRgba8(model, color_it->second, vertex_colors);
+            if (!ReadUsefulColorRgba8(model, source, "COLOR_1", positions.size() / 3, vertex_colors))
+                ReadUsefulColorRgba8(model, source, "COLOR_0", positions.size() / 3, vertex_colors);
             std::vector<Vertex> vertices(positions.size() / 3);
             for (size_t i = 0; i < vertices.size(); ++i)
             {

@@ -20,8 +20,8 @@ using namespace DirectX;
 namespace
 {
     constexpr std::uint32_t kMeshCacheMagic = 0x48534D52u;  // 'RMSH'
-    // v5 は GLB COLOR_0 も保存し、CPU Geometry 解放後のDX12再構築でも維持する。
-    constexpr std::uint32_t kMeshCacheVersion = 5;
+    // v6 は情報のある GLB 頂点カラーを保存する。
+    constexpr std::uint32_t kMeshCacheVersion = 6;
 
     // 文字列は長さ+本体で書く。
     void WriteString(std::ofstream& stream, const std::string& text)
