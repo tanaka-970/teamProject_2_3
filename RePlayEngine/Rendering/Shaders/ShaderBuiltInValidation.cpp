@@ -73,8 +73,8 @@ namespace ReplayEngine::Rendering::Validation
                 { BuiltInShaders::Pixelate, {
                     "PixelSize", "PixelateStrength", "PixelateOpacity" } },
                 { BuiltInShaders::Ggst, {
-                    "BaseColor", "BaseMap", "ShadeColor", "ShadingThreshold",
-                    "ShadingOffset", "SpecularSize", "SpecularIntensity", "IlmMap",
+                    "BaseColor", "BaseMap", "ShadeColor", "ShadingTerminator",
+                    "ShadingThreshold", "ShadingOffset", "SpecularSize", "SpecularIntensity", "IlmMap",
                     "SssMap", "FaceLighting", "FaceBoneIndex", "FlipFaceRight",
                     "FlipFaceFront" } },
             };

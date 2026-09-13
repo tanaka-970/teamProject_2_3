@@ -97,6 +97,13 @@ namespace
         bounds.valid = initialized;
         return bounds;
     }
+
+    float resolve_ggst_shading_threshold(float terminator, float adjustment) noexcept
+    {
+        const float boundary = std::clamp(terminator, 0.0f, 1.0f) +
+            (std::clamp(adjustment, 0.0f, 1.0f) - 0.5f);
+        return std::clamp(boundary * 0.5f, 0.0f, 1.0f);
+    }
 }
 
 ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
@@ -740,7 +747,6 @@ bool framework::build_dx12_static_scene(
     {
         return std::isfinite(value) ? value : fallback;
     };
-
     const auto fill_external_material = [this, &submission, &shader_source_keys,
         &material_alpha_mode, &multiply_color, &add_asset_texture,
         &base_texture_binding, &fallback_texture_key, &read_layer_float,
@@ -840,8 +846,16 @@ bool framework::build_dx12_static_scene(
             };
             const DirectX::XMFLOAT4 shade = property_color(
                 "prop.ShadeColor", { 0.12f, 0.18f, 0.24f, 1.0f });
+            const float shading_adjustment = std::clamp(
+                property_float("prop.ShadingThreshold", 0.5f), 0.0f, 1.0f);
+            const auto* shading_terminator = material->properties.Find(
+                "prop.ShadingTerminator");
+            const float shading_threshold = shading_terminator != nullptr
+                ? resolve_ggst_shading_threshold(shading_terminator->AsFloat(0.5f),
+                    shading_adjustment)
+                : shading_adjustment;
             draw.builtin_params = { 3.0f,
-                std::clamp(property_float("prop.ShadingThreshold", 0.5f), 0.0f, 1.0f),
+                shading_threshold,
                 std::clamp(property_float("prop.ShadingOffset", 0.0f), -1.0f, 1.0f),
                 std::clamp(property_float("prop.SpecularSize", 0.2f), 0.0f, 1.0f) };
             draw.builtin_params1 = {

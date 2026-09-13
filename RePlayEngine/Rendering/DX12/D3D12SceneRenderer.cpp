@@ -754,6 +754,8 @@ namespace ReplayEngine::Rendering::DX12
                 ? D3D12_FILL_MODE_WIREFRAME : D3D12_FILL_MODE_SOLID;
             desc.RasterizerState.CullMode = kind == D3D12ShaderLayerPassKind::Outline
                 ? D3D12_CULL_MODE_FRONT : D3D12_CULL_MODE_NONE;
+            if (kind == D3D12ShaderLayerPassKind::Outline)
+                desc.RasterizerState.FrontCounterClockwise = FALSE;
             desc.RasterizerState.AntialiasedLineEnable = kind == D3D12ShaderLayerPassKind::Wireframe;
             desc.DepthStencilState = MakeDepth(false);
             if (!depth_enabled) desc.DepthStencilState.DepthEnable = FALSE;
