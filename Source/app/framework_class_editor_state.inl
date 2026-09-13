@@ -348,6 +348,12 @@ public:
     void request_automated_frame_capture(const std::string& name);
     void request_automated_exclusive_frame_capture(const std::string& name);
     bool automated_exclusive_frame_capture_attempted() const noexcept;
+    void set_exclusive_capture_time(float seconds) noexcept
+    {
+        exclusive_capture_time_ = seconds;
+    }
+    float exclusive_capture_time_{ -1.0f };
+    float exclusive_capture_elapsed_{ 0.0f };
     bool golden_last_capture_ok() const noexcept;
     const std::string& golden_last_capture_summary() const noexcept;
 

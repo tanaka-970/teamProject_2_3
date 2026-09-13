@@ -240,6 +240,12 @@
             calculate_frame_stats();
 
             float frame_delta_time = tictoc.time_interval();
+            if (exclusive_capture_time_ >= 0.0f &&
+                automated_exclusive_frame_capture_pending)
+            {
+                frame_delta_time = 1.0f / 60.0f;
+                exclusive_capture_elapsed_ += frame_delta_time;
+            }
             if (profile_benchmark_mode)
             {
                 frame_delta_time = 1.0f / 60.0f;

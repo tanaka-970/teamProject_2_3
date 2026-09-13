@@ -29,6 +29,13 @@ bool framework::begin_automated_exclusive_frame_capture()
     if (!automated_exclusive_frame_capture_pending || !scene_manager.IsExclusive())
         return false;
 
+    // 時刻指定があるときは、その時刻まで撮らずに待つ。
+    if (exclusive_capture_time_ >= 0.0f &&
+        exclusive_capture_elapsed_ < exclusive_capture_time_)
+    {
+        return false;
+    }
+
     automated_exclusive_frame_capture_pending = false;
     automated_exclusive_frame_capture_attempted_ = true;
     request_golden(golden_request_kind::capture);

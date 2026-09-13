@@ -255,6 +255,18 @@ int WINAPI WinMain(_In_ HINSTANCE instance, _In_opt_  HINSTANCE prev_instance, _
                 application.set_automated_smoke_test_frames(
                     automated_smoke_test_frames > 0 ? automated_smoke_test_frames : 240u);
             }
+            {
+                std::istringstream capture_arguments(cmd_line != nullptr ? cmd_line : "");
+                std::string capture_token;
+                while (capture_arguments >> capture_token)
+                {
+                    if (capture_token != "--exclusive-time") continue;
+                    float seconds = -1.0f;
+                    if (capture_arguments >> seconds)
+                        application.set_exclusive_capture_time(seconds);
+                    break;
+                }
+            }
             application.request_automated_exclusive_frame_capture(
                 capture_exclusive_frame_name);
         }
