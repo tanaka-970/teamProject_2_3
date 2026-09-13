@@ -1,6 +1,7 @@
 ﻿#include "RuntimeContext.h"
 
 #include "../Events/EventBus.h"
+#include "../../Components/Motion/CompositionPlayerComponent.h"
 #include "../../Components/Motion/MotionPlayerComponent.h"
 #include "../../Object/Component/Component.h"
 #include "../../Object/GameObject/GameObject.h"
@@ -23,6 +24,24 @@ namespace ReplayEngine::Runtime
             if (component == nullptr) return nullptr;
 
             auto* player = dynamic_cast<Components::MotionPlayerComponent*>(component);
+            if (player == nullptr)
+            {
+                status = RuntimeStatus::TypeMismatch;
+                return nullptr;
+            }
+            status = RuntimeStatus::Ok;
+            return player;
+        }
+
+        Components::CompositionPlayerComponent* ResolveCompositionPlayer(
+            const HandleResolver& resolver, const ComponentHandle& handle,
+            RuntimeStatus& status) noexcept
+        {
+            Component* component = nullptr;
+            status = resolver.TryResolve(handle, component);
+            if (component == nullptr) return nullptr;
+
+            auto* player = dynamic_cast<Components::CompositionPlayerComponent*>(component);
             if (player == nullptr)
             {
                 status = RuntimeStatus::TypeMismatch;
@@ -181,6 +200,123 @@ namespace ReplayEngine::Runtime
             ResolveMotionPlayer(resolver_, player, status);
         if (resolved == nullptr) return status;
         out = resolved->Duration();
+        return RuntimeStatus::Ok;
+    }
+
+    // ---- Composition Player ------------------------------------------------
+
+    RuntimeStatus RuntimeContext::FindCompositionPlayer(const ObjectHandle& owner,
+        const std::string& key, ComponentHandle& out) const
+    {
+        out = ComponentHandle::None();
+        RuntimeStatus status = RuntimeStatus::Ok;
+        const GameObject* object = ResolveObject(owner, status);
+        if (object == nullptr) return status;
+
+        const std::size_t count = object->ComponentCount();
+        for (std::size_t index = 0; index < count; ++index)
+        {
+            Component* component = object->ComponentAt(index);
+            if (component == nullptr || component->PendingDestroy()) continue;
+            auto* player = dynamic_cast<Components::CompositionPlayerComponent*>(component);
+            if (player == nullptr) continue;
+            if (!key.empty() && player->key != key) continue;
+
+            out = resolver_.MakeHandle(player);
+            return out.IsEmpty() ? RuntimeStatus::ComponentNotFound : RuntimeStatus::Ok;
+        }
+        return RuntimeStatus::ComponentNotFound;
+    }
+
+    RuntimeStatus RuntimeContext::CompositionPlay(const ComponentHandle& player)
+    {
+        RuntimeStatus status = RuntimeStatus::Ok;
+        Components::CompositionPlayerComponent* resolved =
+            ResolveCompositionPlayer(resolver_, player, status);
+        if (resolved == nullptr) return status;
+        resolved->Play();
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::CompositionPause(const ComponentHandle& player)
+    {
+        RuntimeStatus status = RuntimeStatus::Ok;
+        Components::CompositionPlayerComponent* resolved =
+            ResolveCompositionPlayer(resolver_, player, status);
+        if (resolved == nullptr) return status;
+        resolved->Pause();
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::CompositionResume(const ComponentHandle& player)
+    {
+        RuntimeStatus status = RuntimeStatus::Ok;
+        Components::CompositionPlayerComponent* resolved =
+            ResolveCompositionPlayer(resolver_, player, status);
+        if (resolved == nullptr) return status;
+        resolved->Resume();
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::CompositionStop(const ComponentHandle& player)
+    {
+        RuntimeStatus status = RuntimeStatus::Ok;
+        Components::CompositionPlayerComponent* resolved =
+            ResolveCompositionPlayer(resolver_, player, status);
+        if (resolved == nullptr) return status;
+        resolved->Stop();
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::SetCompositionTime(const ComponentHandle& player, float seconds)
+    {
+        RuntimeStatus status = RuntimeStatus::Ok;
+        Components::CompositionPlayerComponent* resolved =
+            ResolveCompositionPlayer(resolver_, player, status);
+        if (resolved == nullptr) return status;
+        resolved->SetTime(seconds);
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::SetCompositionSpeed(const ComponentHandle& player, float speed)
+    {
+        RuntimeStatus status = RuntimeStatus::Ok;
+        Components::CompositionPlayerComponent* resolved =
+            ResolveCompositionPlayer(resolver_, player, status);
+        if (resolved == nullptr) return status;
+        resolved->speed = speed;
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::SetCompositionWeight(const ComponentHandle& player, float weight)
+    {
+        RuntimeStatus status = RuntimeStatus::Ok;
+        Components::CompositionPlayerComponent* resolved =
+            ResolveCompositionPlayer(resolver_, player, status);
+        if (resolved == nullptr) return status;
+        resolved->weight = weight;
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::IsCompositionPlaying(const ComponentHandle& player,
+        bool& out) const
+    {
+        RuntimeStatus status = RuntimeStatus::Ok;
+        Components::CompositionPlayerComponent* resolved =
+            ResolveCompositionPlayer(resolver_, player, status);
+        if (resolved == nullptr) return status;
+        out = resolved->IsPlaying();
+        return RuntimeStatus::Ok;
+    }
+
+    RuntimeStatus RuntimeContext::GetCompositionTime(const ComponentHandle& player,
+        float& out) const
+    {
+        RuntimeStatus status = RuntimeStatus::Ok;
+        Components::CompositionPlayerComponent* resolved =
+            ResolveCompositionPlayer(resolver_, player, status);
+        if (resolved == nullptr) return status;
+        out = resolved->time;
         return RuntimeStatus::Ok;
     }
 }

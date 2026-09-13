@@ -51,7 +51,7 @@ public static unsafe class NativeBridge
     }
 
     // 関数ポインタ表の互換番号。C++ の Detail::kNativeApiAbiVersion と必ず一致させる。
-    public const uint NativeApiAbiVersion = 20;
+    public const uint NativeApiAbiVersion = 21;
 
     // 表の先頭に必ず置く自己記述ヘッダー。C++ の Detail::NativeApiHeader と同じ並び。
     [StructLayout(LayoutKind.Sequential)]
@@ -283,6 +283,18 @@ public static unsafe class NativeBridge
 
         // v20 addition. Public GameObject.Find 用の activeInHierarchy 限定検索。
         public delegate* unmanaged[Cdecl]<byte*, ObjectHandle*, int> FindActiveGameObjectByName;
+
+        // v21 addition. CompositionPlayer。C++ の composition_* と同じ並び。
+        public delegate* unmanaged[Cdecl]<ObjectHandle, byte*, ComponentHandle*, int> FindCompositionPlayer;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> CompositionPlay;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> CompositionPause;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> CompositionResume;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int> CompositionStop;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float, int> CompositionSetTime;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float, int> CompositionSetSpeed;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float, int> CompositionSetWeight;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, int*, int> CompositionIsPlaying;
+        public delegate* unmanaged[Cdecl]<ComponentHandle, float*, int> CompositionGetTime;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -1325,6 +1337,76 @@ public static unsafe class NativeBridge
                 (RuntimeStatus)api.FindMotionPlayer(owner, text, &value),
                 value);
         }
+    }
+
+    internal static RuntimeResult<ComponentHandle> FindCompositionPlayer(ObjectHandle owner, string key)
+    {
+        if (api.FindCompositionPlayer == null) return new(RuntimeStatus.ServiceUnavailable);
+        ComponentHandle value = default;
+        fixed (byte* text = Encoding.UTF8.GetBytes(key + "\0"))
+        {
+            return new RuntimeResult<ComponentHandle>(
+                (RuntimeStatus)api.FindCompositionPlayer(owner, text, &value),
+                value);
+        }
+    }
+
+    internal static RuntimeStatus CompositionPlay(ComponentHandle player)
+    {
+        if (api.CompositionPlay == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.CompositionPlay(player);
+    }
+
+    internal static RuntimeStatus CompositionPause(ComponentHandle player)
+    {
+        if (api.CompositionPause == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.CompositionPause(player);
+    }
+
+    internal static RuntimeStatus CompositionResume(ComponentHandle player)
+    {
+        if (api.CompositionResume == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.CompositionResume(player);
+    }
+
+    internal static RuntimeStatus CompositionStop(ComponentHandle player)
+    {
+        if (api.CompositionStop == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.CompositionStop(player);
+    }
+
+    internal static RuntimeStatus CompositionSetTime(ComponentHandle player, float seconds)
+    {
+        if (api.CompositionSetTime == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.CompositionSetTime(player, seconds);
+    }
+
+    internal static RuntimeStatus CompositionSetSpeed(ComponentHandle player, float speed)
+    {
+        if (api.CompositionSetSpeed == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.CompositionSetSpeed(player, speed);
+    }
+
+    internal static RuntimeStatus CompositionSetWeight(ComponentHandle player, float weight)
+    {
+        if (api.CompositionSetWeight == null) return RuntimeStatus.ServiceUnavailable;
+        return (RuntimeStatus)api.CompositionSetWeight(player, weight);
+    }
+
+    internal static RuntimeResult<bool> CompositionIsPlaying(ComponentHandle player)
+    {
+        if (api.CompositionIsPlaying == null) return new(RuntimeStatus.ServiceUnavailable);
+        int value = 0;
+        var status = (RuntimeStatus)api.CompositionIsPlaying(player, &value);
+        return new RuntimeResult<bool>(status, value != 0);
+    }
+
+    internal static RuntimeResult<float> CompositionGetTime(ComponentHandle player)
+    {
+        if (api.CompositionGetTime == null) return new(RuntimeStatus.ServiceUnavailable);
+        float value = 0.0f;
+        var status = (RuntimeStatus)api.CompositionGetTime(player, &value);
+        return new RuntimeResult<float>(status, value);
     }
 
     internal static RuntimeStatus MotionPlay(ComponentHandle player)

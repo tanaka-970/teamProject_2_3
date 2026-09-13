@@ -226,6 +226,16 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             table.find_collider_component = &NativeFindColliderComponent;
             table.add_script_component = &NativeAddScriptComponent;
             table.find_active_game_object_by_name = &NativeFindActiveGameObjectByName;
+            table.find_composition_player = &NativeFindCompositionPlayer;
+            table.composition_play = &NativeCompositionPlay;
+            table.composition_pause = &NativeCompositionPause;
+            table.composition_resume = &NativeCompositionResume;
+            table.composition_stop = &NativeCompositionStop;
+            table.composition_set_time = &NativeCompositionSetTime;
+            table.composition_set_speed = &NativeCompositionSetSpeed;
+            table.composition_set_weight = &NativeCompositionSetWeight;
+            table.composition_is_playing = &NativeCompositionIsPlaying;
+            table.composition_get_time = &NativeCompositionGetTime;
 
             // 自己記述ヘッダー。C# 側はこれを見て表の食い違いをその場で弾く。
             table.header.abi_version = kNativeApiAbiVersion;
