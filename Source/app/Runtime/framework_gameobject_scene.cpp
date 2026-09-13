@@ -199,7 +199,7 @@ void framework::initialize_object_scene()
 
     const ReplayEngine::Project::AssetReferenceStatus boot_logo_scene =
         project_settings.ResolveBootLogoScene(asset_database);
-    if (boot_logo_scene.IsResolved())
+    if (ReplayEngine::Scene::kBootLogoEnabled && boot_logo_scene.IsResolved())
     {
         if (load_boot_logo_scene_from_path(boot_logo_scene.path))
         {
@@ -211,7 +211,7 @@ void framework::initialize_object_scene()
             push_editor_log("Warning", "Boot Logo Scene の読み込みに失敗したため既定ロゴを使用します");
         }
     }
-    else if (boot_logo_scene.IsMissing())
+    else if (ReplayEngine::Scene::kBootLogoEnabled && boot_logo_scene.IsMissing())
     {
         push_editor_log("Warning", "Boot Logo Scene の Asset が見つからないため既定ロゴを使用します");
     }

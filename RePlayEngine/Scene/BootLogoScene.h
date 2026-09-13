@@ -5,6 +5,9 @@
 
 namespace ReplayEngine::Scene
 {
+    // 起動ロゴを出さないなら false にする。
+    inline constexpr bool kBootLogoEnabled = true;
+
     class BootLogoScene final : public IScene
     {
     public:
