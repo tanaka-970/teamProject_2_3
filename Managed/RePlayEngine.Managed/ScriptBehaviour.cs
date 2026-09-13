@@ -210,6 +210,8 @@ public abstract class ScriptBehaviour
     public virtual void OnInputFieldCanceled(InputFieldEventInfo input) { }
     public virtual void OnAnimationEvent(MotionEventInfo animationEvent) { }
     public virtual void OnCompositionMarker(MotionEventInfo marker) { }
+    // Motion / Composition が終端へ達したときに 1 度だけ呼ばれる。Loop 中は呼ばれない。
+    public virtual void OnAnimationFinished(MotionEventInfo animation) { }
     public virtual void OnAnimatorStateChanged(AnimatorStateEventInfo animator) { }
     public virtual void OnSliderValueChanged(SliderEventInfo slider) { }
 
@@ -312,6 +314,8 @@ public abstract class ScriptBehaviour
             Subscribe(nameof(OnAnimationEvent), EngineEventIds.MotionEvent, 18, ownSource: true);
             Subscribe(nameof(OnCompositionMarker), EngineEventIds.CompositionMarker, 19,
                 ownSource: true);
+            Subscribe(nameof(OnAnimationFinished), EngineEventIds.MotionFinished, 23,
+                ownSource: true);
             Subscribe(nameof(OnAnimatorStateChanged), EngineEventIds.AnimatorStateChanged, 20,
                 ownSource: true);
             Subscribe(nameof(OnSliderValueChanged), EngineEventIds.SliderValueChanged, 21,
@@ -391,6 +395,7 @@ public abstract class ScriptBehaviour
             case 20: owner.OnAnimatorStateChanged(new AnimatorStateEventInfo(record)); break;
             case 21: owner.OnSliderValueChanged(new SliderEventInfo(record)); break;
             case 22: owner.OnAnyButtonClicked(new ButtonEventInfo(record)); break;
+            case 23: owner.OnAnimationFinished(new MotionEventInfo(record)); break;
             }
         }
 

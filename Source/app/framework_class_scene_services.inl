@@ -96,6 +96,11 @@ public:
     bool load_exclusive_scene_from_path(const std::filesystem::path& path);
     ReplayEngine::Scene::Scene* exclusive_scene_for_render() noexcept;
     void update_exclusive_scene(float elapsed_time);
+    void evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
+        float scaled_delta_time, float unscaled_delta_time,
+        ReplayEngine::Motion::MotionMixer& mixer,
+        ReplayEngine::Runtime::RuntimeContext* runtime_context,
+        std::uint64_t frame_index);
 
 private:
 
@@ -171,11 +176,6 @@ private:
         const std::string& asset_guid);
     void prepare_material_motion_bindings(ReplayEngine::Scene::Scene& scene);
     void prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& scene);
-    void evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
-        float scaled_delta_time, float unscaled_delta_time,
-        ReplayEngine::Motion::MotionMixer& mixer,
-        ReplayEngine::Runtime::RuntimeContext* runtime_context,
-        std::uint64_t frame_index);
     void update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene, float elapsed_time,
         const ReplayEngine::Motion::MotionMixer* mixer);
     void update_ui_number_displays(ReplayEngine::Scene::Scene& scene);
