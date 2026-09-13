@@ -221,6 +221,8 @@
             if (startup_fullscreen_requested) toggle_fullscreen();
         }
 
+        // 初回 tick に起動処理全体の経過時間が乗ると、ロゴを 1 フレームで使い切ってしまう。
+        tictoc.reset();
         while (WM_QUIT != msg.message)
         {
             // メッセージを上限付きで処理してから1フレーム進める。
