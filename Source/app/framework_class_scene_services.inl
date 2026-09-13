@@ -1,4 +1,4 @@
-// Scene/Runtime/描画提出/カメラ/衝突/Project Browser 接続。
+﻿// Scene/Runtime/描画提出/カメラ/衝突/Project Browser 接続。
 // framework_class.h の class framework 内部からのみ include する。
 
     // --- GameObject / Component 基盤との接続 -------------------------------
@@ -91,6 +91,7 @@
     void cancel_editor_play_loading();
 
 public:
+    float measure_boot_logo_duration(const ReplayEngine::Scene::Scene& scene);
     bool load_boot_logo_scene_from_path(const std::filesystem::path& path);
     bool load_exclusive_scene_from_path(const std::filesystem::path& path);
     ReplayEngine::Scene::Scene* exclusive_scene_for_render() noexcept;

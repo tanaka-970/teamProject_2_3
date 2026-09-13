@@ -35,6 +35,8 @@
 #include "../../RePlayEngine/Scene/BootLogoScene.h"
 
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
+#include "../../RePlayEngine/Components/Motion/CompositionPlayerComponent.h"
+#include "../../RePlayEngine/Components/Motion/MotionPlayerComponent.h"
 #include "../../RePlayEngine/Runtime/Behaviour/BehaviourRegistry.h"
 #include "../../RePlayEngine/Scripting/CSharp/CSharpProject.h"
 #include "../../RePlayEngine/Scripting/CSharp/CSharpScriptBackend.h"
@@ -42,6 +44,9 @@
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
 
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
 #include <filesystem>
 #include <string>
 
@@ -185,6 +190,55 @@ bool framework::load_exclusive_scene_from_path(const std::filesystem::path& path
     return true;
 }
 
+// 起動ロゴの尺は Scene が持つモーションから測る。一番長いものが終わった時点で次へ進める。
+float framework::measure_boot_logo_duration(const ReplayEngine::Scene::Scene& scene)
+{
+    using ReplayEngine::Components::CompositionPlayerComponent;
+    using ReplayEngine::Components::MotionPlayerComponent;
+
+    float longest = 0.0f;
+    for (std::size_t object_index = 0; object_index < scene.GameObjectCount(); ++object_index)
+    {
+        ReplayEngine::Core::GameObject* object = scene.GameObjectAt(object_index);
+        if (object == nullptr) continue;
+        for (std::size_t component_index = 0;
+            component_index < object->ComponentCount(); ++component_index)
+        {
+            ReplayEngine::Core::Component* component = object->ComponentAt(component_index);
+            if (component == nullptr) continue;
+
+            float asset_duration = 0.0f;
+            float speed = 1.0f;
+            float delay = 0.0f;
+            if (component->TypeID() == MotionPlayerComponent::StaticTypeID())
+            {
+                const auto& player = static_cast<const MotionPlayerComponent&>(*component);
+                const ReplayEngine::Motion::MotionAsset* asset =
+                    resolve_motion_asset(player.motion.guid);
+                if (asset == nullptr) continue;
+                asset_duration = asset->duration;
+                speed = player.speed;
+                delay = player.trigger_delay;
+            }
+            else if (component->TypeID() == CompositionPlayerComponent::StaticTypeID())
+            {
+                const auto& player = static_cast<const CompositionPlayerComponent&>(*component);
+                const ReplayEngine::Motion::CompositionAsset* asset =
+                    resolve_composition_asset(player.composition.guid);
+                if (asset == nullptr) continue;
+                asset_duration = asset->duration;
+                speed = player.speed;
+            }
+            else continue;
+
+            const float scale = std::abs(speed) > 1.0e-4f ? std::abs(speed) : 1.0f;
+            longest = (std::max)(longest, (std::max)(0.0f, delay) + asset_duration / scale);
+        }
+    }
+    return longest > 0.0f ? longest
+        : ReplayEngine::Scene::BootLogoAssetScene::default_duration;
+}
+
 bool framework::load_boot_logo_scene_from_path(const std::filesystem::path& path)
 {
     if (path.empty()) return false;
@@ -203,6 +257,7 @@ bool framework::load_boot_logo_scene_from_path(const std::filesystem::path& path
     object_boot_logo_frame_index = 0;
     object_loading_scene_frame_history = {};
     object_boot_logo_scene = std::move(scene);
+    object_boot_logo_duration = measure_boot_logo_duration(*object_boot_logo_scene);
     return true;
 }
 

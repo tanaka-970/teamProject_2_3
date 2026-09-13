@@ -30,6 +30,11 @@ namespace ReplayEngine::Scene
         return logo_.IsFinished();
     }
 
+    BootLogoAssetScene::BootLogoAssetScene(float duration) noexcept
+        : duration_(duration > 0.0f ? duration : default_duration)
+    {
+    }
+
     bool BootLogoAssetScene::Initialize()
     {
         time_ = 0.0f;
@@ -43,6 +48,6 @@ namespace ReplayEngine::Scene
 
     bool BootLogoAssetScene::IsFinished() const noexcept
     {
-        return time_ >= duration;
+        return time_ >= duration_;
     }
 }

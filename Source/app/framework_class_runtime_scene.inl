@@ -75,6 +75,7 @@
     std::unique_ptr<ReplayEngine::Scene::Scene> object_boot_logo_scene;
     std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> object_boot_logo_runtime_context;
     std::uint64_t object_boot_logo_frame_index{ 0 };
+    float object_boot_logo_duration{ 0.0f };
     std::unique_ptr<ReplayEngine::Scene::Scene> object_loading_scene;
     std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> object_loading_runtime_context;
     std::uint64_t object_loading_frame_index{ 0 };

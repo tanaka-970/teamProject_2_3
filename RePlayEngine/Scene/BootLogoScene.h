@@ -5,8 +5,9 @@
 
 namespace ReplayEngine::Scene
 {
-    // 起動ロゴを出さないなら false にする。
-    inline constexpr bool kBootLogoEnabled = true;
+    // 起動ロゴの出し方。Scene=Project設定のシーン（使えなければ既定ロゴへ）、BuiltIn=既定ロゴ固定、None=出さない。
+    enum class BootLogoMode { Scene, BuiltIn, None };
+    inline constexpr BootLogoMode kBootLogoMode = BootLogoMode::Scene;
 
     class BootLogoScene final : public IScene
     {
@@ -26,13 +27,17 @@ namespace ReplayEngine::Scene
     class BootLogoAssetScene final : public IScene
     {
     public:
+        // Scene からモーションの尺を測れなかったときだけ使う既定値。
+        static constexpr float default_duration = 3.87f;
+
+        explicit BootLogoAssetScene(float duration) noexcept;
         bool Initialize() override;
         void Update(float elapsed_time) override;
         bool IsFinished() const noexcept override;
         SceneRenderMode RenderMode() const noexcept override { return SceneRenderMode::Exclusive; }
 
     private:
-        static constexpr float duration = 3.87f;
+        float duration_ = default_duration;
         float time_ = 0.0f;
     };
 }

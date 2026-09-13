@@ -219,17 +219,8 @@ bool framework::initialize()
             return true;
         });
     }
-    // Editor と Game のどちらもロゴの裏でロードを進める。
-    if constexpr (ReplayEngine::Scene::kBootLogoEnabled)
-    {
-        scene_manager.SetScene(std::make_unique<ReplayEngine::Scene::BootLogoScene>());
-        scene_manager.QueueScene(std::move(loading_scene));
-    }
-    else
-    {
-        // ロゴを出さないときは current_scene_ を null にしない。空だとキューが進まない。
-        scene_manager.SetScene(std::move(loading_scene));
-    }
+    // Editor と Game のどちらもロゴの裏でロードを進める。どのロゴを出すかは Project 設定を読んだあとで決める。
+    scene_manager.QueueScene(std::move(loading_scene));
 
     scene_manager.QueueSceneFactory([this]() -> std::unique_ptr<ReplayEngine::Scene::IScene>
     {
