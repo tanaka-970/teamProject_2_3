@@ -224,6 +224,78 @@ void framework::draw_project_settings_panel()
 
     ImGui::Separator();
 
+    // ---- 起動ロゴ Scene -----------------------------------------------------
+    ImGui::TextUnformatted("Boot Logo Scene（起動ロゴ）");
+    const Project::AssetReferenceStatus boot_logo =
+        project_settings.ResolveBootLogoScene(asset_database);
+    const std::string boot_logo_preview = boot_logo.IsMissing()
+        ? std::string("[ Missing Scene ]") : boot_logo.DisplayLabel();
+
+    if (boot_logo.IsMissing())
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.45f, 0.35f, 1.0f));
+    ImGui::SetNextItemWidth(-1.0f);
+    if (ImGui::BeginCombo("##BootLogoScene", boot_logo_preview.c_str()))
+    {
+        if (ImGui::Selectable("（未設定）", boot_logo.IsUnset()))
+        {
+            project_settings.ClearBootLogoScene();
+            save_project_settings();
+        }
+
+        for (const auto& record : asset_database.Records())
+        {
+            if (record.kind != ReplayEngine::Assets::AssetKind::Scene) continue;
+            if (asset_database.IsMissing(record.guid)) continue;
+
+            const bool selected = record.guid == project_settings.BootLogoSceneGuid();
+            const std::string label = record.display_name.empty()
+                ? record.source_path.filename().generic_string()
+                : record.display_name;
+            ImGui::PushID(record.guid.c_str());
+            if (ImGui::Selectable(label.c_str(), selected))
+            {
+                project_settings.SetBootLogoSceneGuid(record.guid);
+                save_project_settings();
+            }
+            if (selected) ImGui::SetItemDefaultFocus();
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    if (boot_logo.IsMissing()) ImGui::PopStyleColor();
+
+    if (boot_logo.IsResolved())
+    {
+        ImGui::TextDisabled("Path: %s", boot_logo.path.generic_u8string().c_str());
+    }
+    else if (boot_logo.IsMissing())
+    {
+        ImGui::TextColored(ImVec4(1.0f, 0.45f, 0.35f, 1.0f),
+            "この Boot Logo Scene はプロジェクトに見つかりません（参照は保持）");
+    }
+    else
+    {
+        ImGui::TextDisabled("未指定なら従来の C++ ロゴを使用します");
+    }
+
+    if (project_settings.HasBootLogoScene())
+    {
+        if (ImGui::Button("Boot Logo Scene を解除##ClearBootLogoScene"))
+        {
+            project_settings.ClearBootLogoScene();
+            save_project_settings();
+        }
+    }
+
+    if (ImGui::TreeNode("詳細##BootLogoScene"))
+    {
+        ImGui::TextDisabled("AssetGUID: %s",
+            boot_logo.guid.empty() ? "(なし)" : boot_logo.guid.c_str());
+        ImGui::TreePop();
+    }
+
+    ImGui::Separator();
+
     // ---- Loading Screen Scene -----------------------------------------------
     ImGui::TextUnformatted("Loading Screen Scene（ロード画面）");
     const Project::AssetReferenceStatus loading =

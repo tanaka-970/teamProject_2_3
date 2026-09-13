@@ -219,17 +219,9 @@ bool framework::initialize()
             return true;
         });
     }
-    // Game 起動ではロゴの裏でロードを進める。Editor 起動では固定長の
-    // ロゴ待ちを省き、暗いロード画面から直接セッションを復元する。
-    if (object_boot_from_startup_scene)
-    {
-        scene_manager.SetScene(std::make_unique<ReplayEngine::Scene::BootLogoScene>());
-        scene_manager.QueueScene(std::move(loading_scene));
-    }
-    else
-    {
-        scene_manager.SetScene(std::move(loading_scene));
-    }
+    // Editor と Game のどちらもロゴの裏でロードを進める。
+    scene_manager.SetScene(std::make_unique<ReplayEngine::Scene::BootLogoScene>());
+    scene_manager.QueueScene(std::move(loading_scene));
 
     scene_manager.QueueSceneFactory([this]() -> std::unique_ptr<ReplayEngine::Scene::IScene>
     {

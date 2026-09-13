@@ -245,6 +245,24 @@ namespace ReplayEngine::Project
         AssetReferenceStatus ResolveLoadingScene(
             const Assets::AssetDatabase& database) const;
 
+        // ---- 起動ロゴ Scene -------------------------------------------------
+        const std::string& BootLogoSceneGuid() const noexcept
+        {
+            return boot_logo_scene_guid_;
+        }
+
+        void SetBootLogoSceneGuid(std::string guid)
+        {
+            boot_logo_scene_guid_ = std::move(guid);
+        }
+
+        void ClearBootLogoScene() noexcept { boot_logo_scene_guid_.clear(); }
+
+        bool HasBootLogoScene() const noexcept { return !boot_logo_scene_guid_.empty(); }
+
+        AssetReferenceStatus ResolveBootLogoScene(
+            const Assets::AssetDatabase& database) const;
+
         // ---- Active Scene Flow ----------------------------------------------
         const std::string& SceneFlowGuid() const noexcept { return scene_flow_guid_; }
         void SetSceneFlowGuid(std::string guid) { scene_flow_guid_ = std::move(guid); }
@@ -335,6 +353,7 @@ namespace ReplayEngine::Project
             default_character_prefab_guid_.clear();
             startup_scene_guid_.clear();
             loading_scene_guid_.clear();
+            boot_logo_scene_guid_.clear();
             icon_atlas_guids_.clear();
             icon_tints_.clear();
             icon_regions_.clear();
@@ -355,6 +374,7 @@ namespace ReplayEngine::Project
         std::string default_character_prefab_guid_;
         std::string startup_scene_guid_;
         std::string loading_scene_guid_;
+        std::string boot_logo_scene_guid_;
         std::vector<std::string> icon_atlas_guids_;
         std::map<std::string, DirectX::XMFLOAT4> icon_tints_;
         std::map<std::string, IconRegionRef> icon_regions_;

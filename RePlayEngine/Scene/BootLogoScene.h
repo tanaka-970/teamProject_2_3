@@ -19,4 +19,17 @@ namespace ReplayEngine::Scene
     private:
         Presentation::BootLogoComponent logo_;
     };
+
+    class BootLogoAssetScene final : public IScene
+    {
+    public:
+        bool Initialize() override;
+        void Update(float elapsed_time) override;
+        bool IsFinished() const noexcept override;
+        SceneRenderMode RenderMode() const noexcept override { return SceneRenderMode::Exclusive; }
+
+    private:
+        static constexpr float duration = 3.87f;
+        float time_ = 0.0f;
+    };
 }

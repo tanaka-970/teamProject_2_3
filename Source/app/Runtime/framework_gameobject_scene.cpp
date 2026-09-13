@@ -38,6 +38,7 @@
 #include "../../RePlayEngine/Runtime/Events/EventBus.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
+#include "../../RePlayEngine/Scene/BootLogoScene.h"
 #include "../../RePlayEngine/Scripting/CSharp/CSharpScriptBackend.h"
 #include "../../RePlayEngine/Scripting/Core/ScriptComponent.h"
 #include "../../RePlayEngine/Scripting/Core/ScriptRuntime.h"
@@ -195,6 +196,25 @@ void framework::initialize_object_scene()
     // Runtime 側のサービスを組み立てる。
     // World の所有者はここで確定し、以降 framework が Scene を値で持つことはない。
     initialize_runtime_services();
+
+    const ReplayEngine::Project::AssetReferenceStatus boot_logo_scene =
+        project_settings.ResolveBootLogoScene(asset_database);
+    if (boot_logo_scene.IsResolved())
+    {
+        if (load_boot_logo_scene_from_path(boot_logo_scene.path))
+        {
+            scene_manager.SetScene(
+                std::make_unique<ReplayEngine::Scene::BootLogoAssetScene>());
+        }
+        else
+        {
+            push_editor_log("Warning", "Boot Logo Scene の読み込みに失敗したため既定ロゴを使用します");
+        }
+    }
+    else if (boot_logo_scene.IsMissing())
+    {
+        push_editor_log("Warning", "Boot Logo Scene の Asset が見つからないため既定ロゴを使用します");
+    }
 
     const ReplayEngine::Project::AssetReferenceStatus loading_scene =
         project_settings.ResolveLoadingScene(asset_database);

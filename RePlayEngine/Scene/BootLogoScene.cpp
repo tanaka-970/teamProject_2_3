@@ -29,4 +29,20 @@ namespace ReplayEngine::Scene
     {
         return logo_.IsFinished();
     }
+
+    bool BootLogoAssetScene::Initialize()
+    {
+        time_ = 0.0f;
+        return true;
+    }
+
+    void BootLogoAssetScene::Update(float elapsed_time)
+    {
+        if (elapsed_time > 0.0f) time_ += elapsed_time;
+    }
+
+    bool BootLogoAssetScene::IsFinished() const noexcept
+    {
+        return time_ >= duration;
+    }
 }

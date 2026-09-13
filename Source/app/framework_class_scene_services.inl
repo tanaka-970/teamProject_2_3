@@ -91,6 +91,7 @@
     void cancel_editor_play_loading();
 
 public:
+    bool load_boot_logo_scene_from_path(const std::filesystem::path& path);
     bool load_exclusive_scene_from_path(const std::filesystem::path& path);
     ReplayEngine::Scene::Scene* exclusive_scene_for_render() noexcept;
     void update_exclusive_scene(float elapsed_time);

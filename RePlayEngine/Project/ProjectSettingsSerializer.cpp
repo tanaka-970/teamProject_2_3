@@ -49,6 +49,7 @@ namespace ReplayEngine::Project
 
         // v10 で追加。空 GUID は「未設定」として書き出す。
         stream << "LOADING_SCENE " << std::quoted(settings.LoadingSceneGuid()) << '\n';
+        stream << "BOOT_LOGO_SCENE " << std::quoted(settings.BootLogoSceneGuid()) << '\n';
         // アイコン用アトラスは最大 4 枚。1 枚につき 1 行で並べる。
         for (const auto& atlas_guid : settings.IconAtlasGuids())
             stream << "ICON_ATLAS " << std::quoted(atlas_guid) << '\n';
@@ -225,6 +226,16 @@ namespace ReplayEngine::Project
                 if (value_stream >> std::quoted(guid))
                 {
                     settings.SetLoadingSceneGuid(std::move(guid));
+                }
+            }
+            else if (keyword == "BOOT_LOGO_SCENE")
+            {
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                std::string guid;
+                if (value_stream >> std::quoted(guid))
+                {
+                    settings.SetBootLogoSceneGuid(std::move(guid));
                 }
             }
             else if (keyword == "ICON_ATLAS")

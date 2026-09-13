@@ -32,6 +32,7 @@
 #include "framework.h"
 
 #include "../../RePlayEngine/Scene/LoadingScene.h"
+#include "../../RePlayEngine/Scene/BootLogoScene.h"
 
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Runtime/Behaviour/BehaviourRegistry.h"
@@ -184,9 +185,36 @@ bool framework::load_exclusive_scene_from_path(const std::filesystem::path& path
     return true;
 }
 
+bool framework::load_boot_logo_scene_from_path(const std::filesystem::path& path)
+{
+    if (path.empty()) return false;
+
+    ReplayEngine::Scene::Serialization::SceneLoadReport report;
+    std::string error;
+    std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> boot_logo_runtime_context;
+    std::unique_ptr<ReplayEngine::Scene::Scene> scene =
+        object_runtime_scenes.LoadStandaloneScene(content_path(path), report, error,
+            &boot_logo_runtime_context);
+    if (scene == nullptr) return false;
+
+    object_boot_logo_scene.reset();
+    object_boot_logo_runtime_context.reset();
+    object_boot_logo_runtime_context = std::move(boot_logo_runtime_context);
+    object_boot_logo_frame_index = 0;
+    object_loading_scene_frame_history = {};
+    object_boot_logo_scene = std::move(scene);
+    return true;
+}
+
 ReplayEngine::Scene::Scene* framework::exclusive_scene_for_render() noexcept
 {
-    return scene_manager.IsExclusive() ? object_loading_scene.get() : nullptr;
+    if (!scene_manager.IsExclusive()) return nullptr;
+    const auto* asset_boot_logo = dynamic_cast<const ReplayEngine::Scene::BootLogoAssetScene*>(
+        scene_manager.CurrentScene());
+    if (asset_boot_logo != nullptr) return object_boot_logo_scene.get();
+    if (dynamic_cast<const ReplayEngine::Scene::BootLogoScene*>(
+        scene_manager.CurrentScene()) != nullptr) return nullptr;
+    return object_loading_scene.get();
 }
 
 // 起動時に C# を用意できたかを engine_log.txt へ 1 行残す。
