@@ -227,6 +227,12 @@ void framework::draw_editor()
                 step_motion_preview_frames(1);
             if (motion_action_pressed(u8"1コマ戻る"))
                 step_motion_preview_frames(-1);
+            if (motion_action_pressed(u8"次のキーへ"))
+                step_motion_preview_key(1);
+            if (motion_action_pressed(u8"前のキーへ"))
+                step_motion_preview_key(-1);
+            if (motion_action_pressed(u8"キーを全選択"))
+                select_all_motion_keys();
             if (motion_action_pressed(u8"プリセットを適用"))
             {
                 const ReplayEngine::Assets::AssetRecord* preset_record =

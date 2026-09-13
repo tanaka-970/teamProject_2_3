@@ -197,6 +197,9 @@ void framework::draw_motion_timeline()
         command_guide(u8"末尾へ移動", u8"末尾へ移動");
         command_guide(u8"1コマ戻る", u8"1フレーム戻る");
         command_guide(u8"1コマ進む", u8"1フレーム進む");
+        command_guide(u8"前のキーへ", u8"前のキーへ移動");
+        command_guide(u8"次のキーへ", u8"次のキーへ移動");
+        command_guide(u8"キーを全選択", u8"Track のキーをすべて選択");
         command_guide(u8"プリセットを適用",
             u8"選択中プリセットを一括適用（未選択はEaseInOutCubic）");
         ImGui::Separator();

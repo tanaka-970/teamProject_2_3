@@ -124,6 +124,9 @@ namespace GameInput
             { u8"1コマ進む", VK_NEXT, ActionModifierNone },
             { u8"1コマ戻る", VK_PRIOR, ActionModifierNone },
             { u8"プリセットを適用", VK_F9, ActionModifierNone },
+            { u8"前のキーへ", VK_PRIOR, ActionModifierShift },
+            { u8"次のキーへ", VK_NEXT, ActionModifierShift },
+            { u8"キーを全選択", 'A', ActionModifierCtrl },
         };
         for (const auto& expected : expected_motion_actions)
         {
@@ -249,6 +252,9 @@ namespace GameInput
         actions_[u8"1コマ進む"] = { VK_NEXT, 0, 0, "Motion" };
         actions_[u8"1コマ戻る"] = { VK_PRIOR, 0, 0, "Motion" };
         actions_[u8"プリセットを適用"] = { VK_F9, 0, 0, "Motion" };
+        actions_[u8"前のキーへ"] = { VK_PRIOR, 0, 0, "Motion", ActionModifierShift };
+        actions_[u8"次のキーへ"] = { VK_NEXT, 0, 0, "Motion", ActionModifierShift };
+        actions_[u8"キーを全選択"] = { 'A', 0, 0, "Motion", ActionModifierCtrl };
 
         axes_["MoveX"] = { 'A', VK_LEFT, 'D', VK_RIGHT,
             GamepadAxis::LeftX, 0.18f };
