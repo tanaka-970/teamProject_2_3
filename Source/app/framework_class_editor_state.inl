@@ -1,4 +1,4 @@
-// Editor 選択・Dock/Workspace・Motion/UI/Landscape/Shader/Project 状態。
+﻿// Editor 選択・Dock/Workspace・Motion/UI/Landscape/Shader/Project 状態。
 // framework_class.h の class framework 内部からのみ include する。
 
     enum class editor_selection
@@ -407,6 +407,19 @@ private:
     char new_csharp_behaviour_name[128]{ "NewBehaviour" };
     char new_csharp_namespace[128]{ "Game" };
     bool csharp_scripts_dirty{ false };
+    // Script Catalog / Schema が更新されるたびに進む。Play snapshot は
+    // ScriptComponent の serialize schema に依存するため cache key に含める。
+    std::uint64_t csharp_catalog_generation{ 1 };
+
+    // 同じ C# 入力状態で Play 前ビルドが失敗した場合の再試行抑止。
+    // 失敗したまま F5 を押すたび dotnet build を同期実行して数秒止まる事故を防ぐ。
+    // ソース / csproj / Managed API のいずれかが変われば input revision が変わり、
+    // 次の Play で自動的に再試行される。手動 Build && Reload は常に実行できる。
+    std::uint64_t csharp_last_play_build_failed_revision{ 0 };
+    // mtime 判定が保守的に build_required を返し続けても、同じ入力で一度
+    // 成功した dotnet build を F5 ごとに繰り返さないための成功世代。
+    std::uint64_t csharp_last_play_build_succeeded_revision{ 0 };
+    std::uint64_t csharp_last_play_build_skip_logged_revision{ 0 };
 
     // .cs の保存を検出したら自動で再コンパイルするか。
     // 既定で有効。コンパイル失敗時は直前に成功した Assembly が

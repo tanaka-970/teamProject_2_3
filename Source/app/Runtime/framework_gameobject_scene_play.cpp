@@ -37,6 +37,7 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -67,21 +68,67 @@ void framework::ensure_csharp_ready_for_play()
     if (backend == nullptr) return;
 
     // ファイル時刻を直接見る。巡回の周期に Play の正しさを依存させない。
+    // freshness と入力 revision を同じ走査で取得する。
     const bool assembly_missing = !backend->AssemblyLoaded();
-    const bool sources_are_newer =
-        CSharp::CSharpProject::GameScriptsBuildRequired(content_root_path());
-    if (!assembly_missing && !sources_are_newer) return;
+    const CSharp::CSharpBuildState build_state =
+        CSharp::CSharpProject::QueryGameScriptsBuildState(content_root_path());
+    if (!assembly_missing && !build_state.build_required)
+    {
+        csharp_last_play_build_failed_revision = 0;
+        csharp_last_play_build_succeeded_revision = build_state.input_revision;
+        csharp_last_play_build_skip_logged_revision = 0;
+        return;
+    }
+
+    // mtime ベース判定は安全側へ倒すため、生成物の timestamp が更新されない
+    // MSBuild の no-op 成功では build_required が true のままになる場合がある。
+    // 同じ入力 revision で既に一度成功しており Assembly もロード済みなら、
+    // F5 ごとの dotnet process 起動を禁止する。入力が変われば revision も変わる。
+    if (!assembly_missing && build_state.input_revision != 0 &&
+        csharp_last_play_build_succeeded_revision == build_state.input_revision)
+    {
+        return;
+    }
+
+    // 同じ入力状態で一度失敗済みなら、F5 のたびに同じ dotnet build を
+    // 何度も同期実行しない。最後に成功した Assembly があればそれを使い、
+    // 無い場合も「C# 無効」の診断を残して Play 自体は続ける。
+    // ソース / project / Managed API が変われば revision が変わるため、
+    // 次の Play では自動的に再試行される。
+    if (build_state.input_revision != 0 &&
+        csharp_last_play_build_failed_revision == build_state.input_revision)
+    {
+        if (csharp_last_play_build_skip_logged_revision != build_state.input_revision)
+        {
+            push_editor_log("Warning",
+                "C# は同じソース状態で直前のビルドに失敗しているため、"
+                "Play 前の再ビルドを省略します。ソースを変更するか "
+                "Build && Reload C# で明示的に再試行できます");
+            csharp_last_play_build_skip_logged_revision = build_state.input_revision;
+        }
+        return;
+    }
 
     push_editor_log("Info", assembly_missing
         ? "C# Assembly が無いため、Play の前にビルドします"
         : "C# のソースが Assembly より新しいため、Play の前にビルドします");
 
-    if (build_and_reload_csharp_scripts()) return;
+    if (build_and_reload_csharp_scripts())
+    {
+        csharp_last_play_build_failed_revision = 0;
+        csharp_last_play_build_skip_logged_revision = 0;
+        return;
+    }
+
+    // build_and_reload_csharp_scripts() が失敗後の入力 revision を記録済み。
+    // Play 前に取得した revision で上書きすると、ビルド中に Managed API が更新された
+    // ケースで次回また同じ失敗ビルドを走らせてしまうので、ここでは触らない。
 
     // 失敗しても Play は止めない。直前に成功した Assembly が残っていれば動く。
     // 何も無ければ、この直後の Play 診断が「Assembly ロード: 未」を出す。
     push_editor_log("Error",
-        "Play 前の C# ビルドに失敗しました。C# の変更は反映されていません");
+        "Play 前の C# ビルドに失敗しました。次回 Play では同じ入力の再ビルドを"
+        "繰り返しません。C# の変更は反映されていません");
 }
 
 void framework::enter_object_play_mode(bool show_loading_screen)
@@ -146,7 +193,8 @@ void framework::enter_object_play_mode(bool show_loading_screen)
     // 通常の Editor Play はここでは「開始要求を記録するだけ」にする。
     // 重い処理をこのボタンクリックのコールスタックで行うと、ImGui が次のフレームを
     // Present できず、読み込み表示そのものが出る前に固まって見えるため。
-    object_editor_play_snapshot.Clear();
+    object_editor_play_request_snapshot.reset();
+    object_editor_play_snapshot_reused = false;
     object_editor_play_started_at = std::chrono::steady_clock::now();
     object_editor_play_start_stage = editor_play_start_stage::prepare_runtime;
     object_editor_play_stage_label = u8"実行環境を準備しています";
@@ -188,11 +236,18 @@ bool framework::complete_object_play_mode_start()
     // 衝突世界を Runtime World へ差し替える。
     // 編集 Scene の ObjectID / ColliderID はここで完全に捨てられるので、
     // Play 中に編集 Scene の Collider へ当たることはない。
+    const auto collision_started = std::chrono::steady_clock::now();
     attach_collision_world(runtime_world);
 
     // Attach 直後に登録表を作る。Play From Here の座標は SceneData へ
     // 事前反映済みなので、OnAwake / OnStart からも正しい開始位置が見える。
+    // Landscape collision は shared cook cache を使うため、同じ geometry の
+    // 再 Play ではここで三角形 grid を Cook し直さない。
     object_collision_world.Refresh();
+    const double collision_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - collision_started).count();
+    push_editor_log("Info", "Play 準備: Collision world " +
+        std::to_string(collision_ms) + " ms");
     if (play_spawn_override.active)
     {
         push_editor_log("Info", play_spawn_override.label + " から Play を開始しました");
@@ -213,20 +268,20 @@ bool framework::complete_object_play_mode_start()
     object_editor_context.ResetSceneState();
     object_editor_context.SetStatus("実行中（編集シーンは保持されています）");
 
-    // ---- Play 直後の全数診断 ------------------------------------------------
+    // ---- Play 直後の軽量診断 ----------------------------------------------
     //
-    // Inspector が見ているのは編集 Scene の Component で、実際に動くのは
-    // ここで作られた実行用 World の複製の方。複製側の状態は Inspector から
-    // 一切見えないため、ここで洗いざらい出す。
-    //
-    // 「Play しても動かない」の原因になり得るものを全部並べる:
-    //   ScriptRuntime が無い / Backend が無い / Backend 未初期化 /
-    //   Assembly 未ロード / Play セッション未開始 / Catalog が空 /
-    //   型が Catalog に無い / Schema 未解決 / インスタンス生成失敗
+    // 以前は Play のたびに Catalog 全型 + ScriptComponent 全個体を 1 行ずつ
+    // editor_log.txt へ書いていた。push_editor_log は永続ログも更新するため、
+    // Scene が大きいほど「診断そのもの」が Play 開始時間へ乗っていた。
+    // 成功時は集計 1 行だけ、問題がある項目だけ詳細を出す。診断能力は落とさず、
+    // 正常系の O(N) ファイル I/O を無くす。
     {
+        const auto diagnostics_started = std::chrono::steady_clock::now();
         namespace Scripting = ReplayEngine::Scripting;
 
-        push_editor_log("Info", "===== Play 診断 開始 =====");
+        std::size_t catalog_count = 0;
+        std::size_t catalog_unavailable = 0;
+        Scripting::CSharp::CSharpScriptBackend* backend = nullptr;
 
         if (!object_script_runtime)
         {
@@ -234,10 +289,10 @@ bool framework::complete_object_play_mode_start()
         }
         else
         {
-            push_editor_log("Info", std::string("Play セッション: ") +
-                (object_script_runtime->PlaySessionActive() ? "有効" : "*** 無効 ***"));
+            if (!object_script_runtime->PlaySessionActive())
+                push_editor_log("Error", "Play セッションが無効です");
 
-            auto* backend = dynamic_cast<Scripting::CSharp::CSharpScriptBackend*>(
+            backend = dynamic_cast<Scripting::CSharp::CSharpScriptBackend*>(
                 object_script_runtime->Backend(Scripting::ScriptLanguage::CSharp));
             if (backend == nullptr)
             {
@@ -245,36 +300,38 @@ bool framework::complete_object_play_mode_start()
             }
             else
             {
-                push_editor_log(backend->Initialized() ? "Info" : "Error",
-                    std::string("C# Backend 初期化: ") +
-                    (backend->Initialized() ? "済" : "*** 未 ***"));
-                push_editor_log(backend->AssemblyLoaded() ? "Info" : "Error",
-                    std::string("C# Assembly ロード: ") +
-                    (backend->AssemblyLoaded() ? "済" : "*** 未 ***"));
-                push_editor_log("Info", "C# 生存インスタンス数: " +
-                    std::to_string(backend->LiveInstanceCount()));
+                if (!backend->Initialized())
+                    push_editor_log("Error", "C# Backend が初期化されていません");
+                if (!backend->AssemblyLoaded())
+                    push_editor_log("Error", "C# Assembly がロードされていません");
                 if (!backend->LastErrorMessage().empty())
-                {
                     push_editor_log("Error",
                         "C# Backend 直近エラー: " + backend->LastErrorMessage());
-                }
             }
 
             const auto& all = object_script_runtime->Catalog().All();
-            push_editor_log(all.empty() ? "Error" : "Info",
-                "Catalog 登録数: " + std::to_string(all.size()));
-            for (const Scripting::ScriptTypeDescriptor& descriptor : all)
+            catalog_count = all.size();
+            if (all.empty())
             {
-                const bool can = backend != nullptr &&
-                    backend->CanInstantiate(descriptor.type_id);
-                push_editor_log(can ? "Info" : "Warning",
-                    "  Catalog: " + descriptor.DisplayName() +
-                    " / class=" + descriptor.class_name +
-                    " / typeid=" + descriptor.type_id.ToString() +
-                    " / asset=" + descriptor.asset_guid +
-                    " / 生成可否=" + (can ? "可" : "*** 不可 ***") +
-                    (descriptor.last_error.empty()
-                        ? std::string() : " / エラー=" + descriptor.last_error));
+                push_editor_log("Error", "C# Catalog が空です");
+            }
+            else
+            {
+                // 正常な descriptor は列挙しない。生成不能だけ詳細を残す。
+                for (const Scripting::ScriptTypeDescriptor& descriptor : all)
+                {
+                    const bool can = backend != nullptr &&
+                        backend->CanInstantiate(descriptor.type_id);
+                    if (can && descriptor.last_error.empty()) continue;
+                    ++catalog_unavailable;
+                    push_editor_log("Warning",
+                        "Catalog 生成不可: " + descriptor.DisplayName() +
+                        " / class=" + descriptor.class_name +
+                        " / typeid=" + descriptor.type_id.ToString() +
+                        " / asset=" + descriptor.asset_guid +
+                        (descriptor.last_error.empty()
+                            ? std::string() : " / エラー=" + descriptor.last_error));
+                }
             }
         }
 
@@ -285,10 +342,14 @@ bool framework::complete_object_play_mode_start()
             if (root == nullptr) continue;
             count_runtime_script_instances(*root, script_total, script_with_instance);
         }
+
         push_editor_log(script_total == 0 ? "Error"
-            : (script_with_instance == script_total ? "Info" : "Warning"),
-            "実行用 World の Script Component: " + std::to_string(script_total) +
-            " 個 / インスタンス生成済み " + std::to_string(script_with_instance) + " 個");
+            : (script_with_instance == script_total && catalog_unavailable == 0
+                ? "Info" : "Warning"),
+            "Play 診断: Catalog " + std::to_string(catalog_count) +
+            " 型 (生成不可 " + std::to_string(catalog_unavailable) +
+            ") / Script " + std::to_string(script_total) +
+            " 個 / インスタンス " + std::to_string(script_with_instance) + " 個");
 
         if (script_total == 0)
         {
@@ -296,8 +357,10 @@ bool framework::complete_object_play_mode_start()
                 "実行用 World に Script Component が 1 つもありません。"
                 "編集 Scene から実行用 Scene への複製で落ちています");
         }
-
-        push_editor_log("Info", "===== Play 診断 終了 =====");
+        const double diagnostics_ms = std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - diagnostics_started).count();
+        push_editor_log("Info", "Play 準備: Post-start diagnostics " +
+            std::to_string(diagnostics_ms) + " ms");
     }
     return true;
 }
@@ -329,7 +392,7 @@ void framework::update_editor_play_loading()
         push_editor_log("Error", reason);
         object_editor_context.SetStatus(reason);
         object_runtime_scenes.CancelPending();
-        object_editor_play_snapshot.Clear();
+        object_editor_play_request_snapshot.reset();
         object_editor_play_loading = false;
         object_editor_play_start_stage = editor_play_start_stage::idle;
         object_editor_play_stage_label.clear();
@@ -393,15 +456,60 @@ void framework::update_editor_play_loading()
     case editor_play_start_stage::capture_scene:
     {
         const auto started = std::chrono::steady_clock::now();
-        object_editor_play_snapshot.Clear();
-        // File 保存用の mesh_data 文字列化を通さない Play 専用 Capture。
-        // Landscape は immutable geometry を共有し、Runtime 側だけが実データを複製する。
-        SceneSerialization::CaptureScene(object_scene, object_editor_play_snapshot,
-            SceneSerialization::SceneCaptureMode::Play);
-        apply_play_spawn_override(object_editor_play_snapshot);
-        log_step("Scene capture", started);
+
+        const ReplayEngine::Core::WorldInstanceID world_instance =
+            object_scene.WorldInstanceID();
+        const std::uint32_t structure_generation = object_scene.StructureGeneration();
+        const std::uint64_t content_revision = object_editor_context.ContentRevision();
+        const bool cache_valid = object_editor_play_cached_snapshot != nullptr &&
+            object_editor_play_cached_world_instance == world_instance &&
+            object_editor_play_cached_structure_generation == structure_generation &&
+            object_editor_play_cached_content_revision == content_revision &&
+            object_editor_play_cached_script_generation == csharp_catalog_generation;
+
+        object_editor_play_snapshot_reused = cache_valid;
+        if (!cache_valid)
+        {
+            SceneSerialization::SceneData captured;
+            // File 保存用の mesh_data 文字列化を通さない Play 専用 Capture。
+            // Landscape は immutable geometry を共有し、Runtime 側だけが実データを複製する。
+            SceneSerialization::CaptureScene(object_scene, captured,
+                SceneSerialization::SceneCaptureMode::Play);
+            object_editor_play_cached_snapshot =
+                std::make_shared<SceneSerialization::SceneData>(std::move(captured));
+            object_editor_play_cached_world_instance = world_instance;
+            object_editor_play_cached_structure_generation = structure_generation;
+            object_editor_play_cached_content_revision = content_revision;
+            object_editor_play_cached_script_generation = csharp_catalog_generation;
+            ++object_editor_play_snapshot_cache_misses;
+            push_editor_log("Info", "Play snapshot cache: MISS (再Capture)");
+        }
+        else
+        {
+            ++object_editor_play_snapshot_cache_hits;
+            push_editor_log("Info", "Play snapshot cache: HIT (Scene Capture を省略)");
+        }
+
+        // 通常 Play は immutable cache をそのまま RuntimeSceneService と共有する。
+        // Play From Here だけは開始 Transform を一時的に変えるため、cache 本体を
+        // 汚さないようこの 1 回の request 用コピーへ override を焼き込む。
+        if (play_spawn_override.active)
+        {
+            auto overridden = std::make_shared<SceneSerialization::SceneData>(
+                *object_editor_play_cached_snapshot);
+            apply_play_spawn_override(*overridden);
+            object_editor_play_request_snapshot = std::move(overridden);
+        }
+        else
+        {
+            object_editor_play_request_snapshot = object_editor_play_cached_snapshot;
+        }
+
+        log_step(cache_valid ? "Scene snapshot cache hit" : "Scene capture", started);
         set_stage(editor_play_start_stage::queue_runtime_world, 0.43f,
-            u8"実行用ワールドへスナップショットを渡しています");
+            cache_valid
+                ? u8"シーン変更なし：前回の Play スナップショットを再利用しています"
+                : u8"実行用ワールドへ新しいスナップショットを渡しています");
         break;
     }
 
@@ -409,8 +517,10 @@ void framework::update_editor_play_loading()
     {
         const auto started = std::chrono::steady_clock::now();
         const ReplayEngine::Runtime::SceneRequestResult request =
-            object_runtime_scenes.RequestAdopt(
-                std::move(object_editor_play_snapshot), object_scene_asset_guid);
+            object_runtime_scenes.RequestAdoptShared(
+                object_editor_play_request_snapshot, object_scene_asset_guid);
+        // RuntimeSceneService が shared_ptr を保持したので、この request 側の参照は不要。
+        object_editor_play_request_snapshot.reset();
         log_step("Queue runtime world", started);
         if (request != ReplayEngine::Runtime::SceneRequestResult::Accepted)
         {
@@ -511,13 +621,16 @@ void framework::finish_editor_play_loading()
 
     object_editor_play_loading = false;
     object_editor_play_start_stage = editor_play_start_stage::idle;
-    object_editor_play_snapshot.Clear();
+    object_editor_play_request_snapshot.reset();
     object_editor_play_stage_label.clear();
     object_editor_play_progress = 1.0f;
     object_loading_progress_provider.SetEditorPlayProgress(1.0f);
     object_loading_progress_provider.SetEditorPlayLoading(false);
     push_editor_log("Info", "Editor Play 準備完了: " +
-        std::to_string(milliseconds) + " ms");
+        std::to_string(milliseconds) + " ms / snapshot=" +
+        (object_editor_play_snapshot_reused ? "HIT" : "MISS") +
+        " / cache totals H=" + std::to_string(object_editor_play_snapshot_cache_hits) +
+        " M=" + std::to_string(object_editor_play_snapshot_cache_misses));
 }
 
 void framework::cancel_editor_play_loading()
@@ -525,7 +638,7 @@ void framework::cancel_editor_play_loading()
     if (!object_editor_play_loading) return;
 
     object_runtime_scenes.CancelPending();
-    object_editor_play_snapshot.Clear();
+    object_editor_play_request_snapshot.reset();
     object_editor_play_loading = false;
     object_editor_play_start_stage = editor_play_start_stage::idle;
     object_editor_play_stage_label.clear();
@@ -553,17 +666,20 @@ void framework::count_runtime_script_instances(
         ++total;
         if (script->HasInstance()) ++with_instance;
 
-        push_editor_log(script->HasInstance() ? "Info" : "Error",
-            "  [" + object.Name() + "] 状態=" +
-            ReplayEngine::Scripting::ToString(script->Status()) +
-            " / インスタンス=" + (script->HasInstance() ? "あり" : "*** なし ***") +
-            " / class=" + script->ClassName() +
-            " / typeid=" + script->ScriptType().ToString() +
-            " / asset=" + script->ScriptAssetGUID() +
-            " / Schema=" + (script->Schema() ? "あり" : "*** なし ***") +
-            " / enabled=" + (script->Enabled() ? "true" : "false") +
-            (script->LastError().empty()
-                ? std::string() : " / 理由=" + script->LastError()));
+        if (!script->HasInstance())
+        {
+            push_editor_log("Error",
+                "  [" + object.Name() + "] 状態=" +
+                ReplayEngine::Scripting::ToString(script->Status()) +
+                " / インスタンス=*** なし ***" +
+                " / class=" + script->ClassName() +
+                " / typeid=" + script->ScriptType().ToString() +
+                " / asset=" + script->ScriptAssetGUID() +
+                " / Schema=" + (script->Schema() ? "あり" : "*** なし ***") +
+                " / enabled=" + (script->Enabled() ? "true" : "false") +
+                (script->LastError().empty()
+                    ? std::string() : " / 理由=" + script->LastError()));
+        }
     }
 
     for (ReplayEngine::Core::GameObject* child : object.Children())

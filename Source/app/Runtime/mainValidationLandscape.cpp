@@ -1,4 +1,4 @@
-// Runtime main のうち「Landscape のヘッドレス検証」を持つ。
+﻿// Runtime main のうち「Landscape のヘッドレス検証」を持つ。
 // Landscape topology / serialization / collision の検証関数本体はそのまま移動している。
 #include "framework.h"
 #include "mainInternal.h"
@@ -524,6 +524,59 @@ namespace ReplayEngine::Runtime::Detail
                 std::fprintf(stderr,
                     "Landscape chunk collision query differs from full cook\n");
                 return 61;
+            }
+        }
+
+        // Play clone は Editor 側と同じ immutable geometry revision を維持し、
+        // Landscape の Cook 済み collision を共有する。2 回目の clone で CookCount が
+        // 増える回帰は、Play のたびに数秒固まる原因へ直結するため固定で検証する。
+        {
+            ReplayEngine::Physics::CookedMeshCollisionCache shared_cache;
+            ReplayEngine::Scene::Scene editor_scene("LandscapePlayCookSource");
+            auto* editor_ground = editor_scene.CreateGameObject("Ground");
+            auto* editor_landscape = editor_ground != nullptr
+                ? editor_ground->AddComponent<ReplayEngine::Components::LandscapeComponent>() : nullptr;
+            auto* editor_collider = editor_ground != nullptr
+                ? editor_ground->AddComponent<ReplayEngine::Components::LandscapeColliderComponent>() : nullptr;
+            if (editor_landscape == nullptr || editor_collider == nullptr ||
+                !editor_landscape->Data().Initialize(129, 129, 1.0f))
+            {
+                std::fprintf(stderr, "Landscape Play cook cache setup failed\n");
+                return 62;
+            }
+
+            editor_collider->RefreshGeometryIfChanged(&shared_cache);
+            const std::size_t initial_cooks = shared_cache.CookCount();
+            const auto geometry = editor_landscape->Data().CaptureGeometry();
+            if (!geometry || initial_cooks == 0)
+            {
+                std::fprintf(stderr, "Landscape Play source did not create cached cooks\n");
+                return 63;
+            }
+
+            ReplayEngine::Scene::Scene runtime_scene("LandscapePlayCookClone");
+            auto* runtime_ground = runtime_scene.CreateGameObject("Ground");
+            auto* runtime_landscape = runtime_ground != nullptr
+                ? runtime_ground->AddComponent<ReplayEngine::Components::LandscapeComponent>() : nullptr;
+            auto* runtime_collider = runtime_ground != nullptr
+                ? runtime_ground->AddComponent<ReplayEngine::Components::LandscapeColliderComponent>() : nullptr;
+            if (runtime_landscape == nullptr || runtime_collider == nullptr) return 64;
+            runtime_landscape->Data().RestoreGeometryForPlay(geometry);
+            runtime_collider->RefreshGeometryIfChanged(&shared_cache);
+
+            if (runtime_landscape->Data().Revision() != editor_landscape->Data().Revision() ||
+                runtime_landscape->Data().TopologyRevision() !=
+                    editor_landscape->Data().TopologyRevision() ||
+                shared_cache.CookCount() != initial_cooks ||
+                runtime_collider->LastRecookedChunkCount() != 0 ||
+                runtime_collider->LastRecookedTriangleCount() != 0)
+            {
+                std::fprintf(stderr,
+                    "Landscape Play clone recooked shared collision: cooks=%zu/%zu chunks=%zu triangles=%zu\n",
+                    shared_cache.CookCount(), initial_cooks,
+                    runtime_collider->LastRecookedChunkCount(),
+                    runtime_collider->LastRecookedTriangleCount());
+                return 64;
             }
         }
 

@@ -104,7 +104,24 @@
         completed,
     };
     editor_play_start_stage object_editor_play_start_stage{ editor_play_start_stage::idle };
-    ReplayEngine::Scene::Serialization::SceneData object_editor_play_snapshot;
+
+    // Play snapshot cache。編集内容が変わっていない反復 Play では
+    // PropertyRegistry::Capture を全 Component に対してやり直さない。
+    // RuntimeSceneService へも immutable shared_ptr のまま渡し、SceneData の
+    // 大きな PropertyBag / 文字列群を毎回コピーしない。
+    std::shared_ptr<const ReplayEngine::Scene::Serialization::SceneData>
+        object_editor_play_cached_snapshot;
+    std::shared_ptr<const ReplayEngine::Scene::Serialization::SceneData>
+        object_editor_play_request_snapshot;
+    ReplayEngine::Core::WorldInstanceID object_editor_play_cached_world_instance{
+        ReplayEngine::Core::invalid_world_instance_id };
+    std::uint32_t object_editor_play_cached_structure_generation{ 0 };
+    std::uint64_t object_editor_play_cached_content_revision{ 0 };
+    std::uint64_t object_editor_play_cached_script_generation{ 0 };
+    std::uint64_t object_editor_play_snapshot_cache_hits{ 0 };
+    std::uint64_t object_editor_play_snapshot_cache_misses{ 0 };
+    bool object_editor_play_snapshot_reused{ false };
+
     std::string object_editor_play_stage_label;
     float object_editor_play_progress{ 1.0f };
     std::chrono::steady_clock::time_point object_editor_play_started_at{};

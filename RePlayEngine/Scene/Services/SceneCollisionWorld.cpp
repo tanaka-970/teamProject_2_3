@@ -192,10 +192,13 @@ namespace ReplayEngine::Scene
             else if (entry.shape == Components::ColliderShape::Landscape)
             {
                 auto* landscape = static_cast<Components::LandscapeColliderComponent*>(collider);
-                // Asset共有cacheは介さず、LandscapeComponent の revision が変わった時だけ
-                // local triangle + spatial cook を更新する。Transform 更新は同じ入口で扱う。
-                landscape->RefreshGeometryIfChanged();
-                if (landscape->ReadyForQuery()) ++mesh_collider_count_;
+                if (entry.active)
+                {
+                    // Landscape も同一 geometry revision の Cook を Editor / Play 間で共有する。
+                    // 非 Active Collider は必要になるまで Cook せず、Play 開始時の全件処理を避ける。
+                    landscape->RefreshGeometryIfChanged(cook_cache_);
+                    if (landscape->ReadyForQuery()) ++mesh_collider_count_;
+                }
             }
 
             entry.bounds_valid = entry.active &&

@@ -38,6 +38,12 @@ namespace ReplayEngine::Landscape
     {
         int width = 0, height = 0;
         float cell_size = 1;
+        // 同一プロセス内の Play clone が同じ geometry を識別する世代。
+        // Runtime 側でもこの値を維持することで、Cook 済み衝突形状を共有できる。
+        std::uint64_t revision = 0;
+        std::uint64_t topology_revision = 0;
+        DirectX::XMFLOAT3 bounds_min{};
+        DirectX::XMFLOAT3 bounds_max{};
         std::vector<LandscapeVertex> vertices;
         std::vector<std::uint32_t> indices;
     };
@@ -95,6 +101,10 @@ namespace ReplayEngine::Landscape
         void FinishSculpt();
         std::shared_ptr<const LandscapeGeometry> CaptureGeometry() const;
         void RestoreGeometry(const std::shared_ptr<const LandscapeGeometry>& geometry);
+        // 同一プロセスの Play snapshot 専用。Capture 済み geometry は既に検証済みで
+        // 法線・境界も完成しているため、再検証 / 全法線再計算を省き、Editor 専用の
+        // Sculpt adjacency cache も必要になるまで遅延する。
+        void RestoreGeometryForPlay(const std::shared_ptr<const LandscapeGeometry>& geometry);
 
         DirectX::XMFLOAT3 VertexPosition(std::size_t index) const noexcept;
         bool SetVertexPosition(std::size_t index, const DirectX::XMFLOAT3& position,
@@ -166,7 +176,9 @@ namespace ReplayEngine::Landscape
         bool DeserializeInline(const std::string& text, std::string& error);
 
     private:
-        void BuildChunks();
+        void BuildChunks(bool build_topology_edit_cache = true);
+        void BuildTopologyEditCache();
+        void EnsureTopologyEditCache();
         void RebuildChunkLayout(std::size_t chunk);
         void UpdateSubdivisionAdjacency(std::size_t face, std::uint32_t a,
             std::uint32_t b, std::uint32_t c, std::uint32_t first_new_vertex,
@@ -187,6 +199,7 @@ namespace ReplayEngine::Landscape
         std::vector<std::vector<std::uint32_t>> vertex_faces_;
         std::vector<std::vector<std::uint32_t>> vertex_neighbors_;
         std::vector<std::uint32_t> face_chunks_, face_chunk_offsets_, chunk_remap_;
+        bool topology_edit_cache_ready_ = true;
         std::vector<std::uint8_t> chunk_topology_dirty_;
         bool subdivision_repartition_pending_ = false;
         std::vector<std::uint32_t> normal_marks_, normal_vertices_;

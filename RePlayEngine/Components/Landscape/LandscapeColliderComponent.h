@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../Physics/ColliderComponent.h"
 #include "../../Landscape/LandscapeChunk.h"
@@ -32,7 +32,8 @@ namespace ReplayEngine::Components
         bool UsableAsCharacterShape() const noexcept override { return false; }
         std::string StatusMessage() const override { return status_; }
 
-        bool RefreshGeometryIfChanged();
+        bool RefreshGeometryIfChanged(
+            Physics::CookedMeshCollisionCache* shared_cook_cache = nullptr);
 
         // Sculpt の連続ドラッグ中は collision cook を止め、マウスを離した後に
         // 最新 revision を 1 回だけ cook する。Editor の一時状態であり保存しない。
@@ -55,8 +56,9 @@ namespace ReplayEngine::Components
         float LocalRadiusScale() const noexcept { return local_radius_scale_; }
 
         bool double_sided = true;
-        // Landscape は編集で頻繁に再生成されるため Asset Cook cache には載せず、
-        // Component 自身が revision 単位の spatial cook を持つ。
+        // Landscape は Component 自身が revision 単位で Cook 状態を持つ。
+        // Editor / Play clone 間では同じ geometry revision の Cook データだけを
+        // SceneCollisionWorld の共有 cache 経由で再利用する。
         // 値は local-space XZ grid の cell size。
         float collision_cell_size = 4.0f;
         bool debug_draw_wireframe = false;
