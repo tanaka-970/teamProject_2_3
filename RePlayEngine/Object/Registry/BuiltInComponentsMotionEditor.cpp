@@ -1,4 +1,5 @@
 ﻿#include "BuiltInComponentsInternal.h"
+#include "../../Components/Editor/FolderComponent.h"
 
 namespace ReplayEngine::Core::Detail
 {
@@ -164,6 +165,12 @@ namespace ReplayEngine::Core::Detail
 
         void RegisterEditorNote()
         {
+            ComponentRegistry::Register<Components::FolderComponent>(
+                ComponentTypeInfo::Describe("Folder", "Core")
+                    .WithTypeGUID(Reflection::MakeTypeGUID("ede6f6a2c701477f95c48042111d559b"))
+                    .WithTooltip("GameObject をまとめる入れ物です。")
+                    .EditorOnly());
+
             ComponentRegistry::Register<EditorNoteComponent>(
                 ComponentTypeInfo::Describe("Scene Note", "Editor")
                     .WithTooltip("Scene View 上に制作指示・TODO・BUG メモを表示する Editor Annotation。")

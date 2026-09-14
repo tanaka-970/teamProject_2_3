@@ -10,6 +10,7 @@
 #include <string>
 #include <filesystem>
 #include <cfloat>
+#include "../../RePlayEngine/Assets/VertexColorAsset.h"
 #ifndef REPLAY_ENABLE_FBX_IMPORTER
 #define REPLAY_ENABLE_FBX_IMPORTER 0
 #endif
@@ -244,6 +245,8 @@ public:
         int64_t node_index{ 0 };
         std::vector<vertex> vertices;
         std::vector<uint32_t> indices;
+        // GLB COLOR_0 は実行時だけ保持し、既存cereal形式には追加しない。
+        std::vector<ReplayEngine::Assets::VertexColorRgba8> vertex_colors;
 
         // モーションベクター用の前フレーム姿勢。フレームIDで多重更新を防ぐ。
         DirectX::XMFLOAT4X4 previous_world{ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 };

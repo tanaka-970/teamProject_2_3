@@ -21,8 +21,9 @@ namespace ReplayEngine::Rendering
     //   .hlsl 側の #pragma replay_guid と必ず一致させること。
     namespace BuiltInShaders
     {
-        // shading_model の番号と 1 対 1 で対応する。
+        // legacy shading_model を持つものは番号と 1 対 1 で対応する。
         //   0 fbx_default / 1 pbr / 2 toon / 3 unlit / 4 pixelate / 5 flat_fill
+        // GGST は新規 ShaderGUID 専用で、legacy shading_model を持たない。
         inline constexpr ShaderID FbxDefault =
             Reflection::MakeTypeGUID("00000000000000000000000000000001");
         inline constexpr ShaderID Pbr =
@@ -35,17 +36,20 @@ namespace ReplayEngine::Rendering
             Reflection::MakeTypeGUID("00000000000000000000000000000005");
         inline constexpr ShaderID FlatFill =
             Reflection::MakeTypeGUID("00000000000000000000000000000006");
+        inline constexpr ShaderID Ggst =
+            Reflection::MakeTypeGUID("00000000000000000000000000000007");
 
         struct Definition final
         {
             ShaderID id;
-            int shading_model = 0;
+            // -1 は legacy shading_model を持たない ShaderGUID 専用 BuiltIn。
+            int shading_model = -1;
             ShaderLightingModel lighting_model = ShaderLightingModel::Pbr;
             const char* display_name = "";
             const char* relative_path = "";
         };
 
-        // 表示順は shading_model の番号順。
+        // legacy対応組は shading_model 順、その後へShaderGUID専用BuiltInを並べる。
         const std::vector<Definition>& All();
 
         // shading_model の番号から引く。

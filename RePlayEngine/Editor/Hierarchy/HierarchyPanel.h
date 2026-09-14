@@ -1,9 +1,12 @@
 ﻿#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
+#include "../Icons/EditorIconProvider.h"
 
 #include <cstddef>
+#include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ReplayEngine::Core { class GameObject; }
@@ -12,6 +15,15 @@ namespace ReplayEngine::Scene::Serialization { struct SceneData; }
 namespace ReplayEngine::Editor
 {
     class EditorContext;
+
+    struct AssetPlacementRequest final
+    {
+        std::string asset_guid;
+        Core::ObjectID parent;
+        bool browse_prefab = false;
+
+        bool Valid() const noexcept { return browse_prefab || !asset_guid.empty(); }
+    };
 
     // Scene 内の GameObject をツリー表示し、選択・作成・削除・親子変更を行うパネル。
     //
@@ -27,6 +39,14 @@ namespace ReplayEngine::Editor
     public:
         void Draw(EditorContext& context);
         void DrawContents(EditorContext& context);
+        Core::ObjectID TakePrefabRequest();
+        AssetPlacementRequest TakeAssetPlacementRequest();
+        void SetIconProvider(EditorIconProvider* provider, const HierarchyIconDisplay* display)
+        {
+            icon_provider_ = provider;
+            icon_display_ = display;
+        }
+        void SetToolbarDrawer(std::function<void()> drawer) { toolbar_drawer_ = std::move(drawer); }
 
         // Main Menu / Shortcut からも Hierarchy と同じ安全な経路を使う。
         void CreateEmpty(EditorContext& context) { CreateEmptyGameObject(context, nullptr); }
@@ -60,6 +80,8 @@ namespace ReplayEngine::Editor
         // ツリー走査中に確定させると添字や再帰が壊れるため、
         // 実際の親子・兄弟順変更は走査後にまとめて処理する。
         enum class DropPlacement : int { Child = 0, Before = 1, After = 2, Root = 3 };
+        Core::ObjectID pending_prefab_request_;
+        AssetPlacementRequest pending_asset_placement_request_;
         Core::ObjectID pending_reparent_child_;
         Core::ObjectID pending_reparent_parent_;
         DropPlacement pending_drop_placement_ = DropPlacement::Child;
@@ -71,6 +93,9 @@ namespace ReplayEngine::Editor
 
         static constexpr int search_buffer_size = 256;
         char search_buffer_[search_buffer_size]{};
+        EditorIconProvider* icon_provider_ = nullptr;
+        const HierarchyIconDisplay* icon_display_ = nullptr;
+        std::function<void()> toolbar_drawer_;
         Core::ObjectID selection_anchor_;
         std::vector<Core::ObjectID> visible_objects_;
         Core::ObjectID pending_range_selection_;

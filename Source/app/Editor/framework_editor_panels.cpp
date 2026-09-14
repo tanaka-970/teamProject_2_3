@@ -834,10 +834,45 @@ void framework::draw_console_panel()
     }
     ReplayEngine::Editor::EditorHelp::Item("button.console.clear_log",
         u8"エディタログの表示内容をすべて消去します。Asset や Scene は変更しません。");
+    // 1 行ぶんの文字列。表示とコピーで同じものを使う。
+    const auto log_entry_text = [](const editor_log_entry& entry)
+    {
+        std::string text = "[" + entry.severity + "] " + entry.message;
+        if (!entry.file.empty())
+        {
+            text += " (" + entry.file.filename().generic_u8string();
+            if (entry.line > 0) text += ":" + std::to_string(entry.line);
+            text += ")";
+        }
+        return text;
+    };
+    const auto copy_all_log = [this, &log_entry_text]()
+    {
+        std::string all;
+        for (const editor_log_entry& entry : editor_log_entries)
+        {
+            all += log_entry_text(entry);
+            all += '\n';
+        }
+        ImGui::SetClipboardText(all.c_str());
+    };
+    ImGui::SameLine();
+    if (ImGui::Button(u8"すべてコピー")) copy_all_log();
+    ReplayEngine::Editor::EditorHelp::Item("button.console.copy_log",
+        u8"エディタログをすべてクリップボードへコピーします。");
     ImGui::SameLine();
     ImGui::Text(u8"エディタログ: %zu", editor_log_entries.size());
     if (ImGui::BeginChild("EditorLogEntries", ImVec2(0.0f, 150.0f), true))
     {
+        // Ctrl+C は選択中の 1 行。Ctrl+Shift+C は全部。
+        if (ImGui::IsWindowFocused() && ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed('C'))
+        {
+            if (ImGui::GetIO().KeyShift) copy_all_log();
+            else if (selected_editor_log_index >= 0 &&
+                selected_editor_log_index < static_cast<int>(editor_log_entries.size()))
+                ImGui::SetClipboardText(log_entry_text(
+                    editor_log_entries[selected_editor_log_index]).c_str());
+        }
         for (int index = 0; index < static_cast<int>(editor_log_entries.size()); ++index)
         {
             const editor_log_entry& entry = editor_log_entries[index];
@@ -846,13 +881,7 @@ void framework::draw_console_panel()
             else if (entry.severity == "Warning") color = { 1.0f, 0.74f, 0.28f, 1.0f };
             else if (entry.severity == "Info") color = { 0.56f, 0.84f, 1.0f, 1.0f };
 
-            std::string label = "[" + entry.severity + "] " + entry.message;
-            if (!entry.file.empty())
-            {
-                label += " (" + entry.file.filename().generic_u8string();
-                if (entry.line > 0) label += ":" + std::to_string(entry.line);
-                label += ")";
-            }
+            const std::string label = log_entry_text(entry);
 
             ImGui::PushStyleColor(ImGuiCol_Text, color);
             const bool selected = selected_editor_log_index == index;
@@ -868,6 +897,19 @@ void framework::draw_console_panel()
                 }
             }
             ImGui::PopStyleColor();
+            // 右クリックでコピー。VS のログと同じ感覚で拾えるようにする。
+            if (ImGui::BeginPopupContextItem("LogEntryMenu"))
+            {
+                selected_editor_log_index = index;
+                if (ImGui::MenuItem(u8"この行をコピー"))
+                    ImGui::SetClipboardText(label.c_str());
+                if (ImGui::MenuItem(u8"メッセージだけコピー"))
+                    ImGui::SetClipboardText(entry.message.c_str());
+                if (!entry.file.empty() && ImGui::MenuItem(u8"ファイルのパスをコピー"))
+                    ImGui::SetClipboardText(entry.file.generic_u8string().c_str());
+                if (ImGui::MenuItem(u8"すべてコピー")) copy_all_log();
+                ImGui::EndPopup();
+            }
             if (!entry.file.empty())
                 ReplayEngine::Editor::EditorHelp::Item(
                     "control.console.entry_file", entry.file.generic_u8string().c_str());
@@ -896,6 +938,7 @@ void framework::draw_workspace_panel()
         break;
     case editor_workspace::modeling:
         ImGui::TextUnformatted("モデリングWorkspace");
+        draw_vertex_paint_panel();
         ImGui::TextDisabled("形状編集用のテーブルです。配置操作は配置Workspaceへ分離しています。");
         if (ImGui::Button("選択GameObjectを編集")) selected_editor_object = editor_selection::game_object;
         ReplayEngine::Editor::EditorHelp::Item("button.workspace.edit_game_object",

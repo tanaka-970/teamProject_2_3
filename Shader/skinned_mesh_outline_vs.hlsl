@@ -9,12 +9,15 @@ cbuffer SceneCB : register(b1)
 {
     row_major float4x4 viewProjection;
     row_major float4x4 previousViewProjection;
+    float4 cameraPosition;
+    float4 outlineParams;
 };
 
 cbuffer LayerCB : register(b7)
 {
     float4 layerColor;
     float4 layerParams;
+    float4 layerParams2;
 };
 
 struct BoneMatrix
@@ -34,6 +37,7 @@ struct VS_IN
     uint4 indices : BLENDINDICES;
     float3 morphPosition : MORPHPOSITION;
     float3 morphNormal : MORPHNORMAL;
+    float4 vertexColor : COLOR0;
 };
 
 struct VS_OUT
@@ -69,7 +73,21 @@ VS_OUT main(VS_IN vin)
     const float3 skinnedNormal = SkinDirection(localNormal, vin.weights, vin.indices);
     float4 worldPosition = mul(skinnedPosition, world);
     const float3 worldNormal = normalize(mul(float4(skinnedNormal, 0.0f), world).xyz);
-    worldPosition.xyz += worldNormal * max(layerParams.x, 0.0f);
+    if (layerParams2.x < 0.5f)
+    {
+        float cameraToVertex = distance(worldPosition.xyz, cameraPosition.xyz);
+        cameraToVertex *= max(outlineParams.x, 1.0e-4f);
+        cameraToVertex *= 1.0f + vin.vertexColor.g;
+        const float baseThickness = max(layerParams.x, 0.0f) * cameraToVertex;
+        const float thickness = baseThickness * (vin.vertexColor.a * 2.0f);
+        worldPosition.xyz += worldNormal * thickness;
+        const float depthOffset = max(layerParams.w, 0.0f) * vin.vertexColor.b;
+        worldPosition.xyz += normalize(worldPosition.xyz - cameraPosition.xyz) * depthOffset;
+    }
+    else
+    {
+        worldPosition.xyz += worldNormal * max(layerParams.x, 0.0f);
+    }
     vout.position = mul(worldPosition, viewProjection);
     vout.color = layerColor;
     return vout;

@@ -72,11 +72,25 @@ namespace ReplayEngine::Rendering::Validation
         const ShaderCatalog::Entry* toon = library.Catalog().Find(BuiltInShaders::Toon);
         const ShaderCatalog::Entry* unlit = library.Catalog().Find(BuiltInShaders::Unlit);
         const ShaderCatalog::Entry* pixelate = library.Catalog().Find(BuiltInShaders::Pixelate);
+        const ShaderCatalog::Entry* ggst = library.Catalog().Find(BuiltInShaders::Ggst);
         check.Expect(pbr != nullptr && pbr->schema != nullptr, "PBR が Picker 候補になる");
         check.Expect(toon != nullptr && toon->schema != nullptr, "Toon が Picker 候補になる");
         check.Expect(unlit != nullptr && unlit->schema != nullptr, "Unlit が Picker 候補になる");
         check.Expect(pixelate != nullptr && pixelate->schema != nullptr,
             "Pixelate が Picker 候補になる");
+        check.Expect(ggst != nullptr && ggst->schema != nullptr,
+            "GGST Toon が Picker 候補になる");
+
+        if (ggst && ggst->schema)
+        {
+            check.Expect(ggst->schema->FindByName("IlmMap") != nullptr &&
+                ggst->schema->FindByName("SssMap") != nullptr &&
+                ggst->schema->FindByName("ShadingTerminator") != nullptr &&
+                ggst->schema->FindByName("SpecularIntensity") != nullptr &&
+                ggst->schema->FindByName("FaceLighting") != nullptr &&
+                ggst->schema->FindByName("FaceBoneIndex") != nullptr,
+                "GGST 専用 Property を HLSL Schema から公開する");
+        }
 
         if (pbr && pbr->schema)
         {
@@ -92,6 +106,19 @@ namespace ReplayEngine::Rendering::Validation
         }
 
         // ---- Shader 切替 / Property 保持 ------------------------------------
+        MaterialAsset ggst_material;
+        check.Expect(ggst && MaterialSchema::SelectShader(ggst_material, *ggst),
+            "Material へ GGST Toon を選択できる");
+        check.Expect(ggst_material.shader_guid == BuiltInShaders::Ggst.ToString() &&
+            ggst_material.shading_model == 2,
+            "GGST は正式GUIDを正本にしつつ legacy fallback は Toon に固定する");
+        check.Expect(ggst_material.properties.Find("prop.IlmMap") != nullptr &&
+            ggst_material.properties.Find("prop.SssMap") != nullptr &&
+            ggst_material.properties.Find("prop.ShadingTerminator") != nullptr &&
+            ggst_material.properties.Find("prop.SpecularIntensity") != nullptr &&
+            ggst_material.properties.Find("prop.FaceLighting") != nullptr,
+            "GGST 専用 Material Property を自動生成する");
+
         MaterialAsset material;
         check.Expect(pbr && MaterialSchema::SelectShader(material, *pbr),
             "Material へ PBR を選択できる");

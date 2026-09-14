@@ -1,4 +1,4 @@
-#include "CSharpProjectInternal.h"
+﻿#include "CSharpProjectInternal.h"
 
 #include "../Core/ScriptLanguage.h"
 #include "../Core/ScriptTypes.h"
@@ -68,21 +68,88 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             return static_cast<bool>(stream);
         }
 
-        bool SourceTreeIsNewer(const std::filesystem::path& source_root,
+        namespace
+        {
+            std::uint64_t HashBytes(std::uint64_t seed, const void* data,
+                std::size_t size) noexcept
+            {
+                const auto* bytes = static_cast<const unsigned char*>(data);
+                for (std::size_t i = 0; i < size; ++i)
+                {
+                    seed ^= static_cast<std::uint64_t>(bytes[i]);
+                    seed *= 1099511628211ull;
+                }
+                return seed;
+            }
+
+            std::uint64_t HashText(std::uint64_t seed, const std::string& text) noexcept
+            {
+                return HashBytes(seed, text.data(), text.size());
+            }
+
+            void HashFileMetadata(std::uint64_t& seed, const std::filesystem::path& path,
+                bool& had_error)
+            {
+                std::error_code error;
+                const auto time = std::filesystem::last_write_time(path, error);
+                if (error)
+                {
+                    had_error = true;
+                    seed = HashText(seed, path.generic_u8string());
+                    const std::uint64_t marker = 0xffffffffffffffffull;
+                    seed = HashBytes(seed, &marker, sizeof(marker));
+                    return;
+                }
+
+                const auto time_count = time.time_since_epoch().count();
+                std::uintmax_t size = 0;
+                if (std::filesystem::is_regular_file(path, error) && !error)
+                    size = std::filesystem::file_size(path, error);
+                if (error)
+                {
+                    had_error = true;
+                    error.clear();
+                }
+
+                seed = HashText(seed, path.generic_u8string());
+                seed = HashBytes(seed, &time_count, sizeof(time_count));
+                seed = HashBytes(seed, &size, sizeof(size));
+            }
+        }
+
+        CSharpBuildState QuerySourceTreeBuildState(
+            const std::filesystem::path& source_root,
             const std::filesystem::path& output,
             const std::vector<std::filesystem::path>& dependencies)
         {
-            std::error_code error;
-            if (!std::filesystem::exists(output, error) || error) return true;
-            const auto output_time = std::filesystem::last_write_time(output, error);
-            if (error) return true;
+            CSharpBuildState state;
+            state.build_required = false;
+            std::uint64_t revision = 1469598103934665603ull;
+            bool had_error = false;
 
-            for (const std::filesystem::path& dependency : dependencies)
+            std::error_code error;
+            const bool output_exists = std::filesystem::exists(output, error) && !error;
+            std::filesystem::file_time_type output_time{};
+            if (output_exists)
             {
-                const auto dependency_time =
-                    std::filesystem::last_write_time(dependency, error);
-                if (error || dependency_time > output_time) return true;
+                output_time = std::filesystem::last_write_time(output, error);
+                if (error)
+                {
+                    state.build_required = true;
+                    had_error = true;
+                    error.clear();
+                }
             }
+            else
+            {
+                state.build_required = true;
+                if (error) { had_error = true; error.clear(); }
+            }
+
+            std::vector<std::filesystem::path> inputs;
+            inputs.reserve(64);
+            for (const std::filesystem::path& dependency : dependencies)
+                inputs.push_back(dependency.lexically_normal());
 
             std::filesystem::recursive_directory_iterator it(
                 source_root, std::filesystem::directory_options::skip_permission_denied, error);
@@ -92,7 +159,8 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 if (it->is_directory(error))
                 {
                     const std::string name = it->path().filename().generic_u8string();
-                    if (name == "bin" || name == "obj") it.disable_recursion_pending();
+                    if (name == "bin" || name == "obj" || name == ".vs")
+                        it.disable_recursion_pending();
                     continue;
                 }
                 if (error || !it->is_regular_file(error)) continue;
@@ -101,11 +169,50 @@ namespace ReplayEngine::Scripting::CSharp::Detail
                 if (extension != ".cs" && extension != ".csproj" &&
                     extension != ".props" && extension != ".targets")
                     continue;
-
-                const auto source_time = std::filesystem::last_write_time(it->path(), error);
-                if (error || source_time > output_time) return true;
+                inputs.push_back(it->path().lexically_normal());
             }
-            return static_cast<bool>(error);
+            if (error)
+            {
+                state.build_required = true;
+                had_error = true;
+                error.clear();
+            }
+
+            std::sort(inputs.begin(), inputs.end(),
+                [](const std::filesystem::path& left, const std::filesystem::path& right)
+                {
+                    return left.generic_u8string() < right.generic_u8string();
+                });
+            inputs.erase(std::unique(inputs.begin(), inputs.end()), inputs.end());
+
+            for (const std::filesystem::path& input : inputs)
+            {
+                std::error_code input_error;
+                const auto input_time = std::filesystem::last_write_time(input, input_error);
+                if (input_error)
+                {
+                    state.build_required = true;
+                    had_error = true;
+                }
+                else if (!output_exists || input_time > output_time)
+                {
+                    state.build_required = true;
+                }
+                HashFileMetadata(revision, input, had_error);
+            }
+
+            // 0 は framework 側で「未記録」に使うので避ける。
+            if (revision == 0) revision = 1;
+            if (had_error) revision ^= 0x9e3779b97f4a7c15ull;
+            state.input_revision = revision;
+            return state;
+        }
+
+        bool SourceTreeIsNewer(const std::filesystem::path& source_root,
+            const std::filesystem::path& output,
+            const std::vector<std::filesystem::path>& dependencies)
+        {
+            return QuerySourceTreeBuildState(source_root, output, dependencies).build_required;
         }
 
         std::wstring ToWide(const std::string& text)

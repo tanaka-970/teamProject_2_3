@@ -210,6 +210,8 @@ bool framework::refresh_csharp_scripts()
     const std::size_t resolved = resolve_editor_script_schemas();
 
     snapshot_csharp_script_write_times();
+    ++csharp_catalog_generation;
+    if (csharp_catalog_generation == 0) csharp_catalog_generation = 1;
     editor_command_result = "C# Catalog を更新しました（編集 Scene の Script " +
         std::to_string(resolved) + " 件を再解決）";
     push_editor_log("Info", editor_command_result);
@@ -294,10 +296,26 @@ bool framework::build_and_reload_csharp_scripts()
         {
             push_editor_log("Error", build.output_text);
         }
+
+        // Auto Reload / 手動 Build が失敗した直後に F5 を押しても、同じ入力で
+        // dotnet build をもう一度同期実行しない。ビルド処理が Managed API 等を
+        // 更新する場合もあるため、失敗「後」の revision を記録する。
+        const CSharp::CSharpBuildState failed_state =
+            CSharp::CSharpProject::QueryGameScriptsBuildState(content_root_path());
+        csharp_last_play_build_failed_revision = failed_state.input_revision;
+        csharp_last_play_build_succeeded_revision = 0;
+        csharp_last_play_build_skip_logged_revision = 0;
         return false;
     }
 
     refresh_csharp_scripts();
+    csharp_last_play_build_failed_revision = 0;
+    // 成功後の状態を記録する。MSBuild が「成功・変更なし」で DLL の mtime を
+    // 更新しないケースでも、入力自体が変わるまでは次の F5 で再 build しない。
+    const CSharp::CSharpBuildState succeeded_state =
+        CSharp::CSharpProject::QueryGameScriptsBuildState(content_root_path());
+    csharp_last_play_build_succeeded_revision = succeeded_state.input_revision;
+    csharp_last_play_build_skip_logged_revision = 0;
     editor_command_result = "C# Compile/Reload 成功: " +
         build.output_assembly.generic_u8string();
     push_editor_log("Info", editor_command_result, build.output_assembly);

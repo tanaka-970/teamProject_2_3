@@ -2,6 +2,11 @@
 
 void framework::update(float elapsed_time)
 {
+    // ファイル探索は描画の外で、指定変更か明示的な再読込のときだけ行う。
+    const bool icon_atlas_changed =
+        editor_icon_provider.SetAtlasGuids(project_settings.IconAtlasGuids());
+    if (editor_icons_reload_pending && !icon_atlas_changed) editor_icon_provider.Reload();
+    editor_icons_reload_pending = false;
     ReplayEngine::Rendering::Stats().BeginFrame();
     REPLAY_PROFILE_SCOPE("Update");
     // 基準画像を撮る間はワールドを止める。
@@ -42,6 +47,16 @@ void framework::update(float elapsed_time)
         REPLAY_PROFILE_SCOPE("AssetPump");
         async_asset_manager.PumpMainThread();
     }
+
+    // Editor Play の開始は通常の Editor フレームを維持したまま 1 段ずつ進める。
+    // 緑の実行ボタンを押した直後に重い処理へ入らず、先に ImGui の進捗表示を
+    // Present できることが重要なので、排他 LoadingScene へは切り替えない。
+    if (object_editor_play_loading)
+    {
+        REPLAY_PROFILE_SCOPE("EditorPlayStartup");
+        update_editor_play_loading();
+    }
+
     if (scene_manager.IsExclusive())
     {
         {
@@ -50,9 +65,7 @@ void framework::update(float elapsed_time)
         }
         if (scene_manager.IsExclusive())
         {
-            if (object_editor_play_loading)
-                update_editor_play_loading();
-            else if (object_boot_from_startup_scene && object_runtime_scenes.IsBusy())
+            if (object_boot_from_startup_scene && object_runtime_scenes.IsBusy())
             {
                 // 配布用 Startup Scene も Loading Screen を維持したまま進める。
                 object_runtime_scenes.Tick();
@@ -65,10 +78,6 @@ void framework::update(float elapsed_time)
                 }
             }
             update_exclusive_scene(elapsed_time);
-        }
-        else if (object_editor_play_loading)
-        {
-            finish_editor_play_loading();
         }
         return;
     }

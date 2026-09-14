@@ -44,6 +44,8 @@ VS_OUT main(VS_IN vin)
 
 	vout.texcoord = vin.texcoord;
 	vout.color = material_color;
+	// 旧描画経路には色ストリームが無いため白で互換性を保つ。
+	vout.vertex_color = 1.0f.xxxx;
 	vout.current_clip = vout.position;
 
 	return vout;

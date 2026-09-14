@@ -1,0 +1,535 @@
+REPLAY_SCENE 11
+SCENE "RePlayEngine Boot Logo (Exact)"
+SCENE_STATE 100
+COLLISION_STATE 2 0
+OBJECT_COUNT 15
+OBJECT
+  ID 100
+  NAME "BootLogoCanvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 10
+    PROPERTY "motion" assetref "b07100601eaa4f1ea9d3b0f0cae51002"
+    PROPERTY "key" string "BootLogoExact"
+    PROPERTY "play_on_start" bool 1
+    PROPERTY "trigger" enum 0
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 1
+    PROPERTY "ignore_time_scale" bool 1
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 101
+  NAME "Background"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 110
+  NAME "Streak0"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1500 620
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 45
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 1
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.472 0.678 0.763 1
+    PROPERTY "opacity" float 0.75
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 111
+  NAME "Streak1"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 900 120
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 45
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 2
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.016 0.077 0.18 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 112
+  NAME "Streak2"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1300 200
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 45
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 3
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.016 0.077 0.18 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 113
+  NAME "Streak3"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1100 70
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 45
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 4
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.094 0.467 0.949 1
+    PROPERTY "opacity" float 0.95
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 114
+  NAME "Streak4"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1800 300
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 45
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 5
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.016 0.077 0.18 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 115
+  NAME "Streak5"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1400 100
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 45
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 6
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.472 0.678 0.763 1
+    PROPERTY "opacity" float 0.85
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 116
+  NAME "Streak6"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 2000 420
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 45
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 7
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.016 0.077 0.18 1
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 117
+  NAME "Streak7"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1200 60
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 45
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 8
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.094 0.467 0.949 1
+    PROPERTY "opacity" float 0.9
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 118
+  NAME "Streak8"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 1600 240
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 45
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 9
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref ""
+    PROPERTY "color" color 0.472 0.678 0.763 1
+    PROPERTY "opacity" float 0.8
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 130
+  NAME "Mark"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -455 20
+    PROPERTY "size_delta" vec2 380 380
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 20
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref "c5df2c4beef61362cd7e459698b07bcb"
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 131
+  NAME "Word"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 205 20
+    PROPERTY "size_delta" vec2 880 120.547945
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 21
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref "1507c000c4b97bf495e89901541a9ead"
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "opacity" float 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 132
+  NAME "Note"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 530 295
+    PROPERTY "size_delta" vec2 110 110
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 14
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 22
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref "874e484928a3262e2ac9b962708fc143"
+    PROPERTY "color" color 0.472 0.678 0.763 1
+    PROPERTY "opacity" float 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 133
+  NAME "Star"
+  ENABLED 1
+  PARENT 100
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 1
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 557 285
+    PROPERTY "size_delta" vec2 150 150
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 23
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "sprite" assetref "cf09a62e7242455ae02a99ec8ceed36f"
+    PROPERTY "color" color 0.472 0.678 0.763 1
+    PROPERTY "opacity" float 0
+  END_COMPONENT
+END_OBJECT

@@ -38,6 +38,7 @@
 #include "../../RePlayEngine/Runtime/Events/EventBus.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneData.h"
 #include "../../RePlayEngine/Scene/Serialization/SceneSerializer.h"
+#include "../../RePlayEngine/Scene/BootLogoScene.h"
 #include "../../RePlayEngine/Scripting/CSharp/CSharpScriptBackend.h"
 #include "../../RePlayEngine/Scripting/Core/ScriptComponent.h"
 #include "../../RePlayEngine/Scripting/Core/ScriptRuntime.h"
@@ -195,6 +196,42 @@ void framework::initialize_object_scene()
     // Runtime 側のサービスを組み立てる。
     // World の所有者はここで確定し、以降 framework が Scene を値で持つことはない。
     initialize_runtime_services();
+
+    // 起動ロゴを 1 か所で決める。Scene 指定が使えなければ既定ロゴへ落とす。
+    bool boot_logo_ready = false;
+    if constexpr (ReplayEngine::Scene::kBootLogoMode == ReplayEngine::Scene::BootLogoMode::Scene)
+    {
+        const ReplayEngine::Project::AssetReferenceStatus boot_logo_scene =
+            project_settings.ResolveBootLogoScene(asset_database);
+        if (boot_logo_scene.IsResolved())
+        {
+            if (load_boot_logo_scene_from_path(boot_logo_scene.path))
+            {
+                boot_logo_ready = scene_manager.SetScene(
+                    std::make_unique<ReplayEngine::Scene::BootLogoAssetScene>(
+                        object_boot_logo_duration));
+                push_editor_log("Info", "Boot Logo Scene: " +
+                    boot_logo_scene.path.filename().u8string() + " / " +
+                    std::to_string(object_boot_logo_duration) + " 秒");
+            }
+            else
+            {
+                push_editor_log("Warning", "Boot Logo Scene の読み込みに失敗したため既定ロゴを使用します");
+            }
+        }
+        else if (boot_logo_scene.IsMissing())
+        {
+            push_editor_log("Warning", "Boot Logo Scene の Asset が見つからないため既定ロゴを使用します");
+        }
+    }
+    if constexpr (ReplayEngine::Scene::kBootLogoMode != ReplayEngine::Scene::BootLogoMode::None)
+    {
+        if (!boot_logo_ready)
+            boot_logo_ready = scene_manager.SetScene(
+                std::make_unique<ReplayEngine::Scene::BootLogoScene>());
+    }
+    // ロゴを出さないときは LoadingScene を現在の Scene へ上げる。空のままだとキューが進まない。
+    if (!boot_logo_ready) scene_manager.PromoteQueuedScene();
 
     const ReplayEngine::Project::AssetReferenceStatus loading_scene =
         project_settings.ResolveLoadingScene(asset_database);

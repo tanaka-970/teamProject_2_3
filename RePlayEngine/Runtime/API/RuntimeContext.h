@@ -488,6 +488,20 @@ namespace ReplayEngine::Runtime
         RuntimeStatus GetMotionTime(const ComponentHandle& player, float& out) const;
         RuntimeStatus GetMotionDuration(const ComponentHandle& player, float& out) const;
 
+        // ---- Composition Player ------------------------------------------------
+
+        RuntimeStatus FindCompositionPlayer(const ObjectHandle& owner,
+            const std::string& key, ComponentHandle& out) const;
+        RuntimeStatus CompositionPlay(const ComponentHandle& player);
+        RuntimeStatus CompositionPause(const ComponentHandle& player);
+        RuntimeStatus CompositionResume(const ComponentHandle& player);
+        RuntimeStatus CompositionStop(const ComponentHandle& player);
+        RuntimeStatus SetCompositionTime(const ComponentHandle& player, float seconds);
+        RuntimeStatus SetCompositionSpeed(const ComponentHandle& player, float speed);
+        RuntimeStatus SetCompositionWeight(const ComponentHandle& player, float weight);
+        RuntimeStatus IsCompositionPlaying(const ComponentHandle& player, bool& out) const;
+        RuntimeStatus GetCompositionTime(const ComponentHandle& player, float& out) const;
+
         // ---- 生成・破棄 ---------------------------------------------------------
 
         // 空の GameObject を作る。生成は即時で、Update 中でも安全

@@ -17,7 +17,7 @@ float4 main(VS_OUT pin) : SV_TARGET
     float3 seed = abs(N.y) < 0.999f ? float3(0, 1, 0) : float3(1, 0, 0);
     float3 tangent = normalize(cross(seed, N));
     float3 color = stylized_character_shade(base.rgb * pin.color.rgb,
-        N, tangent, pin.world_position.xyz);
+        N, tangent, pin.world_position.xyz, pin.vertex_color.r);
     float alpha = base.a * pin.color.a * (1.0f - crystal_params.x * crystal_tint.a * 0.65f);
     return float4(color, alpha);
 }

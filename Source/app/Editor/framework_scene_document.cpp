@@ -62,6 +62,13 @@ namespace
 
 void framework::handle_viewport_selection()
 {
+    sync_rig_selection();
+    struct selection_sync
+    {
+        framework& editor;
+        ~selection_sync() { editor.sync_rig_selection(); }
+    } sync_on_exit{ *this };
+    if (handle_vertex_paint_viewport()) return;
     if (!edit_mode_active || !game_scene) return;
     // UIワークスペースではScene ViewもUI専用の直接編集面として扱う。
     // UI枠のドラッグを3Dの矩形選択が同時に拾い、選択解除するのを防ぐ。
@@ -120,30 +127,38 @@ void framework::handle_viewport_selection()
         // 掴める距離。関節の見た目より少し広くしないと当てにくい。
         const float pick_radius = (std::max)(6.0f, rig_joint_radius * 3.0f);
         float best_distance = pick_radius;
+        float best_depth = (std::numeric_limits<float>::max)();
         const std::string* best_name = nullptr;
         std::uint64_t best_owner = 0;
         for (const auto& rig : object_rig_debug_bones)
         {
             for (const rig_debug_bone& bone : rig.second)
             {
+                // 出していない骨は掴ませない。隠した骨にクリックを取られる。
+                if (!rig_bone_within_depth(rig.second, bone)) continue;
                 ImVec2 screen{};
+                float depth{};
                 if (!project_world_to_screen(rig_view_projection, bone.world,
-                    rig_origin, rig_size, screen))
+                    rig_origin, rig_size, screen, depth))
                     continue;
                 const float dx = screen.x - mouse.x;
                 const float dy = screen.y - mouse.y;
                 const float distance = std::sqrt(dx * dx + dy * dy);
-                if (distance >= best_distance) continue;
-                best_distance = distance;
+                if (!std::isfinite(distance) || !std::isfinite(depth) || distance >= pick_radius) continue;
+                // 画面上の近さが主。ほぼ同じ距離のときだけ手前の骨を採る。
+                constexpr float tie_pixels = 2.0f;
+                if (best_name != nullptr && (distance > best_distance + tie_pixels ||
+                    (distance >= best_distance - tie_pixels && depth >= best_depth))) continue;
+                // 基準は最小距離のまま。同点で採った候補で緩めていくと際限がない。
+                best_distance = (std::min)(best_distance, distance);
+                best_depth = depth;
                 best_name = &bone.name;
                 best_owner = rig.first;
             }
         }
         if (best_name != nullptr)
         {
-            select_rig_bone(*best_name, ImGui::GetIO().KeyCtrl);
-            object_editor_context.Selection().Select(
-                ReplayEngine::Core::ObjectID{ best_owner });
+            select_rig_bone(best_owner, *best_name, ImGui::GetIO().KeyCtrl);
             viewport_drag_selecting = false;
             return;
         }
@@ -536,11 +551,24 @@ void framework::save_selected_prefab(bool choose_path)
 
 void framework::load_prefab()
 {
+    load_prefab(ReplayEngine::Core::ObjectID::Invalid());
+}
+
+void framework::load_prefab(ReplayEngine::Core::ObjectID parent)
+{
     namespace Serialization = ReplayEngine::Scene::Serialization;
 
     if (object_scene_play_mode)
     {
         object_editor_context.SetStatus("実行中は Prefab を配置できません");
+        return;
+    }
+
+    ReplayEngine::Core::GameObject* parent_object = parent.Valid()
+        ? object_scene.FindGameObjectByID(parent) : nullptr;
+    if (parent.Valid() && (parent_object == nullptr || parent_object->PendingDestroy()))
+    {
+        object_editor_context.SetStatus("Prefab の配置先が見つかりません");
         return;
     }
 
@@ -567,6 +595,22 @@ void framework::load_prefab()
         object_editor_context.CancelEdit();
         object_editor_context.SetStatus("Prefab 読込失敗: " + error);
         return;
+    }
+
+    if (parent.Valid())
+    {
+        ReplayEngine::Core::GameObject* root = object_scene.FindGameObjectByID(id);
+        if (root == nullptr || !root->SetParent(parent_object, true))
+        {
+            if (root != nullptr)
+            {
+                object_scene.DestroyGameObject(root);
+                object_scene.ProcessPendingOperations();
+            }
+            object_editor_context.CancelEdit();
+            object_editor_context.SetStatus("Prefab の親を設定できませんでした");
+            return;
+        }
     }
 
     object_editor_context.CommitEdit();

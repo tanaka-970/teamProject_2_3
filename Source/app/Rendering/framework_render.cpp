@@ -605,9 +605,13 @@ void framework::render(float elapsed_time)
             bool static_scene_built = false;
             {
                 REPLAY_PROFILE_SCOPE("Render/BuildSceneSubmission");
+                dx12_scene_build_options scene_options;
+                // 単体表示は編集カメラで見ている Scene View のときだけ効かせる。
+                if (object_isolate_active && !object_scene_play_mode)
+                    scene_options.isolate_root = object_isolate_root;
                 static_scene_built = upload_ok &&
                     build_dx12_static_scene(static_scene, active_object_scene(),
-                        object_render_items, elapsed_time);
+                        object_render_items, elapsed_time, scene_options);
             }
             ReplayEngine::Rendering::DX12::D3D12SceneEffectSubmission scene_effects;
             bool scene_effects_ok = false;

@@ -11,6 +11,7 @@ namespace ReplayEngine::Rendering::BuiltInShaders
             { Unlit,      3, ShaderLightingModel::Unlit, "Unlit",    "Materials/BuiltIn/Unlit.hlsl" },
             { Pixelate,   4, ShaderLightingModel::Pbr,   "Pixelate", "Materials/BuiltIn/Pixelate.hlsl" },
             { FlatFill,   5, ShaderLightingModel::Unlit, "Flat Fill", "Materials/BuiltIn/FlatFill.hlsl" },
+            { Ggst,      -1, ShaderLightingModel::Toon,  "GGST Toon", "Materials/BuiltIn/Ggst.hlsl" },
         };
         return definitions;
     }
@@ -19,7 +20,8 @@ namespace ReplayEngine::Rendering::BuiltInShaders
     {
         for (const Definition& definition : All())
         {
-            if (definition.shading_model == shading_model) return definition.id;
+            if (definition.shading_model >= 0 &&
+                definition.shading_model == shading_model) return definition.id;
         }
         // 知らない番号は無効値。
         //
@@ -35,7 +37,8 @@ namespace ReplayEngine::Rendering::BuiltInShaders
     {
         for (const Definition& definition : All())
         {
-            if (definition.shading_model == shading_model)
+            if (definition.shading_model >= 0 &&
+                definition.shading_model == shading_model)
             {
                 out = definition.lighting_model;
                 return true;

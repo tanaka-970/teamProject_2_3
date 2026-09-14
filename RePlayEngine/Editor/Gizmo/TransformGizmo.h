@@ -18,10 +18,13 @@ namespace ReplayEngine::Editor
         void SetSnapEnabled(bool enabled) noexcept { snap_enabled_ = enabled; }
         float SnapStep() const noexcept { return snap_step_; }
         void SetSnapStep(float value) noexcept;
+        float RotateSnapStep() const noexcept { return rotate_snap_step_; }
+        void SetRotateSnapStep(float value) noexcept;
 
     private:
         GizmoOperation operation_ = GizmoOperation::Translate;
         bool snap_enabled_ = false;
         float snap_step_ = 0.5f;
+        float rotate_snap_step_ = 15.0f;
     };
 }

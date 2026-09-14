@@ -221,6 +221,8 @@
             if (startup_fullscreen_requested) toggle_fullscreen();
         }
 
+        // 初回 tick に起動処理全体の経過時間が乗ると、ロゴを 1 フレームで使い切ってしまう。
+        tictoc.reset();
         while (WM_QUIT != msg.message)
         {
             // メッセージを上限付きで処理してから1フレーム進める。
@@ -238,6 +240,12 @@
             calculate_frame_stats();
 
             float frame_delta_time = tictoc.time_interval();
+            if (exclusive_capture_time_ >= 0.0f &&
+                automated_exclusive_frame_capture_pending)
+            {
+                frame_delta_time = 1.0f / 60.0f;
+                exclusive_capture_elapsed_ += frame_delta_time;
+            }
             if (profile_benchmark_mode)
             {
                 frame_delta_time = 1.0f / 60.0f;

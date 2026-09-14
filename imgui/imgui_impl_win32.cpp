@@ -296,6 +296,11 @@ static void ImGui_ImplWin32_UpdateMonitors()
     g_WantUpdateMonitors = false;
 }
 
+// local addition: 1 フレーム内に届いた押下と解放を取りこぼさないための持ち越し状態。
+static bool g_MouseDownUnseen[5] = {};
+static bool g_MouseUpDeferred[5] = {};
+static bool g_MouseCtrlAtPress = false;
+
 void    ImGui_ImplWin32_NewFrame()
 {
     ImGuiIO& io = ImGui::GetIO();
@@ -314,8 +319,23 @@ void    ImGui_ImplWin32_NewFrame()
     io.DeltaTime = (float)(current_time - g_Time) / g_TicksPerSecond;
     g_Time = current_time;
 
+    // local addition: 押下が前のフレームで見えた解放だけを、ここで反映する。
+    for (int button = 0; button < 5; ++button)
+    {
+        if (g_MouseUpDeferred[button] && !g_MouseDownUnseen[button])
+        {
+            io.MouseDown[button] = false;
+            g_MouseUpDeferred[button] = false;
+        }
+        g_MouseDownUnseen[button] = false;
+    }
+    if (!ImGui::IsAnyMouseDown() && ::GetCapture() == g_hWnd)
+        ::ReleaseCapture();
+
     // Read keyboard modifiers inputs
     io.KeyCtrl = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
+    // local addition: 押下が見える最初のフレームは、押下した瞬間の Ctrl を使う。
+    if (g_MouseCtrlAtPress) { io.KeyCtrl = true; g_MouseCtrlAtPress = false; }
     io.KeyShift = (::GetKeyState(VK_SHIFT) & 0x8000) != 0;
     io.KeyAlt = (::GetKeyState(VK_MENU) & 0x8000) != 0;
     io.KeySuper = false;
@@ -377,6 +397,10 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARA
         if (!ImGui::IsAnyMouseDown() && ::GetCapture() == NULL)
             ::SetCapture(hwnd);
         io.MouseDown[button] = true;
+        // local addition: この押下はまだどのフレームにも見えていない。
+        g_MouseDownUnseen[button] = true;
+        g_MouseUpDeferred[button] = false;
+        if ((wParam & MK_CONTROL) != 0) g_MouseCtrlAtPress = true;
         return 0;
     }
     case WM_LBUTTONUP:
@@ -389,7 +413,9 @@ IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hwnd, UINT msg, WPARA
         if (msg == WM_RBUTTONUP) { button = 1; }
         if (msg == WM_MBUTTONUP) { button = 2; }
         if (msg == WM_XBUTTONUP) { button = (GET_XBUTTON_WPARAM(wParam) == XBUTTON1) ? 3 : 4; }
-        io.MouseDown[button] = false;
+        // local addition: 押下がまだフレームに見えていなければ、解放は次のフレームへ持ち越す。
+        if (g_MouseDownUnseen[button]) g_MouseUpDeferred[button] = true;
+        else io.MouseDown[button] = false;
         if (!ImGui::IsAnyMouseDown() && ::GetCapture() == hwnd)
             ::ReleaseCapture();
         return 0;

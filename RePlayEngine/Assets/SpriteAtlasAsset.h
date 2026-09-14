@@ -2,6 +2,7 @@
 
 #include <DirectXMath.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -28,13 +29,17 @@ namespace ReplayEngine::Assets
     {
     public:
         static constexpr const char* file_extension = ".replayatlas";
-        static constexpr int current_version = 2;
+        // v3 … 圧縮済みテクスチャをファイル末尾へ直接埋め込み、Atlas 1 個を 1 ファイルにした。
+        static constexpr int current_version = 3;
 
         std::string name{ "Sprite Atlas" };
         std::string image_guid;
-        // Atlas と同じフォルダに置く、BC 圧縮済みの自立テクスチャキャッシュ。
-        // 空なら従来どおり image_guid の元画像へフォールバックする。
+        // v2 まで使っていた、Atlas と同じフォルダへ置く別ファイルの DDS。
+        // v3 以降は書き出さないが、既存ファイルを読むために残す。
         std::string embedded_texture_path;
+        // v3 の埋め込みテクスチャ本体。形式は先頭のマジックで判別する（現状は DDS）。
+        // これがあれば元画像が消えても Atlas は成立する。
+        std::vector<std::uint8_t> embedded_texture_bytes;
         std::vector<SpriteAtlasRegion> regions;
 
         const SpriteAtlasRegion* FindRegion(const std::string& region_name) const noexcept;

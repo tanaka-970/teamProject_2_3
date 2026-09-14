@@ -1,4 +1,4 @@
-// Scene/Runtime/描画提出/カメラ/衝突/Project Browser 接続。
+﻿// Scene/Runtime/描画提出/カメラ/衝突/Project Browser 接続。
 // framework_class.h の class framework 内部からのみ include する。
 
     // --- GameObject / Component 基盤との接続 -------------------------------
@@ -91,9 +91,16 @@
     void cancel_editor_play_loading();
 
 public:
+    float measure_boot_logo_duration(const ReplayEngine::Scene::Scene& scene);
+    bool load_boot_logo_scene_from_path(const std::filesystem::path& path);
     bool load_exclusive_scene_from_path(const std::filesystem::path& path);
     ReplayEngine::Scene::Scene* exclusive_scene_for_render() noexcept;
     void update_exclusive_scene(float elapsed_time);
+    void evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
+        float scaled_delta_time, float unscaled_delta_time,
+        ReplayEngine::Motion::MotionMixer& mixer,
+        ReplayEngine::Runtime::RuntimeContext* runtime_context,
+        std::uint64_t frame_index);
 
 private:
 
@@ -129,12 +136,17 @@ private:
     {
         bool include_auxiliary_geometry = true;
         bool include_active_lighting = true;
+        // 単体表示。有効ならこの GameObject と子孫の描画物だけを積む。
+        ReplayEngine::Core::ObjectID isolate_root{};
     };
     bool build_dx12_static_scene(
         ReplayEngine::Rendering::DX12::D3D12StaticSceneSubmission& submission,
         const ReplayEngine::Scene::Scene& scene,
         const ReplayEngine::Rendering::RenderItemList& render_items,
         float elapsed_time, dx12_scene_build_options options = {});
+    // Atlas を更新時刻付きで覚える。毎フレーム同じファイルを読み直さないため。
+    const ReplayEngine::Assets::SpriteAtlasAsset* resolve_sprite_atlas(
+        const std::filesystem::path& path);
     // Canvas/RectTransform の解決結果を、GPU APIを呼ばないDX12 UIコマンドへ変換する。
     bool build_dx12_ui(
         ReplayEngine::Rendering::DX12::D3D12UIFrame& frame);
@@ -164,11 +176,6 @@ private:
         const std::string& asset_guid);
     void prepare_material_motion_bindings(ReplayEngine::Scene::Scene& scene);
     void prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& scene);
-    void evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
-        float scaled_delta_time, float unscaled_delta_time,
-        ReplayEngine::Motion::MotionMixer& mixer,
-        ReplayEngine::Runtime::RuntimeContext* runtime_context,
-        std::uint64_t frame_index);
     void update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene, float elapsed_time,
         const ReplayEngine::Motion::MotionMixer* mixer);
     void update_ui_number_displays(ReplayEngine::Scene::Scene& scene);
@@ -220,6 +227,9 @@ private:
     // F キーのフォーカス。選択対象の World Bounds を求めて収める。
     // Undo 履歴へは積まない（Scene のデータを変更していないため）。
     void focus_editor_camera_on_selection();
+    // 単体表示の出入り。Scene のデータは変えず、描画とカメラだけを切り替える。
+    void begin_object_isolate();
+    void end_object_isolate();
 
     void draw_editor_camera_settings();
     void draw_editor_camera_preset_manager();
@@ -369,6 +379,8 @@ private:
     bool duplicate_motion_keys();
     bool delete_motion_keys();
     bool scale_motion_key_times(float scale, int pivot_mode);
+    void step_motion_preview_key(int direction);
+    bool select_all_motion_keys();
     bool apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing,
         const ReplayEngine::Reflection::AssetReference* curve = nullptr);
     void push_motion_curve_warning_once(const std::string& curve_error);
@@ -383,13 +395,22 @@ private:
     void draw_motion_timeline();
     void draw_motion_graph_editor();
     void draw_motion_rig();
+    float rig_gizmo_size_clip_space = 0.06f;
     bool draw_bone_transform_gizmo();
-    void select_rig_bone(const std::string& name, bool additive);
+    bool effective_gizmo_local_space() const;
+    bool active_rig_gizmo_target() const;
+    void sync_rig_selection();
+    bool gizmo_gesture_active() const;
+    void cancel_gizmo_gesture();
+    void select_rig_bone(std::uint64_t owner, const std::string& name, bool additive);
+    bool rig_bone_within_depth(const std::vector<rig_debug_bone>& bones,
+        const rig_debug_bone& bone) const;
     void apply_rig_pose_to_selection(std::uint64_t owner,
         const std::vector<rig_debug_bone>& bones, const rig_pose_override& primary_start,
-        const rig_pose_override& primary_now, int operation);
+        const rig_pose_override& primary_now, int operation, bool local_space);
     void begin_rig_pose_edit(std::uint64_t owner, std::string label);
     void commit_rig_pose_edit();
+    void cancel_rig_pose_edit();
     bool undo_rig_pose_edit();
     bool redo_rig_pose_edit();
     // 既存のモデルを地形にする。対象は GameObject で受ける。
@@ -401,6 +422,9 @@ private:
     bool project_world_to_screen(const DirectX::XMMATRIX& view_projection,
         const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
         ImVec2& out) const noexcept;
+    bool project_world_to_screen(const DirectX::XMMATRIX& view_projection,
+        const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
+        ImVec2& out, float& depth) const noexcept;
     void stop_motion_preview();
     void capture_motion_preview_targets();
     void apply_motion_preview_time();

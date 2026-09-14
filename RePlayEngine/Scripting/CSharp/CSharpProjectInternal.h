@@ -1,7 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "CSharpProject.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -14,6 +15,10 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     bool WriteTextIfChanged(const std::filesystem::path& path,
         const std::string& text, std::string& error);
     bool SourceTreeIsNewer(const std::filesystem::path& source_root,
+        const std::filesystem::path& output,
+        const std::vector<std::filesystem::path>& dependencies = {});
+    CSharpBuildState QuerySourceTreeBuildState(
+        const std::filesystem::path& source_root,
         const std::filesystem::path& output,
         const std::vector<std::filesystem::path>& dependencies = {});
     std::wstring ToWide(const std::string& text);

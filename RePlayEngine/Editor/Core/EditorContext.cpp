@@ -1,4 +1,5 @@
 #include "EditorContext.h"
+#include "../Commands/EditSerial.h"
 
 #include "../../Scene/Runtime/Scene.h"
 
@@ -45,6 +46,7 @@ namespace ReplayEngine::Editor
         scene_->ProcessPendingOperations();
 
         history_.Commit(*scene_);
+        edit_serial_ = NextEditSerial();
         MarkDirty();
 
         // 消えた GameObject を選択から外す。
@@ -59,6 +61,13 @@ namespace ReplayEngine::Editor
         MarkDirty();
     }
 
+    void EditorContext::CommitVertexColorEdit(std::unique_ptr<VertexPaint::ColorEdit> command)
+    {
+        if (!CanEdit() || !command || !command->target) return;
+        history_.CommitVertexColors(std::move(command));
+        edit_serial_ = NextEditSerial();
+        MarkDirty();
+    }
     void EditorContext::CancelEdit() noexcept
     {
         history_.Cancel();
@@ -105,6 +114,7 @@ namespace ReplayEngine::Editor
         // SynchronizeStates が余分に 1 回走る。
         selection_.PruneMissing(*scene_);
         MarkDirty();
+        edit_serial_ = NextEditSerial();
         SetStatus("元に戻す: " + label);
         return true;
     }
@@ -127,6 +137,7 @@ namespace ReplayEngine::Editor
 
         selection_.PruneMissing(*scene_);
         MarkDirty();
+        edit_serial_ = NextEditSerial();
         SetStatus("やり直す: " + label);
         return true;
     }

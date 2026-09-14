@@ -112,6 +112,36 @@ namespace ReplayEngine::Project
         return status;
     }
 
+    AssetReferenceStatus ProjectSettings::ResolveBootLogoScene(
+        const Assets::AssetDatabase& database) const
+    {
+        AssetReferenceStatus status;
+        status.guid = boot_logo_scene_guid_;
+
+        if (boot_logo_scene_guid_.empty())
+        {
+            status.state = AssetReferenceStatus::State::Unset;
+            return status;
+        }
+
+        const Assets::AssetRecord* record = database.FindByGuid(boot_logo_scene_guid_);
+        if (record == nullptr || record->kind != Assets::AssetKind::Scene)
+        {
+            status.state = AssetReferenceStatus::State::Missing;
+            if (record != nullptr)
+            {
+                status.display_name = record->display_name;
+                status.path = record->source_path;
+            }
+            return status;
+        }
+
+        status.state = AssetReferenceStatus::State::Resolved;
+        status.display_name = record->display_name;
+        status.path = record->source_path;
+        return status;
+    }
+
     AssetReferenceStatus ProjectSettings::ResolveSceneFlow(
         const Assets::AssetDatabase& database) const
     {

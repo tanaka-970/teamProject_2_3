@@ -1,4 +1,4 @@
-#include "LandscapeColliderComponent.h"
+﻿#include "LandscapeColliderComponent.h"
 #include "LandscapeComponent.h"
 #include "../../Object/GameObject/GameObject.h"
 
@@ -73,7 +73,8 @@ namespace ReplayEngine::Components
         return cooked_;
     }
 
-    bool LandscapeColliderComponent::RefreshGeometryIfChanged()
+    bool LandscapeColliderComponent::RefreshGeometryIfChanged(
+        Physics::CookedMeshCollisionCache* shared_cook_cache)
     {
         last_recooked_chunk_count_ = 0;
         last_recooked_triangle_count_ = 0;
@@ -141,31 +142,57 @@ namespace ReplayEngine::Components
                     target_chunk.cooked == nullptr;
                 if (!chunk_changed) continue;
 
-                std::vector<Physics::Triangle> chunk_triangles;
-                chunk_triangles.reserve(source_chunk.indices.size() / 3u);
-                for (std::size_t i = 0; i + 2 < source_chunk.indices.size(); i += 3)
-                {
-                    Physics::Triangle triangle{};
-                    triangle.vertices[0] = vertices[source_chunk.indices[i]].position;
-                    triangle.vertices[1] = vertices[source_chunk.indices[i + 1]].position;
-                    triangle.vertices[2] = vertices[source_chunk.indices[i + 2]].position;
-                    triangle.material_index = 0;
-                    chunk_triangles.push_back(triangle);
-                }
-
                 Physics::CookKey key;
-                key.asset_guid = "runtime-landscape:" + std::to_string(source_chunk.coord.x) +
+                // LandscapeData::revision は Play clone でも元 geometry の値を維持する。
+                // そのため Editor と Runtime World が同じ key になり、重い grid Cook を
+                // Play のたびに作り直さず shared cache から取得できる。
+                key.asset_guid = "runtime-landscape:" + std::to_string(data.Revision()) +
+                    ":" + std::to_string(source_chunk.coord.x) +
                     ":" + std::to_string(source_chunk.coord.z);
-                key.content_revision = std::to_string(source_chunk.revision);
+                key.content_revision = std::to_string(data.TopologyRevision());
                 key.settings.cell_size = requested_cell_size;
                 key.settings.double_sided = double_sided;
                 key.settings.sub_mesh_index = -1;
-                target_chunk.cooked = Physics::CookedMeshCollisionData::Build(
-                    std::move(key), std::move(chunk_triangles));
+
+                bool cooked_now = false;
+                const auto build_triangles = [&vertices, &source_chunk, &cooked_now](
+                    const Physics::CookKey&, std::vector<Physics::Triangle>& out)
+                {
+                    cooked_now = true;
+                    out.clear();
+                    out.reserve(source_chunk.indices.size() / 3u);
+                    for (std::size_t i = 0; i + 2 < source_chunk.indices.size(); i += 3)
+                    {
+                        Physics::Triangle triangle{};
+                        triangle.vertices[0] = vertices[source_chunk.indices[i]].position;
+                        triangle.vertices[1] = vertices[source_chunk.indices[i + 1]].position;
+                        triangle.vertices[2] = vertices[source_chunk.indices[i + 2]].position;
+                        triangle.material_index = 0;
+                        out.push_back(triangle);
+                    }
+                    return !out.empty();
+                };
+
+                if (shared_cook_cache != nullptr)
+                {
+                    // cache hit なら build_triangles 自体が呼ばれない。三角形配列の生成も
+                    // spatial grid Cook もゼロになる。
+                    target_chunk.cooked = shared_cook_cache->Acquire(key, build_triangles);
+                }
+                else
+                {
+                    std::vector<Physics::Triangle> chunk_triangles;
+                    build_triangles(key, chunk_triangles);
+                    target_chunk.cooked = Physics::CookedMeshCollisionData::Build(
+                        std::move(key), std::move(chunk_triangles));
+                }
                 target_chunk.source_revision = source_chunk.revision;
                 target_chunk.face_indices = data.ChunkFaceIndices(chunk_index);
-                ++last_recooked_chunk_count_;
-                last_recooked_triangle_count_ += source_chunk.indices.size() / 3u;
+                if (cooked_now)
+                {
+                    ++last_recooked_chunk_count_;
+                    last_recooked_triangle_count_ += source_chunk.indices.size() / 3u;
+                }
             }
 
             geometry_revision_ = data.Revision();

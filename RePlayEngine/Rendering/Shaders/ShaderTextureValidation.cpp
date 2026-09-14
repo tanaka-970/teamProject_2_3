@@ -116,6 +116,12 @@ namespace ReplayEngine::Rendering::Validation
         check.Expect(ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
             "RampMap", bridge_slot) && bridge_slot == 46,
             "RampMapはGBuffer t46へ再配置される");
+        check.Expect(ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
+            "IlmMap", bridge_slot) && bridge_slot == 47,
+            "IlmMapはGBuffer t47へ再配置される");
+        check.Expect(ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
+            "SssMap", bridge_slot) && bridge_slot == 48,
+            "SssMapはGBuffer t48へ再配置される");
 
         MaterialAsset toon;
         toon.shader_guid = BuiltInShaders::Toon.ToString();
@@ -126,6 +132,41 @@ namespace ReplayEngine::Rendering::Validation
         check.Expect((toon_binding.TextureSemanticMask() &
             ResolvedMaterialBinding::NormalMapSemantic) == 0,
             "Toonのt41 RampMapをNormalMapと誤認しない");
+
+        MaterialAsset ggst;
+        ggst.shader_guid = BuiltInShaders::Ggst.ToString();
+        ggst.SyncLegacyFieldsToProperties();
+        ResolvedMaterialBinding ggst_binding;
+        check.Expect(MaterialBindingResolver::Resolve(ggst, library.Catalog(),
+            ShaderVariant::Static, ggst_binding), "GGST texture bindingを解決できる");
+        const auto* ilm = Find(ggst_binding, "IlmMap");
+        const auto* sss = Find(ggst_binding, "SssMap");
+        check.Expect(ilm != nullptr && ilm->slot >=
+            ShaderConstantPacker::material_texture_base_slot,
+            "GGST IlmMapがSchema textureとして存在する");
+        check.Expect(sss != nullptr && sss->slot >=
+            ShaderConstantPacker::material_texture_base_slot,
+            "GGST SssMapがSchema textureとして存在する");
+        check.Expect((ggst_binding.TextureSemanticMask() &
+            ResolvedMaterialBinding::IlmMapSemantic) == 0,
+            "ILM未設定時は標準ILM値を使うためsemanticを立てない");
+        check.Expect((ggst_binding.TextureSemanticMask() &
+            ResolvedMaterialBinding::SssMapSemantic) == 0,
+            "SSS未設定時はShadeColorをそのまま使うためsemanticを立てない");
+        ggst.properties.Set("prop.IlmMap",
+            Reflection::PropertyValue::MakeAssetReference("ilm-asset-guid"));
+        check.Expect(MaterialBindingResolver::Resolve(ggst, library.Catalog(),
+            ShaderVariant::Static, ggst_binding), "ILM設定済みGGSTを解決できる");
+        check.Expect((ggst_binding.TextureSemanticMask() &
+            ResolvedMaterialBinding::IlmMapSemantic) != 0,
+            "ILM設定時だけGBuffer semanticを立てる");
+        ggst.properties.Set("prop.SssMap",
+            Reflection::PropertyValue::MakeAssetReference("sss-asset-guid"));
+        check.Expect(MaterialBindingResolver::Resolve(ggst, library.Catalog(),
+            ShaderVariant::Static, ggst_binding), "SSS設定済みGGSTを解決できる");
+        check.Expect((ggst_binding.TextureSemanticMask() &
+            ResolvedMaterialBinding::SssMapSemantic) != 0,
+            "SSS設定時だけGBuffer semanticを立てる");
 
         MaterialAsset old_alias = material;
         old_alias.properties.Remove("prop.OcclusionMap");

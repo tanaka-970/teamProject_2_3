@@ -245,6 +245,33 @@ namespace
     }
 }
 
+// 更新時刻が変わったときだけ読み直す。Material cache と同じ寿命の考え方。
+const ReplayEngine::Assets::SpriteAtlasAsset* framework::resolve_sprite_atlas(
+    const std::filesystem::path& path)
+{
+    if (path.empty()) return nullptr;
+    std::error_code stamp_error;
+    const auto write_time = std::filesystem::last_write_time(path, stamp_error);
+    const std::string key = path.lexically_normal().generic_string();
+    const auto found = object_sprite_atlas_cache.find(key);
+    if (found != object_sprite_atlas_cache.end() &&
+        (stamp_error || found->second.write_time == write_time))
+        return &found->second.atlas;
+
+    ReplayEngine::Assets::SpriteAtlasAsset atlas;
+    std::string error;
+    if (!ReplayEngine::Assets::SpriteAtlasAsset::LoadFromFile(path, atlas, error))
+    {
+        object_sprite_atlas_cache.erase(key);
+        return nullptr;
+    }
+    cached_sprite_atlas entry;
+    entry.atlas = std::move(atlas);
+    entry.write_time = stamp_error ? std::filesystem::file_time_type{} : write_time;
+    const auto stored = object_sprite_atlas_cache.insert_or_assign(key, std::move(entry));
+    return &stored.first->second.atlas;
+}
+
 // DX12 UI のCPU提出層。ここでは既存の Canvas/RectTransform/FontAtlas の正本だけを読み、
 // GPU APIやD3D11 Viewを触らない。GPU所有権は D3D12DeviceContext::DrawRuntimeUI に限定する。
 bool framework::build_dx12_ui(
@@ -458,6 +485,7 @@ bool framework::build_dx12_ui_for_scene(
         rotated = false;
         std::string image_guid = image.sprite.guid;
         std::filesystem::path embedded_path;
+        const std::vector<std::uint8_t>* embedded_bytes = nullptr;
         if (!image.atlas.guid.empty() && !image.atlas_region.empty())
         {
             const Assets::AssetRecord* atlas_record =
@@ -467,10 +495,10 @@ bool framework::build_dx12_ui_for_scene(
                 const std::filesystem::path atlas_path = content_path(
                     atlas_record->cache_path.empty()
                         ? atlas_record->source_path : atlas_record->cache_path);
-                Assets::SpriteAtlasAsset atlas;
-                std::string error;
-                if (Assets::SpriteAtlasAsset::LoadFromFile(atlas_path, atlas, error))
+                const Assets::SpriteAtlasAsset* cached = resolve_sprite_atlas(atlas_path);
+                if (cached != nullptr)
                 {
+                    const Assets::SpriteAtlasAsset& atlas = *cached;
                     const Assets::SpriteAtlasRegion* region =
                         atlas.FindRegion(image.atlas_region);
                     if (region != nullptr)
@@ -499,12 +527,28 @@ bool framework::build_dx12_ui_for_scene(
                                     : DirectX::XMFLOAT2{ relative_x, 1.0f - relative_y });
                             }
                         }
-                        if (!atlas.embedded_texture_path.empty())
+                        // v3 の埋め込みが最優先。無ければ v2 の隣ファイルを見る。
+                        if (!atlas.embedded_texture_bytes.empty())
+                            embedded_bytes = &atlas.embedded_texture_bytes;
+                        else if (!atlas.embedded_texture_path.empty())
                             embedded_path = atlas_path.parent_path() /
                                 std::filesystem::u8path(atlas.embedded_texture_path);
                     }
                 }
             }
+        }
+        // 埋め込み DDS はファイルを持たないので、Atlas の GUID を鍵にして 1 度だけ積む。
+        if (embedded_bytes != nullptr && !embedded_bytes->empty())
+        {
+            const std::string embedded_key = "atlas:" + image.atlas.guid;
+            if (texture_keys.insert(embedded_key).second)
+            {
+                D3D12StaticTextureSource source;
+                source.key = embedded_key;
+                source.dds_bytes = *embedded_bytes;
+                frame.texture_sources.push_back(std::move(source));
+            }
+            return embedded_key;
         }
         std::filesystem::path source_path;
         if (!embedded_path.empty()) source_path = embedded_path;
@@ -2561,6 +2605,7 @@ bool framework::build_dx12_scene_effects(
 
     if (!dx12_device_context.CacheMeshLocalBounds(static_scene)) return false;
     submission.Clear();
+    if (static_scene.vertex_color_debug_channel != 0) return true;
     std::unordered_set<std::string> texture_keys;
     const auto register_effect_texture = [&](const Assets::AssetRecord* record)
         -> std::string

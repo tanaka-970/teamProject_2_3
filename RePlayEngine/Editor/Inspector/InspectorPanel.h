@@ -46,6 +46,11 @@ namespace ReplayEngine::Editor
         bool DrawContents(EditorContext& context, bool& show_game_template_components);
 
         // 型ごとの追加 UI を Component の中へ差し込む。ここは型を知らない。
+        using ComponentHeaderDrawer = std::function<bool(const Core::Component&, const char*, int)>;
+        void SetComponentHeaderDrawer(ComponentHeaderDrawer drawer)
+        {
+            component_header_drawer_ = std::move(drawer);
+        }
         using ComponentExtraDrawer = std::function<void(EditorContext&, Core::Component&)>;
         void SetComponentExtraDrawer(ComponentExtraDrawer drawer)
         {
@@ -81,6 +86,7 @@ namespace ReplayEngine::Editor
 
         AddComponentPanel add_component_panel_;
         ComponentExtraDrawer component_extra_drawer_;
+        ComponentHeaderDrawer component_header_drawer_;
 
         // 削除ボタンが押された Component。
         //

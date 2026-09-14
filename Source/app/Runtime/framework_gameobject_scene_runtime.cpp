@@ -50,13 +50,16 @@ namespace
 
 void framework::update_exclusive_scene(float elapsed_time)
 {
-    if (object_loading_scene == nullptr) return;
+    ReplayEngine::Scene::Scene* active_scene = exclusive_scene_for_render();
+    if (active_scene == nullptr) return;
 
-    ReplayEngine::Scene::Scene& scene = *object_loading_scene;
+    ReplayEngine::Scene::Scene& scene = *active_scene;
     const float safe_delta_time = (std::max)(0.0f, elapsed_time);
-    ReplayEngine::Runtime::RuntimeContext* runtime_context =
-        object_loading_runtime_context.get();
-    const std::uint64_t frame_index = object_loading_frame_index++;
+    const bool boot_logo_active = active_scene == object_boot_logo_scene.get();
+    ReplayEngine::Runtime::RuntimeContext* runtime_context = boot_logo_active
+        ? object_boot_logo_runtime_context.get() : object_loading_runtime_context.get();
+    const std::uint64_t frame_index = boot_logo_active
+        ? object_boot_logo_frame_index++ : object_loading_frame_index++;
     if (runtime_context != nullptr)
     {
         ReplayEngine::Runtime::RuntimeTime runtime_time;

@@ -34,7 +34,8 @@ namespace ReplayEngine::Assets
         SpriteAtlasAsset& out, std::string& error)
     {
         REPLAY_PROFILE_SCOPE("Asset/SpriteAtlas");
-        std::ifstream file(path);
+        // 末尾へ DDS を埋め込むため、CRLF 変換の入らない binary で開く。
+        std::ifstream file(path, std::ios::binary);
         if (!file)
         {
             error = "Sprite Atlas を開けません: " + path.string();
@@ -46,6 +47,8 @@ namespace ReplayEngine::Assets
         std::string line;
         while (std::getline(file, line))
         {
+            // binary で開いた分だけ行末に CR が残るので落としてから解析する。
+            if (!line.empty() && line.back() == '\r') line.pop_back();
             std::istringstream input(line);
             std::string head;
             if (!(input >> head) || head.empty() || head[0] == '#') continue;
@@ -65,6 +68,27 @@ namespace ReplayEngine::Assets
             else if (head == "TEXTURE_DDS")
             {
                 input >> std::quoted(asset.embedded_texture_path);
+            }
+            else if (head == "TEXTURE_EMBEDDED")
+            {
+                // この行以降はバイナリなので、必ず最後に置かれている。読んだら打ち切る。
+                std::size_t byte_count = 0;
+                input >> byte_count;
+                constexpr std::size_t maximum_bytes = 1ull << 30;
+                if (byte_count == 0 || byte_count > maximum_bytes)
+                {
+                    error = "Sprite Atlas の埋め込みテクスチャの長さが不正です";
+                    return false;
+                }
+                asset.embedded_texture_bytes.resize(byte_count);
+                file.read(reinterpret_cast<char*>(asset.embedded_texture_bytes.data()),
+                    static_cast<std::streamsize>(byte_count));
+                if (static_cast<std::size_t>(file.gcount()) != byte_count)
+                {
+                    error = "Sprite Atlas の埋め込みテクスチャが途中で切れています";
+                    return false;
+                }
+                break;
             }
             else if (head == "REGION")
             {
@@ -172,7 +196,8 @@ namespace ReplayEngine::Assets
             }
         }
 
-        std::ofstream file(path);
+        // 末尾の埋め込み DDS を壊さないため、改行変換の入らない binary で開く。
+        std::ofstream file(path, std::ios::binary);
         if (!file)
         {
             error = "Sprite Atlas を書き込めません: " + path.string();
@@ -202,6 +227,13 @@ namespace ReplayEngine::Assets
                     file << ' ' << point.x << ' ' << point.y;
                 file << '\n';
             }
+        }
+        // 埋め込みは必ず最後。これ以降は行として解析されない。
+        if (!asset.embedded_texture_bytes.empty())
+        {
+            file << "TEXTURE_EMBEDDED " << asset.embedded_texture_bytes.size() << '\n';
+            file.write(reinterpret_cast<const char*>(asset.embedded_texture_bytes.data()),
+                static_cast<std::streamsize>(asset.embedded_texture_bytes.size()));
         }
         return static_cast<bool>(file);
     }

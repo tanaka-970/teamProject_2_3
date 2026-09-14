@@ -350,13 +350,11 @@ namespace ReplayEngine::Rendering::DX12
             return true;
         }
 
-        bool DecodeDdsFile(const std::filesystem::path& path,
+        // 解析の本体。ファイルからでも埋め込みバイト列からでも同じ経路を通す。
+        bool DecodeDdsStream(std::istream& stream,
             DecodedDdsImage& image, bool require_cube) noexcept
         {
             image = {};
-            if (path.empty()) return false;
-            std::ifstream stream(path, std::ios::binary);
-            if (!stream) return false;
 
             constexpr std::uint32_t kDdsMagic = 0x20534444u;
             constexpr std::uint32_t kDx10FourCc = MakeFourCc('D', 'X', '1', '0');
@@ -447,6 +445,36 @@ namespace ReplayEngine::Rendering::DX12
                 return false;
             }
             return true;
+        }
+
+        bool DecodeDdsFile(const std::filesystem::path& path,
+            DecodedDdsImage& image, bool require_cube) noexcept
+        {
+            image = {};
+            if (path.empty()) return false;
+            std::ifstream stream(path, std::ios::binary);
+            if (!stream) return false;
+            return DecodeDdsStream(stream, image, require_cube);
+        }
+
+        // Sprite Atlas へ埋め込まれた DDS のように、ファイルを持たない資産用。
+        bool DecodeDdsMemory(const std::uint8_t* data, std::size_t size,
+            DecodedDdsImage& image, bool require_cube) noexcept
+        {
+            image = {};
+            if (data == nullptr || size == 0) return false;
+            try
+            {
+                std::istringstream stream(
+                    std::string(reinterpret_cast<const char*>(data), size),
+                    std::ios::binary);
+                return DecodeDdsStream(stream, image, require_cube);
+            }
+            catch (...)
+            {
+                image = {};
+                return false;
+            }
         }
 
         bool DecodeDds2D(const std::filesystem::path& path,
@@ -1502,6 +1530,130 @@ namespace ReplayEngine::Rendering::DX12
             return image.width != 0 && image.height != 0 && !image.pixels.empty();
         }
 
+        bool DecodeTgaRgba8(const std::filesystem::path& path,
+            DecodedRgbaImage& image) noexcept
+        {
+            image = {};
+            if (path.empty()) return false;
+            try
+            {
+                std::ifstream stream(path, std::ios::binary | std::ios::ate);
+                if (!stream) return false;
+                const std::streamoff file_size = stream.tellg();
+                if (file_size < 18 || file_size > static_cast<std::streamoff>(1ull << 31))
+                    return false;
+                std::vector<std::uint8_t> bytes(static_cast<std::size_t>(file_size));
+                stream.seekg(0, std::ios::beg);
+                if (!stream.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(file_size))) return false;
+
+                const std::uint8_t id_length = bytes[0];
+                const std::uint8_t color_map_type = bytes[1];
+                const std::uint8_t image_type = bytes[2];
+                const std::uint16_t width = static_cast<std::uint16_t>(bytes[12]) |
+                    static_cast<std::uint16_t>(static_cast<std::uint16_t>(bytes[13]) << 8);
+                const std::uint16_t height = static_cast<std::uint16_t>(bytes[14]) |
+                    static_cast<std::uint16_t>(static_cast<std::uint16_t>(bytes[15]) << 8);
+                const std::uint8_t pixel_depth = bytes[16];
+                const std::uint8_t descriptor = bytes[17];
+                const bool true_color = image_type == 2 || image_type == 10;
+                const bool grayscale = image_type == 3 || image_type == 11;
+                const bool rle = image_type == 10 || image_type == 11;
+                if (color_map_type != 0 || (!true_color && !grayscale) ||
+                    width == 0 || height == 0 || width > 16384 || height > 16384)
+                    return false;
+                const std::size_t pixel_bytes = static_cast<std::size_t>(pixel_depth / 8u);
+                if ((true_color && pixel_bytes != 2 && pixel_bytes != 3 && pixel_bytes != 4) ||
+                    (grayscale && pixel_bytes != 1 && pixel_bytes != 2)) return false;
+                std::size_t cursor = 18u + static_cast<std::size_t>(id_length);
+                if (cursor > bytes.size()) return false;
+
+                const std::size_t pixel_count = static_cast<std::size_t>(width) * height;
+                image.pixels.resize(pixel_count * 4u);
+                image.width = width;
+                image.height = height;
+                const bool top_origin = (descriptor & 0x20u) != 0;
+                const bool right_origin = (descriptor & 0x10u) != 0;
+                std::size_t output_index = 0;
+
+                const auto write_pixel = [&](const std::uint8_t* source) -> bool
+                {
+                    if (output_index >= pixel_count) return false;
+                    std::uint8_t r = 255, g = 255, b = 255, a = 255;
+                    if (grayscale)
+                    {
+                        r = g = b = source[0];
+                        if (pixel_bytes == 2) a = source[1];
+                    }
+                    else if (pixel_bytes == 2)
+                    {
+                        const std::uint16_t packed = static_cast<std::uint16_t>(source[0]) |
+                            static_cast<std::uint16_t>(static_cast<std::uint16_t>(source[1]) << 8);
+                        b = static_cast<std::uint8_t>((packed & 31u) * 255u / 31u);
+                        g = static_cast<std::uint8_t>(((packed >> 5) & 31u) * 255u / 31u);
+                        r = static_cast<std::uint8_t>(((packed >> 10) & 31u) * 255u / 31u);
+                        if ((descriptor & 0x0fu) != 0)
+                            a = (packed & 0x8000u) != 0 ?
+                                static_cast<std::uint8_t>(255) : static_cast<std::uint8_t>(0);
+                    }
+                    else
+                    {
+                        b = source[0];
+                        g = source[1];
+                        r = source[2];
+                        if (pixel_bytes == 4) a = source[3];
+                    }
+                    const std::size_t file_x = output_index % width;
+                    const std::size_t file_y = output_index / width;
+                    const std::size_t x = right_origin ? width - 1u - file_x : file_x;
+                    const std::size_t y = top_origin ? file_y : height - 1u - file_y;
+                    const std::size_t destination = (y * width + x) * 4u;
+                    image.pixels[destination + 0] = r;
+                    image.pixels[destination + 1] = g;
+                    image.pixels[destination + 2] = b;
+                    image.pixels[destination + 3] = a;
+                    ++output_index;
+                    return true;
+                };
+
+                while (output_index < pixel_count)
+                {
+                    std::size_t count = 1;
+                    bool repeated = false;
+                    if (rle)
+                    {
+                        if (cursor >= bytes.size()) return false;
+                        const std::uint8_t packet = bytes[cursor++];
+                        count = static_cast<std::size_t>(packet & 0x7fu) + 1u;
+                        repeated = (packet & 0x80u) != 0;
+                    }
+                    if (count > pixel_count - output_index) return false;
+                    if (repeated)
+                    {
+                        if (cursor + pixel_bytes > bytes.size()) return false;
+                        const std::uint8_t* source = bytes.data() + cursor;
+                        cursor += pixel_bytes;
+                        for (std::size_t i = 0; i < count; ++i)
+                            if (!write_pixel(source)) return false;
+                    }
+                    else
+                    {
+                        if (cursor + count * pixel_bytes > bytes.size()) return false;
+                        for (std::size_t i = 0; i < count; ++i)
+                        {
+                            if (!write_pixel(bytes.data() + cursor)) return false;
+                            cursor += pixel_bytes;
+                        }
+                    }
+                }
+                return true;
+            }
+            catch (...)
+            {
+                image = {};
+                return false;
+            }
+        }
+
         bool IsValidSize(std::uint32_t width, std::uint32_t height) noexcept
         {
             return width != 0 && height != 0;
@@ -2247,6 +2399,8 @@ namespace ReplayEngine::Rendering::DX12
                 D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
             { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24,
                 D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+            { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 1, 0,
+                D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
         };
 
         for (std::uint32_t sided = 0; sided < 2; ++sided)
@@ -2603,7 +2757,8 @@ namespace ReplayEngine::Rendering::DX12
         if (!mesh->Upload(device_.Get(), upload_context_, source.vertices.data(),
             static_cast<std::uint32_t>(vertex_bytes), sizeof(D3D12StaticVertex),
             source.indices.data(), static_cast<std::uint32_t>(index_bytes),
-            DXGI_FORMAT_R32_UINT))
+            DXGI_FORMAT_R32_UINT, source.vertex_colors.size() == source.vertices.size()
+                ? source.vertex_colors.data() : nullptr))
             return false;
         mesh->SetDebugName(source.key);
         try
@@ -2695,10 +2850,15 @@ namespace ReplayEngine::Rendering::DX12
             std::transform(extension.begin(), extension.end(), extension.begin(),
                 [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
 
-            if (extension == ".dds")
+            // 埋め込みバイト列があればファイルより優先する。拡張子は見ない。
+            if (!source.dds_bytes.empty() || extension == ".dds")
             {
                 DecodedDdsImage decoded;
-                if (!DecodeDds2D(source.source_path, decoded))
+                const bool decoded_ok = source.dds_bytes.empty()
+                    ? DecodeDds2D(source.source_path, decoded)
+                    : DecodeDdsMemory(source.dds_bytes.data(), source.dds_bytes.size(),
+                        decoded, false);
+                if (!decoded_ok)
                 {
                     DebugMessage("[DX12] DDS texture decode failed; using white fallback.\n");
                     remember_decode_failure();
@@ -2717,9 +2877,12 @@ namespace ReplayEngine::Rendering::DX12
             else
             {
                 DecodedRgbaImage decoded;
-                if (!DecodeWicRgba8(source.source_path, decoded))
+                const bool decoded_ok = extension == ".tga" ?
+                    DecodeTgaRgba8(source.source_path, decoded) :
+                    DecodeWicRgba8(source.source_path, decoded);
+                if (!decoded_ok)
                 {
-                    DebugMessage("[DX12] WIC texture decode failed; using white fallback.\n");
+                    DebugMessage("[DX12] texture decode failed; using white fallback.\n");
                     remember_decode_failure();
                     return false;
                 }
@@ -3238,9 +3401,10 @@ namespace ReplayEngine::Rendering::DX12
             command_list_->SetGraphicsRootDescriptorTable(15, static_samplers_[2].gpu);   // s2
 
             const D3D12_VERTEX_BUFFER_VIEW vertex_view = mesh_it->second->VertexView();
+            const D3D12_VERTEX_BUFFER_VIEW views[] = { vertex_view, mesh_it->second->ColorView() };
             const D3D12_INDEX_BUFFER_VIEW index_view = mesh_it->second->IndexView();
             command_list_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-            command_list_->IASetVertexBuffers(0, 1, &vertex_view);
+            command_list_->IASetVertexBuffers(0, 2, views);
             command_list_->IASetIndexBuffer(&index_view);
             const std::uint32_t available = mesh_it->second->IndexCount();
             const std::uint32_t start = (std::min)(draw.start_index, available);
@@ -3362,6 +3526,25 @@ namespace ReplayEngine::Rendering::DX12
         RetireStaticMesh(std::move(existing->second));
         static_mesh_cache_.erase(existing);
         static_mesh_bounds_cache_.erase(key);
+    }
+
+    bool D3D12DeviceContext::UpdateVertexColors(const D3D12VertexColorUpdate& update) noexcept
+    {
+        auto& cache = update.skinned ? skinned_mesh_cache_ : static_mesh_cache_;
+        const auto found = cache.find(update.key);
+        if (found == cache.end() || !update.asset) return true;
+        if (found->second->ColorRevision() == update.revision) return true;
+        const auto& blocks = update.asset->meshes;
+        const auto block = std::find_if(blocks.begin(), blocks.end(),
+            [&](const Assets::VertexColorMeshBlock& b) { return b.mesh_index == update.mesh_index; });
+        if (block == blocks.end() || block->colors.size() > UINT32_MAX) return false;
+        auto replacement = std::make_unique<D3D12MeshBuffer>();
+        if (!replacement->UploadColorsSharingGeometry(device_.Get(), upload_context_, *found->second,
+            block->colors.data(), static_cast<std::uint32_t>(block->colors.size()), update.revision)) return false;
+        replacement->SetDebugName(update.key);
+        RetireStaticMesh(std::move(found->second));
+        found->second = std::move(replacement);
+        return true;
     }
 
     // 置換で外した静的メッシュは、次に Signal する Fence を越えるまで解放しない。

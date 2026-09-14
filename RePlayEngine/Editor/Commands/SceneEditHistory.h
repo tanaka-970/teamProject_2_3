@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../Landscape/LandscapeUndoCommand.h"
+#include "../../VertexPaint/VertexColorPaint.h"
 #include "../../Scene/Serialization/SceneData.h"
 
 #include <cstddef>
@@ -39,6 +40,7 @@ namespace ReplayEngine::Editor
         void Commit(const Scene::Scene& scene);
         void CommitLandscape(Core::ObjectID object,
             std::unique_ptr<Landscape::LandscapeUndoCommand> command, std::string label);
+        void CommitVertexColors(std::unique_ptr<VertexPaint::ColorEdit> command);
         void Cancel() noexcept;
 
         bool InTransaction() const noexcept { return in_transaction_; }
@@ -63,6 +65,7 @@ namespace ReplayEngine::Editor
             Scene::Serialization::SceneData after;
             Core::ObjectID landscape_object;
             std::unique_ptr<Landscape::LandscapeUndoCommand> landscape_command;
+            std::unique_ptr<VertexPaint::ColorEdit> vertex_color_command;
         };
 
         static bool ApplyLandscape(const Entry& entry, Scene::Scene& scene, bool redo);

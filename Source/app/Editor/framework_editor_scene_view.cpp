@@ -2,6 +2,9 @@
 // Scene View の描画・検索・Hierarchy 操作の関数本体はそのまま移動している。
 #include "framework.h"
 
+#include "imgui/ImGuizmo.h"
+#include "imgui/imgui_internal.h"
+
 #include "../../RePlayEngine/Components/Core/PivotComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/PlayerControllerComponent.h"
@@ -22,6 +25,37 @@
 #include <cstdio>
 #include <filesystem>
 #include <string>
+
+void framework::begin_object_isolate()
+{
+    const ReplayEngine::Core::ObjectID primary = object_editor_context.Selection().Primary();
+    if (!primary.Valid())
+    {
+        object_editor_context.SetStatus("単体表示にする GameObject が選択されていません");
+        return;
+    }
+    // 戻り先は最初に入ったときの 1 回だけ控える。対象を変えても上書きしない。
+    if (!object_isolate_active)
+    {
+        object_isolate_return_position = editor_camera.Position();
+        object_isolate_return_yaw = editor_camera.Yaw();
+        object_isolate_return_pitch = editor_camera.Pitch();
+    }
+    object_isolate_active = true;
+    object_isolate_root = primary;
+    focus_editor_camera_on_selection();
+    object_editor_context.SetStatus("単体表示にしました");
+}
+
+void framework::end_object_isolate()
+{
+    if (!object_isolate_active) return;
+    object_isolate_active = false;
+    object_isolate_root = ReplayEngine::Core::ObjectID::Invalid();
+    editor_camera.SetPosition(object_isolate_return_position);
+    editor_camera.SetYawPitch(object_isolate_return_yaw, object_isolate_return_pitch);
+    object_editor_context.SetStatus("単体表示を解除しました");
+}
 
 void framework::draw_scene_view_panel()
 {
@@ -116,10 +150,85 @@ void framework::draw_scene_view_panel()
             ImGui::SameLine();
             ImGui::Checkbox(u8"グリッド", &show_scene_grid);
             ImGui::SameLine();
+            // 単体表示。押している間は色を変えて、いま絞っていることを見せる。
+            {
+                const bool selectable = object_editor_context.Selection().Primary().Valid();
+                const bool dimmed = !selectable && !object_isolate_active;
+                if (object_isolate_active)
+                    ImGui::PushStyleColor(ImGuiCol_Button,
+                        ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+                if (dimmed)
+                    ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+                if (ImGui::Button(u8"単体表示"))
+                {
+                    if (object_isolate_active) end_object_isolate();
+                    else begin_object_isolate();
+                }
+                if (dimmed) ImGui::PopStyleVar();
+                if (object_isolate_active) ImGui::PopStyleColor();
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip(object_isolate_active
+                        ? u8"選択したものだけを表示中。押すと戻ります（Esc でも可）"
+                        : u8"選択した GameObject と子だけを表示します");
+            }
+            // 選択を変えたら対象も移す。戻り先のカメラは最初のものを保つ。
+            if (object_isolate_active)
+            {
+                const ReplayEngine::Core::ObjectID primary =
+                    object_editor_context.Selection().Primary();
+                if (primary.Valid() && primary != object_isolate_root)
+                {
+                    object_isolate_root = primary;
+                    focus_editor_camera_on_selection();
+                }
+            }
+            ImGui::SameLine();
+            const bool bone_gizmo_target = !rig_selected_bone.empty() &&
+                (show_rig_debug_draw || show_motion_rig_panel);
+            const bool local_space = effective_gizmo_local_space();
             ImGui::TextDisabled("Perspective | %s | %s | %s",
-                gizmo_local_space ? "Local" : "World",
+                bone_gizmo_target ? (local_space ? u8"Local(骨)" : u8"World(骨)")
+                    : (local_space ? "Local" : "World"),
                 transform_gizmo.SnapEnabled() ? "Snap" : "Free",
                 object_scene_play_mode ? (object_scene_paused ? "Paused" : "Playing") : "Editing");
+            ImGui::SameLine();
+            const float rotate_steps[] = { 1.0f, 5.0f, 10.0f, 15.0f, 30.0f, 45.0f, 90.0f };
+            const char* rotate_labels[] = { u8"1度", u8"5度", u8"10度", u8"15度",
+                u8"30度", u8"45度", u8"90度" };
+            char rotate_preview[32]{};
+            std::snprintf(rotate_preview, sizeof(rotate_preview), u8"%g度",
+                transform_gizmo.RotateSnapStep());
+            const bool snap_enabled = transform_gizmo.SnapEnabled();
+            if (!snap_enabled)
+            {
+                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+                ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+            }
+            ImGui::SetNextItemWidth(75.0f);
+            if (ImGui::BeginCombo(u8"回転刻み##RotateSnapStep", rotate_preview))
+            {
+                for (int i = 0; i < IM_ARRAYSIZE(rotate_steps); ++i)
+                {
+                    const bool selected = transform_gizmo.RotateSnapStep() == rotate_steps[i];
+                    if (ImGui::Selectable(rotate_labels[i], selected) && snap_enabled)
+                        transform_gizmo.SetRotateSnapStep(rotate_steps[i]);
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            if (!snap_enabled)
+            {
+                ImGui::PopItemFlag();
+                ImGui::PopStyleVar();
+            }
+            // 何も見えないときに「壊れた」と誤解させないため、対象を明示する。
+            if (object_isolate_active)
+            {
+                const ReplayEngine::Core::GameObject* target =
+                    active_object_scene().FindGameObjectByID(object_isolate_root);
+                ImGui::TextColored(ImVec4(0.35f, 0.75f, 1.0f, 1.0f),
+                    u8"単体表示中: %s", target != nullptr ? target->Name().c_str() : "(対象なし)");
+            }
         }
         if (active_editor_workspace != editor_workspace::ui)
         {
@@ -168,6 +277,10 @@ void framework::draw_scene_view_panel()
     scene_view_max_y = maximum.y;
     scene_view_hovered = ImGui::IsItemHovered();
     scene_view_focused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+    // Esc は補助。ギズモを掴んでいる間はそちらの取り消しが優先する。
+    if (object_isolate_active && scene_view_focused && !ImGuizmo::IsUsing() &&
+        ImGui::IsKeyPressed(VK_ESCAPE))
+        end_object_isolate();
     draw_ui_scene_overlay();
 
     // 右クリックの Play From Here / Checkpoint / Scene Memo。
@@ -355,6 +468,39 @@ void framework::draw_scene_hierarchy()
 
         const ReplayEngine::Core::ObjectID before = object_editor_context.Selection().Primary();
         object_hierarchy_panel.DrawContents(object_editor_context);
+        const ReplayEngine::Editor::AssetPlacementRequest placement_request =
+            object_hierarchy_panel.TakeAssetPlacementRequest();
+        if (placement_request.Valid())
+        {
+            if (placement_request.browse_prefab)
+            {
+                load_prefab(placement_request.parent);
+            }
+            else if (const auto* asset = asset_database.FindByGuid(placement_request.asset_guid))
+            {
+                place_asset_in_object_scene(*asset, asset_drop_add_collider,
+                    nullptr, placement_request.parent);
+            }
+            else
+            {
+                object_editor_context.SetStatus("配置する Asset が見つかりません");
+            }
+        }
+        const ReplayEngine::Core::ObjectID prefab_request = object_hierarchy_panel.TakePrefabRequest();
+        if (prefab_request.Valid())
+        {
+            const ReplayEngine::Core::GameObject* target =
+                active_object_scene().FindGameObjectByID(prefab_request);
+            if (target != nullptr && !target->PendingDestroy())
+            {
+                object_editor_context.Selection().Select(prefab_request, false);
+                if (object_editor_context.Selection().ResolvePrimary(object_scene) == target)
+                {
+                    selected_editor_object = editor_selection::game_object;
+                    save_selected_prefab(true);
+                }
+            }
+        }
         const ReplayEngine::Core::ObjectID after = object_editor_context.Selection().Primary();
 
         if (after.Valid() && after != before)

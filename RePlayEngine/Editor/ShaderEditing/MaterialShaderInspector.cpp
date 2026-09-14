@@ -6,6 +6,8 @@
 #include "imgui/imgui.h"
 
 #include <algorithm>
+#include <array>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -56,6 +58,29 @@ namespace ReplayEngine::Editor
         {
             if (!property.tooltip.empty() && ImGui::IsItemHovered())
                 ImGui::SetTooltip("%s", property.tooltip.c_str());
+        }
+
+        bool DrawGgstFaceBoneName(MaterialAsset& material)
+        {
+            constexpr const char* saved_name = "prop.FaceBoneName";
+            const Reflection::PropertyValue* stored = material.properties.Find(saved_name);
+            const std::string current = stored != nullptr ? stored->AsString() : std::string{};
+            std::array<char, 192> buffer{};
+            std::snprintf(buffer.data(), buffer.size(), "%s", current.c_str());
+
+            bool changed = false;
+            if (ImGui::InputText(u8"顔ボーン名", buffer.data(), buffer.size()))
+            {
+                material.properties.Set(saved_name,
+                    Reflection::PropertyValue::MakeString(buffer.data()));
+                changed = true;
+            }
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip(u8"モデル内のボーン名を完全一致で指定します。空なら下の顔ボーンIDを使います。");
+            }
+            ImGui::TextDisabled(u8"名前を指定した場合は顔ボーンIDより優先します。空ならIDがフォールバックです。");
+            return changed;
         }
 
         bool DrawTexture(const ShaderProperty& property,
@@ -145,7 +170,8 @@ namespace ReplayEngine::Editor
                     const std::string label = record->display_name.empty()
                         ? record->source_path.filename().u8string()
                         : record->display_name;
-                    if (ImGui::Selectable(label.c_str(), record->guid == guid))
+                    const std::string item_id = label + "##" + record->guid;
+                    if (ImGui::Selectable(item_id.c_str(), record->guid == guid))
                     {
                         material.properties.Set(saved,
                             Reflection::PropertyValue::MakeAssetReference(record->guid));
@@ -381,13 +407,17 @@ namespace ReplayEngine::Editor
         }
 
         std::size_t UnknownPropertyCount(const MaterialAsset& material,
-            const Rendering::ShaderPropertySchema* schema)
+            const Rendering::ShaderPropertySchema* schema, Rendering::ShaderID shader)
         {
             if (schema == nullptr) return material.properties.Size();
             std::size_t count = 0;
             for (const Reflection::PropertyBag::Entry& item : material.properties.Entries())
             {
-                if (schema->FindBySavedName(item.name) == nullptr) ++count;
+                if (schema->FindBySavedName(item.name) != nullptr) continue;
+                // 顔ボーン名はGPUへ送らないGGST専用Editorメタデータなので未知扱いにしない。
+                if (shader == Rendering::BuiltInShaders::Ggst &&
+                    item.name == "prop.FaceBoneName") continue;
+                ++count;
             }
             return count;
         }
@@ -437,6 +467,13 @@ namespace ReplayEngine::Editor
                 }
 
                 if (DrawProperty(property, material, assets))
+                {
+                    result.changed = true;
+                    result.properties_changed = true;
+                }
+
+                if (entry->info.id == Rendering::BuiltInShaders::Ggst &&
+                    property.name == "FaceLighting" && DrawGgstFaceBoneName(material))
                 {
                     result.changed = true;
                     result.properties_changed = true;
@@ -492,7 +529,8 @@ namespace ReplayEngine::Editor
             }
 
             const std::size_t retained = UnknownPropertyCount(material,
-                entry != nullptr && entry->schema ? entry->schema.get() : nullptr);
+                entry != nullptr && entry->schema ? entry->schema.get() : nullptr,
+                entry != nullptr ? entry->info.id : Rendering::ShaderID{});
             ImGui::TextDisabled("Retained / unknown properties  %zu", retained);
             ImGui::TextDisabled("未知 Property は Shader 切替や Missing 時にも削除しません");
             ImGui::TreePop();

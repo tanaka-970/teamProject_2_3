@@ -197,6 +197,9 @@ void framework::draw_motion_timeline()
         command_guide(u8"末尾へ移動", u8"末尾へ移動");
         command_guide(u8"1コマ戻る", u8"1フレーム戻る");
         command_guide(u8"1コマ進む", u8"1フレーム進む");
+        command_guide(u8"前のキーへ", u8"前のキーへ移動");
+        command_guide(u8"次のキーへ", u8"次のキーへ移動");
+        command_guide(u8"キーを全選択", u8"Track のキーをすべて選択");
         command_guide(u8"プリセットを適用",
             u8"選択中プリセットを一括適用（未選択はEaseInOutCubic）");
         ImGui::Separator();
@@ -980,7 +983,7 @@ void framework::draw_motion_graph_editor()
                 else
                 {
                     eased = ReplayEngine::Motion::ApplyEasing(
-                        a.easing, normalized, a.bezier);
+                        a.easing, normalized, a.bezier, a.power);
                 }
                 if (!std::isfinite(eased))
                 {
@@ -1323,6 +1326,17 @@ void framework::draw_motion_graph_editor()
         motion_editor_dirty = true;
         if (easing == MotionEasing::PresetCurve && easing_curve.IsAssigned())
             motion_selected_easing_curve = easing_curve;
+    }
+    if (key.easing == MotionEasing::EaseInPower)
+    {
+        float power = key.power;
+        if (ImGui::DragFloat(u8"指数##MotionGraphKeyPower", &power, 0.01f, 0.01f, 50.0f, "%.3f"))
+        {
+            motion_edit_history.Begin(motion_editor_asset, u8"イージング指数を変更");
+            key.power = (std::max)(0.01f, power);
+            motion_edit_history.Commit(motion_editor_asset);
+            motion_editor_dirty = true;
+        }
     }
     if (ImGui::Button(u8"自動スムーズ"))
     {

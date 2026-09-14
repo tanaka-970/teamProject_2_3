@@ -284,6 +284,7 @@ namespace framework_motion_workspace::Detail
             MotionEasing::EaseInOutElastic,
             MotionEasing::CustomBezier,
             MotionEasing::PresetCurve,
+            MotionEasing::EaseInPower,
         };
 
         bool changed = false;

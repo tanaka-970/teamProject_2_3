@@ -1,8 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include "../Core/ScriptTypeCatalog.h"
 #include "../../Assets/AssetDatabase.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -42,6 +43,15 @@ namespace ReplayEngine::Scripting::CSharp
         std::filesystem::path output_assembly;
         std::string output_text;
         std::vector<CSharpDiagnostic> diagnostics;
+    };
+
+    // Play 直前の freshness 判定と入力世代を 1 回の走査で取得する。
+    // input_revision は同じソース状態なら同じ値になり、ソース / project /
+    // Managed API dependency のどれかが変われば変化する。
+    struct CSharpBuildState final
+    {
+        bool build_required = true;
+        std::uint64_t input_revision = 0;
     };
 
     class CSharpProject final
@@ -94,6 +104,9 @@ namespace ReplayEngine::Scripting::CSharp
             const std::filesystem::path& project_root,
             const std::string& configuration = "Debug");
         static bool GameScriptsBuildRequired(
+            const std::filesystem::path& project_root,
+            const std::string& configuration = "Debug");
+        static CSharpBuildState QueryGameScriptsBuildState(
             const std::filesystem::path& project_root,
             const std::string& configuration = "Debug");
 

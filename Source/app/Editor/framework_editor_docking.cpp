@@ -10,8 +10,73 @@
 #include <string>
 #include <string_view>
 
+
+void framework::draw_editor_play_loading_overlay()
+{
+    if (!object_editor_play_loading || ImGui::GetCurrentContext() == nullptr) return;
+
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    if (viewport == nullptr) return;
+
+    // Editor 全体を覆う入力ブロッカー。Play 用スナップショットを作っている途中で
+    // Scene を編集されると Capture の前後で内容が変わるため、見た目だけでなく入力も止める。
+    ImGui::SetNextWindowPos(viewport->Pos, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(viewport->Size, ImGuiCond_Always);
+    ImGui::SetNextWindowViewport(viewport->ID);
+    ImGui::SetNextWindowBgAlpha(0.50f);
+    const ImGuiWindowFlags blocker_flags =
+        ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoNavFocus;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    if (ImGui::Begin("##EditorPlayLoadingBlocker", nullptr, blocker_flags))
+    {
+        const ImVec2 card_size(520.0f, 170.0f);
+        const ImVec2 available = ImGui::GetContentRegionAvail();
+        ImGui::SetCursorPos(ImVec2(
+            (std::max)(0.0f, (available.x - card_size.x) * 0.5f),
+            (std::max)(0.0f, (available.y - card_size.y) * 0.5f)));
+
+        ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 8.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(22.0f, 18.0f));
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.055f, 0.065f, 0.080f, 0.98f));
+        ImGui::BeginChild("##EditorPlayLoadingCard", card_size, true,
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+
+        ImGui::TextUnformatted(u8"実行準備中");
+        ImGui::Spacing();
+        ImGui::TextWrapped("%s", object_editor_play_stage_label.empty()
+            ? u8"実行用シーンを準備しています"
+            : object_editor_play_stage_label.c_str());
+        ImGui::Spacing();
+
+        const int percent = static_cast<int>((std::max)(0.0f,
+            (std::min)(1.0f, object_editor_play_progress)) * 100.0f + 0.5f);
+        const std::string percent_text = std::to_string(percent) + "%";
+        ImGui::PushStyleColor(ImGuiCol_PlotHistogram, ImVec4(0.16f, 0.68f, 0.32f, 1.0f));
+        ImGui::ProgressBar(object_editor_play_progress, ImVec2(-1.0f, 18.0f),
+            percent_text.c_str());
+        ImGui::PopStyleColor();
+
+        ImGui::Spacing();
+        ImGui::TextDisabled(u8"編集中のシーンは保持されます。実行中の変更は編集シーンへ戻りません。");
+        if (ImGui::Button(u8"■ 中止")) exit_object_play_mode();
+
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+        ImGui::PopStyleVar(2);
+    }
+    ImGui::End();
+    ImGui::PopStyleVar(2);
+}
+
 void framework::draw_editor()
 {
+    if (vertex_paint_stroke && (!vertex_paint_active() || !ImGui::IsMouseDown(ImGuiMouseButton_Left)))
+        finish_vertex_paint_stroke(false);
     object_inspector_panel.FinishPropertyEdit(object_editor_context);
     motion_rig_panel_visible = false;
     editor_session_active = true;
@@ -173,6 +238,7 @@ void framework::draw_editor()
         if (active_editor_view == editor_view::scene) handle_viewport_selection();
         draw_collider_debug_overlay();
         draw_dx12_debug_panel();
+        draw_editor_play_loading_overlay();
         return;
     }
 
@@ -225,6 +291,12 @@ void framework::draw_editor()
                 step_motion_preview_frames(1);
             if (motion_action_pressed(u8"1コマ戻る"))
                 step_motion_preview_frames(-1);
+            if (motion_action_pressed(u8"次のキーへ"))
+                step_motion_preview_key(1);
+            if (motion_action_pressed(u8"前のキーへ"))
+                step_motion_preview_key(-1);
+            if (motion_action_pressed(u8"キーを全選択"))
+                select_all_motion_keys();
             if (motion_action_pressed(u8"プリセットを適用"))
             {
                 const ReplayEngine::Assets::AssetRecord* preset_record =
@@ -251,6 +323,7 @@ void framework::draw_editor()
         }
         draw_scene_view_panel();
         if (show_hierarchy_panel) draw_scene_hierarchy();
+        draw_icon_settings_panel();
         draw_motion_layers();
         draw_motion_preview();
         draw_motion_inspector();
@@ -265,11 +338,13 @@ void framework::draw_editor()
         if (active_editor_view == editor_view::scene) handle_viewport_selection();
         draw_collider_debug_overlay();
         draw_dx12_debug_panel();
+        draw_editor_play_loading_overlay();
         return;
     }
 
     draw_scene_view_panel();
     if (show_hierarchy_panel) draw_scene_hierarchy();
+    draw_icon_settings_panel();
     if (show_inspector_panel) draw_inspector();
     if (show_project_panel) draw_project_panel();
     if (show_console_panel) draw_console_panel();
@@ -288,6 +363,8 @@ void framework::draw_editor()
         object_validation_panel.Draw(object_editor_context, &asset_database,
             &object_collision_world, object_render_items.Size());
     draw_collision_diagnostics_panel();
+    // ホバー中や操作中の ID を実機で確かめる窓。
+    if (show_imgui_metrics) ImGui::ShowMetricsWindow(&show_imgui_metrics);
     draw_dx12_debug_panel();
     draw_search_results();
     if (active_editor_view == editor_view::scene) handle_viewport_selection();
@@ -296,4 +373,5 @@ void framework::draw_editor()
     // 背景の描画リストへ積むので、パネルの下に隠れず、
     // かつパネルの上へも被らない。
     draw_collider_debug_overlay();
+    draw_editor_play_loading_overlay();
 }

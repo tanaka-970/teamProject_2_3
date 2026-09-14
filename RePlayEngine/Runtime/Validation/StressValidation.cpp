@@ -385,13 +385,17 @@ namespace ReplayEngine::Runtime::Validation
         }
         const std::size_t editor_count = editor_scene.GameObjectCount();
 
+        // Editor の反復 Play と同じく、編集内容が変わらない間は immutable
+        // SceneData を 1 回だけ Capture して共有する。Runtime World を汚して破棄しても
+        // 元 snapshot が変わらず次の Play に再利用できることをここで繰り返し検証する。
+        auto play_snapshot = std::make_shared<Serialization::SceneData>();
+        Serialization::CaptureScene(editor_scene, *play_snapshot,
+            Serialization::SceneCaptureMode::Play);
+
         bool play_ok = true;
         for (int cycle = 0; cycle < play_cycles; ++cycle)
         {
-            Serialization::SceneData snapshot;
-            Serialization::CaptureScene(editor_scene, snapshot);
-
-            if (scenes.RequestAdopt(snapshot, std::string()) !=
+            if (scenes.RequestAdoptShared(play_snapshot, std::string()) !=
                 SceneRequestResult::Accepted)
             {
                 play_ok = false;

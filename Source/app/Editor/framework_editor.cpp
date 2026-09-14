@@ -603,8 +603,113 @@ std::string framework::action_shortcut(std::string_view name) const
     return shortcut;
 }
 
+framework::editor_history_target framework::resolve_editor_history(bool undo, bool menu_context) const
+{
+    if (vertex_paint_active()) return editor_history_target::scene;
+    if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus)
+        return editor_history_target::atlas;
+
+    const bool motion_workspace = active_editor_workspace == editor_workspace::motion;
+    if (!motion_workspace)
+    {
+        if (show_scene_flow_panel && scene_flow_editor_loaded && !project_browser_focused)
+            return editor_history_target::scene_flow;
+        if (!project_browser_focused && material_editor_loaded &&
+            selected_editor_object == editor_selection::asset)
+            return editor_history_target::material;
+        // メニュー固有の Project 履歴の対象範囲も維持する。
+        if (project_browser_focused || (menu_context &&
+            (selected_editor_object == editor_selection::asset ||
+                selected_editor_object == editor_selection::world ||
+                selected_editor_object == editor_selection::rendering)))
+            return editor_history_target::external;
+    }
+
+    const bool rig_available = undo ? rig_pose_history_cursor > 0
+        : rig_pose_history_cursor < rig_pose_history.size();
+    if (rig_available)
+    {
+        const std::uint64_t other_serial = motion_workspace
+            ? (motion_composition_loaded ? composition_edit_history.EditSerial()
+                : motion_edit_history.EditSerial())
+            : object_editor_context.EditSerial();
+        if (rig_pose_last_serial > other_serial)
+            return editor_history_target::rig_pose;
+    }
+    return motion_workspace ? editor_history_target::motion : editor_history_target::scene;
+}
+
+bool framework::can_edit_history(editor_history_target target, bool undo)
+{
+    if (vertex_paint_stroke) return true;
+    if (gizmo_gesture_active()) return true;
+    switch (target)
+    {
+    case editor_history_target::atlas:
+        return undo ? sprite_atlas_history_cursor > 0
+            : sprite_atlas_history_cursor < sprite_atlas_history.size();
+    case editor_history_target::motion:
+        return motion_composition_loaded
+            ? (undo ? composition_edit_history.CanUndo() : composition_edit_history.CanRedo())
+            : (undo ? motion_edit_history.CanUndo() : motion_edit_history.CanRedo());
+    case editor_history_target::scene_flow:
+        return undo ? scene_flow_edit_history.CanUndo() : scene_flow_edit_history.CanRedo();
+    case editor_history_target::material:
+        return undo ? material_editor_history.CanUndo() : material_editor_history.CanRedo();
+    case editor_history_target::external:
+        return undo ? external_file_history.CanUndo() : external_file_history.CanRedo();
+    case editor_history_target::scene:
+        return undo ? object_editor_context.History().CanUndo()
+            : object_editor_context.History().CanRedo();
+    case editor_history_target::rig_pose:
+        return undo ? rig_pose_history_cursor > 0
+            : rig_pose_history_cursor < rig_pose_history.size();
+    }
+    return false;
+}
+
+bool framework::execute_editor_history(editor_history_target target, bool undo)
+{
+    if (vertex_paint_stroke)
+    {
+        finish_vertex_paint_stroke(true);
+        return true;
+    }
+    if (gizmo_gesture_active())
+    {
+        cancel_gizmo_gesture();
+        return true;
+    }
+    switch (target)
+    {
+    case editor_history_target::atlas:
+        return undo ? undo_sprite_atlas_edit() : redo_sprite_atlas_edit();
+    case editor_history_target::motion:
+        return undo ? undo_motion_edit() : redo_motion_edit();
+    case editor_history_target::scene_flow:
+        return undo ? undo_scene_flow_edit() : redo_scene_flow_edit();
+    case editor_history_target::material:
+        return undo ? undo_material_editor() : redo_material_editor();
+    case editor_history_target::external:
+    {
+        const bool handled = undo ? undo_external_file_edit() : redo_external_file_edit();
+        if (!handled)
+            project_browser_status = undo
+                ? "Projectで取り消せるファイル操作はありません"
+                : "Projectでやり直せるファイル操作はありません";
+        return handled;
+    }
+    case editor_history_target::scene:
+        return undo ? object_editor_context.Undo() : object_editor_context.Redo();
+    case editor_history_target::rig_pose:
+        return undo ? undo_rig_pose_edit() : redo_rig_pose_edit();
+    }
+    return false;
+}
+
 void framework::draw_editor_main_menu()
 {
+    sync_rig_selection();
     if (editor_style_history.InTransaction() && !ImGui::IsAnyItemActive())
     {
         editor_style_history.Commit(capture_editor_style_snapshot());
@@ -651,65 +756,27 @@ void framework::draw_editor_main_menu()
     {
         const std::string undo_shortcut = action_shortcut(u8"元に戻す");
         const std::string redo_shortcut = action_shortcut(u8"やり直し");
-        const bool atlas_context = sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus;
-        const bool motion_workspace = active_editor_workspace == editor_workspace::motion;
-        const bool material_context = !project_browser_focused && !atlas_context &&
-            !motion_workspace && material_editor_loaded &&
-            selected_editor_object == editor_selection::asset;
-        const bool scene_flow_context = !project_browser_focused &&
-            scene_flow_editor_loaded && show_scene_flow_panel;
-        const bool external_context = !atlas_context && !motion_workspace &&
-            !scene_flow_context &&
-            !material_context &&
-            (project_browser_focused || selected_editor_object == editor_selection::asset ||
-                selected_editor_object == editor_selection::world ||
-                selected_editor_object == editor_selection::rendering);
-        const bool scene_context = !atlas_context && !motion_workspace &&
-            !material_context && !external_context;
-        const bool scene_edit_blocked = scene_context && !object_editor_context.CanEdit();
-        const bool can_undo = atlas_context ? sprite_atlas_history_cursor > 0
-            : motion_workspace ? (motion_composition_loaded
-                ? composition_edit_history.CanUndo() : motion_edit_history.CanUndo())
-            : scene_flow_context ? scene_flow_edit_history.CanUndo()
-            : material_context ? material_editor_history.CanUndo()
-            : external_context ? external_file_history.CanUndo()
-            : object_editor_context.History().CanUndo();
-        if (scene_edit_blocked) ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
+        const editor_history_target undo_target = resolve_editor_history(true, true);
+        const bool undo_blocked = undo_target == editor_history_target::scene &&
+            !object_editor_context.CanEdit();
+        if (undo_blocked) ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
             ImGui::GetStyle().Alpha * 0.5f);
-        if (ImGui::MenuItem("Undo", undo_shortcut.c_str(), false, can_undo))
-        {
-            if (atlas_context) undo_sprite_atlas_edit();
-            else if (motion_workspace) undo_motion_edit();
-            else if (scene_flow_context) undo_scene_flow_edit();
-            else if (material_context) undo_material_editor();
-            else if (external_context) undo_external_file_edit();
-            else object_editor_context.Undo();
-        }
-        if (scene_edit_blocked)
+        if (ImGui::MenuItem("Undo", undo_shortcut.c_str(), false, can_edit_history(undo_target, true)))
+            execute_editor_history(undo_target, true);
+        if (undo_blocked)
         {
             ReplayEngine::Editor::EditorHelp::Item("button.edit.undo_blocked",
                 u8"実行中は元に戻せません。Shift+F5 で停止してください。");
             ImGui::PopStyleVar();
         }
-        const bool can_redo = atlas_context ? sprite_atlas_history_cursor < sprite_atlas_history.size()
-            : motion_workspace ? (motion_composition_loaded
-                ? composition_edit_history.CanRedo() : motion_edit_history.CanRedo())
-            : scene_flow_context ? scene_flow_edit_history.CanRedo()
-            : material_context ? material_editor_history.CanRedo()
-            : external_context ? external_file_history.CanRedo()
-            : object_editor_context.History().CanRedo();
-        if (scene_edit_blocked) ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
+        const editor_history_target redo_target = resolve_editor_history(false, true);
+        const bool redo_blocked = redo_target == editor_history_target::scene &&
+            !object_editor_context.CanEdit();
+        if (redo_blocked) ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
             ImGui::GetStyle().Alpha * 0.5f);
-        if (ImGui::MenuItem("Redo", redo_shortcut.c_str(), false, can_redo))
-        {
-            if (atlas_context) redo_sprite_atlas_edit();
-            else if (motion_workspace) redo_motion_edit();
-            else if (scene_flow_context) redo_scene_flow_edit();
-            else if (material_context) redo_material_editor();
-            else if (external_context) redo_external_file_edit();
-            else object_editor_context.Redo();
-        }
-        if (scene_edit_blocked) ImGui::PopStyleVar();
+        if (ImGui::MenuItem("Redo", redo_shortcut.c_str(), false, can_edit_history(redo_target, false)))
+            execute_editor_history(redo_target, false);
+        if (redo_blocked) ImGui::PopStyleVar();
         ImGui::EndMenu();
     }
     // GameObject / Component / Assets を 1 つへまとめる。
@@ -812,6 +879,7 @@ void framework::draw_editor_main_menu()
         ImGui::MenuItem("Scene Flow", nullptr, &show_scene_flow_panel);
         ImGui::MenuItem(u8"カメラ操作プリセット", nullptr, &show_camera_preset_manager);
         ImGui::MenuItem("Collision Diagnostics", nullptr, &show_collision_diagnostics);
+        ImGui::MenuItem("ImGui Metrics", nullptr, &show_imgui_metrics);
         ImGui::Separator();
         // シェーダ資産の一覧。
         // .hlsl の #pragma がそのまま項目になることを確かめる窓。
@@ -1046,6 +1114,9 @@ void framework::draw_editor_main_menu()
                 }
                 ImGui::TreePop();
             }
+
+            ImGui::Separator();
+            if (ImGui::MenuItem(u8"種類別アイコン...")) show_icon_settings_window = true;
 
             if (ImGui::TreeNodeEx(u8"詳細", 0))
             {

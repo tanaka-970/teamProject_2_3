@@ -97,6 +97,13 @@ namespace
         bounds.valid = initialized;
         return bounds;
     }
+
+    float resolve_ggst_shading_threshold(float terminator, float adjustment) noexcept
+    {
+        const float boundary = std::clamp(terminator, 0.0f, 1.0f) +
+            (std::clamp(adjustment, 0.0f, 1.0f) - 0.5f);
+        return std::clamp(boundary * 0.5f, 0.0f, 1.0f);
+    }
 }
 
 ReplayEngine::Rendering::RenderItem framework::resolve_render_item_material(
@@ -740,7 +747,6 @@ bool framework::build_dx12_static_scene(
     {
         return std::isfinite(value) ? value : fallback;
     };
-
     const auto fill_external_material = [this, &submission, &shader_source_keys,
         &material_alpha_mode, &multiply_color, &add_asset_texture,
         &base_texture_binding, &fallback_texture_key, &read_layer_float,
@@ -815,11 +821,61 @@ bool framework::build_dx12_static_scene(
         draw.alpha_cutoff = material->alpha_cutoff;
         const BaseTextureBinding binding = base_texture_binding(item);
         const bool flat_fill = item.material_binding.shader == BuiltInShaders::FlatFill;
+        const bool is_ggst = item.material_binding.shader == BuiltInShaders::Ggst;
         // BuiltIn は自前 PSO を持てないので、固有表現は builtin_params で運ぶ。
-        // x=効果ID（1=Pixelate）、y/z/w=その効果の引数。増やすときは ID を足す。
-        const bool is_toon = item.material_binding.shader == BuiltInShaders::Toon ||
-            (uses_deferred_layer && item.lighting_model == ShaderLightingModel::Toon);
-        if (is_toon && !item.pixelate_enabled)
+        // x=効果ID（1=Pixelate / 2=Toon / 3=GGST）、y/z/w=その効果の引数。
+        const bool is_toon = !is_ggst && (item.material_binding.shader == BuiltInShaders::Toon ||
+            (uses_deferred_layer && item.lighting_model == ShaderLightingModel::Toon));
+        if (is_ggst && !item.pixelate_enabled)
+        {
+            const auto property_float = [material](const char* name, float fallback)
+            {
+                const auto* value = material->properties.Find(name);
+                return value != nullptr ? value->AsFloat(fallback) : fallback;
+            };
+            const auto property_bool = [material](const char* name, bool fallback)
+            {
+                const auto* value = material->properties.Find(name);
+                return value != nullptr ? value->AsBool(fallback) : fallback;
+            };
+            const auto property_color = [material](const char* name,
+                const DirectX::XMFLOAT4& fallback)
+            {
+                const auto* value = material->properties.Find(name);
+                return value != nullptr ? value->AsVector4() : fallback;
+            };
+            const DirectX::XMFLOAT4 shade = property_color(
+                "prop.ShadeColor", { 0.12f, 0.18f, 0.24f, 1.0f });
+            const float shading_adjustment = std::clamp(
+                property_float("prop.ShadingThreshold", 0.5f), 0.0f, 1.0f);
+            const auto* shading_terminator = material->properties.Find(
+                "prop.ShadingTerminator");
+            const float shading_threshold = shading_terminator != nullptr
+                ? resolve_ggst_shading_threshold(shading_terminator->AsFloat(0.5f),
+                    shading_adjustment)
+                : shading_adjustment;
+            draw.builtin_params = { 3.0f,
+                shading_threshold,
+                std::clamp(property_float("prop.ShadingOffset", 0.0f), -1.0f, 1.0f),
+                std::clamp(property_float("prop.SpecularSize", 0.2f), 0.0f, 1.0f) };
+            draw.builtin_params1 = {
+                std::clamp(shade.x, 0.0f, 1.0f), std::clamp(shade.y, 0.0f, 1.0f),
+                std::clamp(shade.z, 0.0f, 1.0f),
+                std::clamp(property_float("prop.SpecularIntensity", 10.0f), 0.0f, 20.0f) };
+            draw.builtin_params2 = {
+                property_bool("prop.FaceLighting", false) ? 1.0f : 0.0f,
+                std::clamp(property_float("prop.FaceBoneIndex", 0.0f), 0.0f, 1023.0f),
+                property_bool("prop.FlipFaceRight", false) ? 1.0f : 0.0f,
+                property_bool("prop.FlipFaceFront", false) ? 1.0f : 0.0f };
+            draw.ggst_face_bone_index = static_cast<std::int32_t>(
+                std::lround(draw.builtin_params2.y));
+            if (const auto* name = material->properties.Find("prop.FaceBoneName"))
+            {
+                if (name->Type() == ReplayEngine::Reflection::PropertyType::String)
+                    draw.ggst_face_bone_name = name->AsString();
+            }
+        }
+        else if (is_toon && !item.pixelate_enabled)
         {
             const auto property_float = [material](const char* name, float fallback)
             {
@@ -890,11 +946,14 @@ bool framework::build_dx12_static_scene(
         {
             D3D12StaticMaterialTexture mapped;
             mapped.slot = texture.slot;
-            // BuiltIn Toon の RampMap だけ宣言順(t41)ではなく Bridge の固定 slot へ載せ替える。
+            // BuiltIn の特殊Textureは宣言順ではなく固定Bridge slotへ載せ替える。
             std::uint32_t bridge_slot = 0;
-            if (is_toon && texture.property_name == "RampMap" &&
-                ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
-                    texture.property_name, bridge_slot))
+            const bool fixed_bridge_texture =
+                (is_toon && texture.property_name == "RampMap") ||
+                (is_ggst && (texture.property_name == "IlmMap" ||
+                    texture.property_name == "SssMap"));
+            if (fixed_bridge_texture && ResolvedMaterialBinding::TryGetGBufferBridgeSlot(
+                texture.property_name, bridge_slot))
                 mapped.slot = bridge_slot;
             mapped.texture_key = add_asset_texture(texture.asset_guid);
             if (mapped.texture_key.empty())
@@ -961,9 +1020,45 @@ bool framework::build_dx12_static_scene(
         return source_item.material_slots[subset_index];
     };
 
-    const auto make_mesh_source = [&submission, &mesh_source_keys, this](
+    const auto load_vertex_colors = [](RenderItem& item, const std::filesystem::path& model_path,
+        const auto& meshes)
+    {
+        if (item.vertex_colors || model_path.empty()) return;
+        const auto path = ReplayEngine::Assets::VertexColorAsset::SidecarPath(model_path);
+        std::error_code ec;
+        if (!std::filesystem::exists(path, ec) || ec) return;
+        std::vector<ReplayEngine::Assets::VertexColorFingerprint> expected;
+        expected.reserve(meshes.size());
+        for (const auto& mesh : meshes)
+        {
+            if (mesh.vertices.size() > UINT32_MAX || mesh.indices.size() > UINT32_MAX) return;
+            expected.push_back(ReplayEngine::Assets::VertexColorAsset::Fingerprint(
+                mesh.vertices.empty() ? nullptr : &mesh.vertices.front().position,
+                static_cast<std::uint32_t>(mesh.vertices.size()), sizeof(mesh.vertices.front()),
+                static_cast<std::uint32_t>(mesh.indices.size())));
+        }
+        auto asset = std::make_shared<ReplayEngine::Assets::VertexColorAsset>();
+        std::string error;
+        if (ReplayEngine::Assets::VertexColorAsset::LoadFromFile(path, expected, *asset, error))
+            item.vertex_colors = std::move(asset);
+    };
+    const auto copy_vertex_colors = [](auto& source, const RenderItem* item,
+        std::uint32_t mesh_index)
+    {
+        if (item == nullptr || !item->vertex_colors || source.vertices.empty() ||
+            source.vertices.size() > UINT32_MAX || source.indices.size() > UINT32_MAX) return;
+        const auto fingerprint = ReplayEngine::Assets::VertexColorAsset::Fingerprint(
+            &source.vertices.front().position, static_cast<std::uint32_t>(source.vertices.size()),
+            sizeof(source.vertices.front()), static_cast<std::uint32_t>(source.indices.size()));
+        if (const auto* block = item->vertex_colors->FindMesh(mesh_index, fingerprint))
+            source.vertex_colors = block->colors;
+    };
+
+    const auto make_mesh_source = [&submission, &mesh_source_keys, &copy_vertex_colors, this](
         const std::string& key, auto vertex_begin, auto vertex_end,
-        const std::vector<std::uint32_t>& indices)
+        const std::vector<std::uint32_t>& indices,
+        const RenderItem* item = nullptr, std::uint32_t mesh_index = 0,
+        const std::vector<ReplayEngine::Assets::VertexColorRgba8>* imported_colors = nullptr)
     {
         // 視錐台カリング用の境界。メッシュごとに一度だけ求めて残す。
         if (static_mesh_bounds_cache.find(key) == static_mesh_bounds_cache.end())
@@ -987,6 +1082,9 @@ bool framework::build_dx12_static_scene(
                 source.vertices.push_back(vertex);
             }
             source.indices = indices;
+            if (imported_colors != nullptr && imported_colors->size() == source.vertices.size())
+                source.vertex_colors = *imported_colors;
+            copy_vertex_colors(source, item, mesh_index);
             submission.mesh_sources.push_back(std::move(source));
         }
         catch (...)
@@ -996,8 +1094,8 @@ bool framework::build_dx12_static_scene(
     };
 
     std::unordered_set<std::string> skinned_mesh_source_keys;
-    const auto make_skinned_mesh_source = [&submission, &skinned_mesh_source_keys](
-        const std::string& key, const skinned_mesh::mesh& mesh)
+    const auto make_skinned_mesh_source = [&submission, &skinned_mesh_source_keys, &copy_vertex_colors](
+        const std::string& key, const skinned_mesh::mesh& mesh, const RenderItem& item, std::uint32_t mesh_index)
     {
         if (!skinned_mesh_source_keys.insert(key).second) return;
         REPLAY_PROFILE_SCOPE("Item/MakeSkinnedSource");
@@ -1022,6 +1120,9 @@ bool framework::build_dx12_static_scene(
                 source.vertices.push_back(vertex);
             }
             source.indices = mesh.indices;
+            if (mesh.vertex_colors.size() == source.vertices.size())
+                source.vertex_colors = mesh.vertex_colors;
+            copy_vertex_colors(source, &item, mesh_index);
             submission.skinned_mesh_sources.push_back(std::move(source));
         }
         catch (...)
@@ -1467,11 +1568,40 @@ bool framework::build_dx12_static_scene(
         return bounds;
     };
 
+    // 単体表示の対象。毎フレーム作り直すが、歩くのは部分木だけなので安い。
+    std::unordered_set<std::uint64_t> isolate_ids;
+    if (options.isolate_root.Valid())
+    {
+        if (const ReplayEngine::Core::GameObject* root =
+            scene.FindGameObjectByID(options.isolate_root))
+        {
+            std::vector<const ReplayEngine::Core::GameObject*> pending{ root };
+            while (!pending.empty())
+            {
+                const ReplayEngine::Core::GameObject* current = pending.back();
+                pending.pop_back();
+                if (current == nullptr) continue;
+                isolate_ids.insert(current->ID().Value());
+                for (const ReplayEngine::Core::GameObject* child : current->Children())
+                    pending.push_back(child);
+            }
+        }
+    }
+
+    // 骨の一覧は owner ごとに1つ。メッシュを跨いでも作り直さず統合する。
+    const bool rig_capture_enabled = show_rig_debug_draw ||
+        (show_motion_rig_panel && motion_rig_panel_visible &&
+            active_editor_workspace == editor_workspace::motion);
+    std::unordered_set<std::uint64_t> rig_owners_captured;
+
     for (const RenderItem& source_item : render_items.Items())
     {
         if (source_item.mesh_asset.empty()) continue;
+        if (!isolate_ids.empty() &&
+            isolate_ids.find(source_item.owner.Value()) == isolate_ids.end())
+            continue;
 
-        const RenderItem item = resolve_render_item_material(source_item);
+        RenderItem item = resolve_render_item_material(source_item);
         if (source_item.skinned)
         {
             skinned_mesh* mesh_asset = resolve_object_mesh(item.mesh_asset);
@@ -1496,7 +1626,10 @@ bool framework::build_dx12_static_scene(
                 D3D12MeshLocalBounds cached_bounds;
                 if (!dx12_device_context.HasSkinnedMesh(mesh_key) ||
                     !dx12_device_context.GetSkinnedMeshLocalBounds(mesh_key, cached_bounds))
-                    make_skinned_mesh_source(mesh_key, mesh);
+                {
+                    load_vertex_colors(item, model_source, mesh_asset->meshes);
+                    make_skinned_mesh_source(mesh_key, mesh, item, static_cast<std::uint32_t>(mesh_index));
+                }
 
                 DirectX::XMFLOAT4X4 mesh_world =
                     multiply_world(mesh.default_global_transform, item.world);
@@ -1634,28 +1767,47 @@ bool framework::build_dx12_static_scene(
                     }
                 }
 
-                if ((show_rig_debug_draw || (show_motion_rig_panel && motion_rig_panel_visible &&
-                    active_editor_workspace == editor_workspace::motion)) && bone_globals_ready)
+                if (rig_capture_enabled && bone_globals_ready)
                 {
                     // 上で組んだ行列をそのまま使う。ポーズも表示へ反映される。
                     const DirectX::XMMATRIX object_world =
                         DirectX::XMLoadFloat4x4(&item.world);
                     std::vector<rig_debug_bone>& bones =
                         object_rig_debug_bones[source_item.owner.Value()];
-                    bones.clear();
-                    bones.reserve(mesh.bind_pose.bones.size());
+                    if (rig_owners_captured.insert(source_item.owner.Value()).second)
+                        bones.clear();
+                    // メッシュごとに骨集合が違うモデルがある。名前で突き合わせて足す。
+                    std::vector<int> merged_index(mesh.bind_pose.bones.size(), -1);
                     for (std::size_t index = 0; index < mesh.bind_pose.bones.size(); ++index)
                     {
                         const skeleton::bone& bone = mesh.bind_pose.bones[index];
-                        rig_debug_bone entry{};
-                        entry.name = bone.name;
-                        entry.parent = static_cast<int>(bone.parent_index);
+                        int slot = -1;
+                        for (std::size_t i = 0; i < bones.size(); ++i)
+                            if (bones[i].name == bone.name) { slot = static_cast<int>(i); break; }
+                        if (slot < 0)
+                        {
+                            slot = static_cast<int>(bones.size());
+                            bones.push_back(rig_debug_bone{});
+                        }
+                        rig_debug_bone& entry = bones[static_cast<std::size_t>(slot)];
                         const DirectX::XMMATRIX global =
                             DirectX::XMLoadFloat4x4(&bone_globals[index]);
                         const DirectX::XMMATRIX bone_world = global * object_world;
+                        entry.name = bone.name;
                         DirectX::XMStoreFloat3(&entry.world, bone_world.r[3]);
                         DirectX::XMStoreFloat4x4(&entry.world_matrix, bone_world);
-                        bones.push_back(std::move(entry));
+                        merged_index[index] = slot;
+                    }
+                    // 親は統合後の番号へ振り直す。メッシュ内の番号のままだと別の骨を指す。
+                    for (std::size_t index = 0; index < mesh.bind_pose.bones.size(); ++index)
+                    {
+                        const int slot = merged_index[index];
+                        if (slot < 0) continue;
+                        const int parent =
+                            static_cast<int>(mesh.bind_pose.bones[index].parent_index);
+                        bones[static_cast<std::size_t>(slot)].parent =
+                            parent >= 0 && static_cast<std::size_t>(parent) < merged_index.size()
+                            ? merged_index[static_cast<std::size_t>(parent)] : -1;
                     }
                 }
 
@@ -1778,6 +1930,62 @@ bool framework::build_dx12_static_scene(
                             draw.double_sided = item.double_sided;
                         }
                     }
+                    if (draw.builtin_params.x >= 2.5f && draw.builtin_params.x < 3.5f &&
+                        draw.builtin_params2.x >= 0.5f && !mesh.bind_pose.bones.empty())
+                    {
+                        std::size_t face_bone = static_cast<std::size_t>((std::max)(0,
+                            draw.ggst_face_bone_index));
+                        if (!draw.ggst_face_bone_name.empty())
+                        {
+                            const auto named = std::find_if(mesh.bind_pose.bones.begin(),
+                                mesh.bind_pose.bones.end(), [&draw](const skeleton::bone& bone)
+                                {
+                                    return bone.name == draw.ggst_face_bone_name;
+                                });
+                            if (named != mesh.bind_pose.bones.end())
+                                face_bone = static_cast<std::size_t>(
+                                    std::distance(mesh.bind_pose.bones.begin(), named));
+                        }
+                        face_bone = (std::min)(face_bone, mesh.bind_pose.bones.size() - 1u);
+                        draw.ggst_face_bone_index = static_cast<std::int32_t>(face_bone);
+                        draw.builtin_params2.y = static_cast<float>(face_bone);
+
+                        const skeleton::bone& bone = mesh.bind_pose.bones[face_bone];
+                        DirectX::XMMATRIX bone_global = DirectX::XMMatrixIdentity();
+                        if (bone_globals_ready && face_bone < bone_globals.size())
+                        {
+                            bone_global = DirectX::XMLoadFloat4x4(&bone_globals[face_bone]);
+                        }
+                        else if (keyframe != nullptr && bone.node_index >= 0 &&
+                            static_cast<std::size_t>(bone.node_index) < keyframe->nodes.size())
+                        {
+                            bone_global = DirectX::XMLoadFloat4x4(&keyframe->nodes[
+                                static_cast<std::size_t>(bone.node_index)].global_transform);
+                        }
+                        else
+                        {
+                            bone_global = DirectX::XMMatrixInverse(nullptr,
+                                DirectX::XMLoadFloat4x4(&bone.offset_transform));
+                        }
+
+                        DirectX::XMMATRIX mesh_global =
+                            DirectX::XMLoadFloat4x4(&mesh.default_global_transform);
+                        if (keyframe != nullptr && mesh.node_index >= 0 &&
+                            static_cast<std::size_t>(mesh.node_index) < keyframe->nodes.size())
+                        {
+                            mesh_global = DirectX::XMLoadFloat4x4(&keyframe->nodes[
+                                static_cast<std::size_t>(mesh.node_index)].global_transform);
+                        }
+                        const DirectX::XMMATRIX bone_in_mesh = bone_global *
+                            DirectX::XMMatrixInverse(nullptr, mesh_global);
+                        DirectX::XMStoreFloat3(&draw.ggst_face_right,
+                            DirectX::XMVector3Normalize(DirectX::XMVector3TransformNormal(
+                                DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f), bone_in_mesh)));
+                        DirectX::XMStoreFloat3(&draw.ggst_face_front,
+                            DirectX::XMVector3Normalize(DirectX::XMVector3TransformNormal(
+                                DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), bone_in_mesh)));
+                    }
+
                     skinned_draw.motion_key = std::to_string(source_item.owner.Value()) + ":" +
                         mesh_key + ":" + std::to_string(start);
                     resolve_normal_adjust(source_item, draw, &mesh, keyframe);
@@ -1896,6 +2104,10 @@ bool framework::build_dx12_static_scene(
             if (geometry_missing)
             {
                 if (!gltf->ExportStaticPrimitives(exported)) continue;
+                std::filesystem::path model_source;
+                std::string model_reason;
+                (void)resolve_model_source(item.mesh_asset, model_source, model_reason);
+                load_vertex_colors(item, model_source, exported);
                 for (std::size_t primitive_index = 0;
                     primitive_index < exported.size(); ++primitive_index)
                 {
@@ -1904,7 +2116,8 @@ bool framework::build_dx12_static_scene(
                     if (!dx12_device_context.HasStaticMesh(key))
                         make_mesh_source(key, exported[primitive_index].vertices.begin(),
                             exported[primitive_index].vertices.end(),
-                            exported[primitive_index].indices);
+                            exported[primitive_index].indices, &item, static_cast<std::uint32_t>(primitive_index),
+                            &exported[primitive_index].vertex_colors);
                 }
             }
 
@@ -1988,8 +2201,12 @@ bool framework::build_dx12_static_scene(
             const std::string mesh_key = item.mesh_asset + "#mesh:" +
                 std::to_string(mesh_index);
             if (!dx12_device_context.HasStaticMesh(mesh_key))
+            {
+                load_vertex_colors(item, model_source, mesh_asset->meshes);
                 make_mesh_source(mesh_key, mesh.vertices.begin(), mesh.vertices.end(),
-                    mesh.indices);
+                    mesh.indices, &item, static_cast<std::uint32_t>(mesh_index),
+                    &mesh.vertex_colors);
+            }
 
             const DirectX::XMFLOAT4X4 mesh_world =
                 multiply_world(mesh.default_global_transform, item.world);
@@ -2116,6 +2333,15 @@ bool framework::build_dx12_static_scene(
             }
         }
     }
+
+    submit_vertex_paint(submission, render_items,
+        options.include_auxiliary_geometry && &scene == &active_object_scene());
+
+    // 描画へ出なかった owner の骨を残さない。単体表示で隠したモデルが選択候補に残る。
+    if (rig_capture_enabled && options.include_auxiliary_geometry)
+        for (auto it = object_rig_debug_bones.begin(); it != object_rig_debug_bones.end(); )
+            it = rig_owners_captured.count(it->first) == 0
+                ? object_rig_debug_bones.erase(it) : std::next(it);
 
     if (options.include_auxiliary_geometry && editor_mode && !object_scene_play_mode)
     {

@@ -1,4 +1,4 @@
-#include "CSharpProject.h"
+﻿#include "CSharpProject.h"
 
 #include "../Core/ScriptLanguage.h"
 #include "../Core/ScriptTypes.h"
@@ -98,12 +98,43 @@ namespace ReplayEngine::Scripting::CSharp
             ManagedApiAssemblyPath(root, configuration));
     }
 
-    bool CSharpProject::GameScriptsBuildRequired(
+    CSharpBuildState CSharpProject::QueryGameScriptsBuildState(
         const std::filesystem::path& project_root, const std::string& configuration)
     {
         const std::filesystem::path root = NormalizeRoot(project_root);
-        return SourceTreeIsNewer(ScriptsRoot(root),
-            GameScriptsAssemblyPath(root, configuration),
+
+        // GameScripts だけでなく Managed API の入力世代も同じ状態値へ含める。
+        // これが無いと Managed API 側のソースだけ修正した場合、直前の失敗 revision と
+        // 同一に見えて Play 前ビルドを永遠に再試行しない可能性がある。
+        const CSharpBuildState managed = QuerySourceTreeBuildState(
+            ManagedApiProjectPath(root).parent_path(),
+            ManagedApiAssemblyPath(root, configuration));
+        const CSharpBuildState scripts = QuerySourceTreeBuildState(
+            ScriptsRoot(root), GameScriptsAssemblyPath(root, configuration),
             { ManagedApiAssemblyPath(root, configuration) });
+
+        std::error_code error;
+        const bool runtime_config_missing = !std::filesystem::exists(
+            ManagedApiRuntimeConfigPath(root, configuration), error) || error;
+
+        CSharpBuildState combined;
+        combined.build_required = managed.build_required || scripts.build_required ||
+            runtime_config_missing;
+
+        // boost::hash_combine と同じ考え方で 2 系統の世代を 1 値へ畳む。
+        // 0 は framework 側の「未記録」なので最後に避ける。
+        std::uint64_t revision = managed.input_revision;
+        revision ^= scripts.input_revision + 0x9e3779b97f4a7c15ull +
+            (revision << 6) + (revision >> 2);
+        if (runtime_config_missing)
+            revision ^= 0xd6e8feb86659fd93ull;
+        combined.input_revision = revision != 0 ? revision : 1;
+        return combined;
+    }
+
+    bool CSharpProject::GameScriptsBuildRequired(
+        const std::filesystem::path& project_root, const std::string& configuration)
+    {
+        return QueryGameScriptsBuildState(project_root, configuration).build_required;
     }
 }

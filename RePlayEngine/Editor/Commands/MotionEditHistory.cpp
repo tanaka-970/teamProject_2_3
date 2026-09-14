@@ -1,4 +1,5 @@
 ﻿#include "MotionEditHistory.h"
+#include "EditSerial.h"
 
 #include "../../Reflection/Property/PropertyValue.h"
 
@@ -31,6 +32,7 @@ namespace ReplayEngine::Editor
             return NearlyEqual(a.time, b.time) &&
                 a.easing == b.easing &&
                 a.easing_curve.guid == b.easing_curve.guid &&
+                NearlyEqual(a.power, b.power) &&
                 NearlyEqual(a.bezier.out_handle.x, b.bezier.out_handle.x) &&
                 NearlyEqual(a.bezier.out_handle.y, b.bezier.out_handle.y) &&
                 NearlyEqual(a.bezier.in_handle.x, b.bezier.in_handle.x) &&
@@ -213,6 +215,7 @@ namespace ReplayEngine::Editor
         entries_.push_back(std::move(entry));
         if (entries_.size() > maximum_entries) entries_.erase(entries_.begin());
         cursor_ = entries_.size();
+        edit_serial_ = NextEditSerial();
     }
 
     void MotionEditHistory::Cancel() noexcept
@@ -231,6 +234,7 @@ namespace ReplayEngine::Editor
         const Entry& entry = entries_[cursor_];
         asset = entry.before;
         label = entry.label;
+        edit_serial_ = NextEditSerial();
         return true;
     }
 
@@ -243,6 +247,7 @@ namespace ReplayEngine::Editor
         asset = entry.after;
         label = entry.label;
         ++cursor_;
+        edit_serial_ = NextEditSerial();
         return true;
     }
 
@@ -291,6 +296,7 @@ namespace ReplayEngine::Editor
         entries_.push_back(std::move(entry));
         if (entries_.size() > maximum_entries) entries_.erase(entries_.begin());
         cursor_ = entries_.size();
+        edit_serial_ = NextEditSerial();
     }
 
     void CompositionEditHistory::Cancel() noexcept
@@ -310,6 +316,7 @@ namespace ReplayEngine::Editor
         const Entry& entry = entries_[cursor_];
         asset = entry.before;
         label = entry.label;
+        edit_serial_ = NextEditSerial();
         return true;
     }
 
@@ -323,6 +330,7 @@ namespace ReplayEngine::Editor
         asset = entry.after;
         label = entry.label;
         ++cursor_;
+        edit_serial_ = NextEditSerial();
         return true;
     }
 

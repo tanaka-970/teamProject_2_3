@@ -31,6 +31,7 @@ public static class EngineEventIds
     public const string InputFieldValueChanged = "a1000000000000000000000000000021";
     public const string AnimatorStateChanged = "a1000000000000000000000000000022";
     public const string SliderValueChanged = "a1000000000000000000000000000023";
+    public const string MotionFinished = "a1000000000000000000000000000024";
 }
 
 // 接触 1 件分。OnCollisionEnter などが受け取る。

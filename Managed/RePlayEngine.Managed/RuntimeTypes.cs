@@ -89,6 +89,28 @@ public readonly struct MotionPlayer
     public RuntimeResult<float> GetDuration() => NativeBridge.MotionGetDuration(Handle);
 }
 
+// Motion Composition を鳴らす側。MotionPlayer と同じ使い勝手に揃えている。
+public readonly struct CompositionPlayer
+{
+    internal CompositionPlayer(ComponentHandle handle)
+    {
+        Handle = handle;
+    }
+
+    internal ComponentHandle Handle { get; }
+    public bool IsValid => !Handle.IsEmpty;
+
+    public RuntimeStatus Play() => NativeBridge.CompositionPlay(Handle);
+    public RuntimeStatus Pause() => NativeBridge.CompositionPause(Handle);
+    public RuntimeStatus Resume() => NativeBridge.CompositionResume(Handle);
+    public RuntimeStatus Stop() => NativeBridge.CompositionStop(Handle);
+    public RuntimeStatus SetTime(float seconds) => NativeBridge.CompositionSetTime(Handle, seconds);
+    public RuntimeStatus SetSpeed(float speed) => NativeBridge.CompositionSetSpeed(Handle, speed);
+    public RuntimeStatus SetWeight(float weight) => NativeBridge.CompositionSetWeight(Handle, weight);
+    public RuntimeResult<bool> IsPlaying() => NativeBridge.CompositionIsPlaying(Handle);
+    public RuntimeResult<float> GetTime() => NativeBridge.CompositionGetTime(Handle);
+}
+
 [StructLayout(LayoutKind.Sequential)]
 public struct ObjectReference
 {

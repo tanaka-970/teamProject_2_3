@@ -30,6 +30,7 @@
 #endif
 #include "imgui_internal.h"
 #include "ImGuizmo.h"
+#include <cmath>
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
 #include <malloc.h>
@@ -686,6 +687,8 @@ namespace IMGUIZMO_NAMESPACE
       vec_t mRotationVectorSource;
       float mRotationAngle;
       float mRotationAngleOrigin;
+      float mRotationAngleDisplay = 0.f;
+      float mRotationAngleDisplayPrevious = 0.f;
       //vec_t mWorldToLocalAxis;
 
       // scale
@@ -716,6 +719,10 @@ namespace IMGUIZMO_NAMESPACE
       float mY = 0.f;
       float mWidth = 0.f;
       float mHeight = 0.f;
+      float mSizeReferenceHeight = 0.f;
+      ImVec2 mLabelRectMin;
+      ImVec2 mLabelRectMax;
+      bool mHasLabelRect = false;
       float mXMax = 0.f;
       float mYMax = 0.f;
       float mDisplayRatio = 1.f;
@@ -903,8 +910,21 @@ namespace IMGUIZMO_NAMESPACE
       gContext.mWidth = width;
       gContext.mHeight = height;
       gContext.mXMax = gContext.mX + gContext.mWidth;
-      gContext.mYMax = gContext.mY + gContext.mXMax;
+      gContext.mYMax = gContext.mY + gContext.mHeight;
       gContext.mDisplayRatio = width / height;
+   }
+
+   void SetSizeReference(float width, float height)
+   {
+      gContext.mSizeReferenceHeight = width > 0.f && height > 0.f && std::isfinite(width) && std::isfinite(height) ? height : 0.f;
+   }
+
+   void SetLabelRect(float x, float y, float width, float height)
+   {
+      gContext.mLabelRectMin = ImVec2(x, y);
+      gContext.mLabelRectMax = ImVec2(x + width, y + height);
+      gContext.mHasLabelRect = width > 0.f && height > 0.f && std::isfinite(x) && std::isfinite(y) &&
+         std::isfinite(x + width) && std::isfinite(y + height);
    }
 
    void SetOrthographic(bool isOrthographic)
@@ -1186,10 +1206,31 @@ namespace IMGUIZMO_NAMESPACE
       }
    }
 
-   static float ComputeAngleOnPlan()
+   static bool TryGetRotationPlanePosition(const vec_t& plane, vec_t& localPos)
    {
-      const float len = IntersectRayPlane(gContext.mRayOrigin, gContext.mRayVector, gContext.mTranslationPlan);
-      vec_t localPos = Normalized(gContext.mRayOrigin + gContext.mRayVector * len - gContext.mModel.v.position);
+      const float len = IntersectRayPlane(gContext.mRayOrigin, gContext.mRayVector, plane);
+      if (len < 0.f || !std::isfinite(len))
+      {
+         return false;
+      }
+      localPos = gContext.mRayOrigin + gContext.mRayVector * len - gContext.mModel.v.position;
+      const float distance = localPos.Length();
+      const float maxDistance = ImAbs(gContext.mScreenFactor) * rotationDisplayFactor * 10.f; // Reject intersections beyond ten ring radii.
+      return std::isfinite(distance) && std::isfinite(maxDistance) && distance > FLT_EPSILON && distance <= maxDistance;
+   }
+
+   static float ComputeAngleOnPlan(bool* valid = NULL)
+   {
+      vec_t localPos;
+      if (valid)
+      {
+         *valid = false;
+      }
+      if (!TryGetRotationPlanePosition(gContext.mTranslationPlan, localPos))
+      {
+         return gContext.mRotationAngle;
+      }
+      localPos.Normalize();
 
       vec_t perpendicularVector;
       perpendicularVector.Cross(gContext.mRotationVectorSource, gContext.mTranslationPlan);
@@ -1197,7 +1238,27 @@ namespace IMGUIZMO_NAMESPACE
       float acosAngle = Clamp(Dot(localPos, gContext.mRotationVectorSource), -1.f, 1.f);
       float angle = acosf(acosAngle);
       angle *= (Dot(localPos, perpendicularVector) < 0.f) ? 1.f : -1.f;
+      if (!std::isfinite(angle))
+      {
+         return gContext.mRotationAngle;
+      }
+      if (valid)
+      {
+         *valid = true;
+      }
       return angle;
+   }
+
+   static void DrawRotationLabel(const char* text, ImVec2 position)
+   {
+      if (gContext.mHasLabelRect)
+      {
+         const ImVec2 textSize = ImGui::CalcTextSize(text) + ImVec2(1.f, 1.f); // Include the shadow in the label bounds.
+         position.x = Clamp(position.x, gContext.mLabelRectMin.x, ImMax(gContext.mLabelRectMin.x, gContext.mLabelRectMax.x - textSize.x));
+         position.y = Clamp(position.y, gContext.mLabelRectMin.y, ImMax(gContext.mLabelRectMin.y, gContext.mLabelRectMax.y - textSize.y));
+      }
+      gContext.mDrawList->AddText(position + ImVec2(1.f, 1.f), IM_COL32_BLACK, text);
+      gContext.mDrawList->AddText(position, IM_COL32_WHITE, text);
    }
 
    static void DrawRotationGizmo(OPERATION op, int type)
@@ -1226,7 +1287,7 @@ namespace IMGUIZMO_NAMESPACE
 
       cameraToModelNormalized.TransformVector(gContext.mModelInverse);
 
-      gContext.mRadiusSquareCenter = screenRotateSize * gContext.mHeight;
+      gContext.mRadiusSquareCenter = screenRotateSize * (gContext.mSizeReferenceHeight > 0.f ? gContext.mSizeReferenceHeight : gContext.mHeight);
 
       bool hasRSC = Intersects(op, ROTATE_SCREEN);
       for (int axis = 0; axis < 3; axis++)
@@ -1265,6 +1326,12 @@ namespace IMGUIZMO_NAMESPACE
          drawList->AddCircle(worldToPos(gContext.mModel.v.position, gContext.mViewProjection), gContext.mRadiusSquareCenter, colors[0], 64, 3.f);
       }
 
+      if (!gContext.mbUsing && IsRotateType(type))
+      {
+         const char* axisNames[] = { "X", "Y", "Z", "Screen" };
+         DrawRotationLabel(axisNames[type - MT_ROTATE_X], ImGui::GetIO().MousePos + ImVec2(14.f, 14.f));
+      }
+
       if (gContext.mbUsing && (gContext.mActualID == -1 || gContext.mActualID == gContext.mEditingID) && IsRotateType(type))
       {
          ImVec2 circlePos[halfCircleSegmentCount + 1];
@@ -1285,9 +1352,8 @@ namespace IMGUIZMO_NAMESPACE
 
          ImVec2 destinationPosOnScreen = circlePos[1];
          char tmps[512];
-         ImFormatString(tmps, sizeof(tmps), rotationInfoMask[type - MT_ROTATE_X], (gContext.mRotationAngle / ZPI) * 180.f, gContext.mRotationAngle);
-         drawList->AddText(ImVec2(destinationPosOnScreen.x + 15, destinationPosOnScreen.y + 15), IM_COL32_BLACK, tmps);
-         drawList->AddText(ImVec2(destinationPosOnScreen.x + 14, destinationPosOnScreen.y + 14), IM_COL32_WHITE, tmps);
+         ImFormatString(tmps, sizeof(tmps), rotationInfoMask[type - MT_ROTATE_X], (gContext.mRotationAngleDisplay / ZPI) * 180.f, gContext.mRotationAngleDisplay);
+         DrawRotationLabel(tmps, destinationPosOnScreen + ImVec2(14.f, 14.f));
       }
    }
 
@@ -1935,12 +2001,14 @@ namespace IMGUIZMO_NAMESPACE
       }
       ImGuiIO& io = ImGui::GetIO();
       int type = MT_NONE;
+      float bestDistanceRatio = FLT_MAX;
 
       vec_t deltaScreen = { io.MousePos.x - gContext.mScreenSquareCenter.x, io.MousePos.y - gContext.mScreenSquareCenter.y, 0.f, 0.f };
       float dist = deltaScreen.Length();
       if (Intersects(op, ROTATE_SCREEN) && dist >= (gContext.mRadiusSquareCenter - 4.0f) && dist < (gContext.mRadiusSquareCenter + 4.0f))
       {
          type = MT_ROTATE_SCREEN;
+         bestDistanceRatio = ImAbs(dist - gContext.mRadiusSquareCenter) / 4.f;
       }
 
       const vec_t planNormals[] = { gContext.mModel.v.right, gContext.mModel.v.up, gContext.mModel.v.dir };
@@ -1948,7 +2016,7 @@ namespace IMGUIZMO_NAMESPACE
       vec_t modelViewPos;
       modelViewPos.TransformPoint(gContext.mModel.v.position, gContext.mViewMat);
 
-      for (int i = 0; i < 3 && type == MT_NONE; i++)
+      for (int i = 0; i < 3; i++)
       {
          if(!Intersects(op, static_cast<OPERATION>(ROTATE_X << i)))
          {
@@ -1957,8 +2025,12 @@ namespace IMGUIZMO_NAMESPACE
          // pickup plan
          vec_t pickupPlan = BuildPlan(gContext.mModel.v.position, planNormals[i]);
 
-         const float len = IntersectRayPlane(gContext.mRayOrigin, gContext.mRayVector, pickupPlan);
-         const vec_t intersectWorldPos = gContext.mRayOrigin + gContext.mRayVector * len;
+         vec_t localPos;
+         if (!TryGetRotationPlanePosition(pickupPlan, localPos))
+         {
+            continue;
+         }
+         const vec_t intersectWorldPos = localPos + gContext.mModel.v.position;
          vec_t intersectViewPos;
          intersectViewPos.TransformPoint(intersectWorldPos, gContext.mViewMat);
 
@@ -1967,7 +2039,6 @@ namespace IMGUIZMO_NAMESPACE
             continue;
          }
 
-         const vec_t localPos = intersectWorldPos - gContext.mModel.v.position;
          vec_t idealPosOnCircle = Normalized(localPos);
          idealPosOnCircle.TransformVector(gContext.mModelInverse);
          const ImVec2 idealPosOnCircleScreen = worldToPos(idealPosOnCircle * rotationDisplayFactor * gContext.mScreenFactor, gContext.mMVP);
@@ -1976,9 +2047,11 @@ namespace IMGUIZMO_NAMESPACE
          const ImVec2 distanceOnScreen = idealPosOnCircleScreen - io.MousePos;
 
          const float distance = makeVect(distanceOnScreen).Length();
-         if (distance < 8.f) // pixel size
+         const float distanceRatio = distance / 8.f;
+         if (distance < 8.f && distanceRatio < bestDistanceRatio) // Compare distances relative to each pickup threshold.
          {
             type = MT_ROTATE_X + i;
+            bestDistanceRatio = distanceRatio;
          }
       }
 
@@ -2314,9 +2387,6 @@ namespace IMGUIZMO_NAMESPACE
 
          if (CanActivate() && type != MT_NONE)
          {
-            gContext.mbUsing = true;
-            gContext.mEditingID = gContext.mActualID;
-            gContext.mCurrentOperation = type;
             const vec_t rotatePlanNormal[] = { gContext.mModel.v.right, gContext.mModel.v.up, gContext.mModel.v.dir, -gContext.mCameraDir };
             // pickup plan
             if (applyRotationLocaly)
@@ -2328,10 +2398,24 @@ namespace IMGUIZMO_NAMESPACE
                gContext.mTranslationPlan = BuildPlan(gContext.mModelSource.v.position, directionUnary[type - MT_ROTATE_X]);
             }
 
-            const float len = IntersectRayPlane(gContext.mRayOrigin, gContext.mRayVector, gContext.mTranslationPlan);
-            vec_t localPos = gContext.mRayOrigin + gContext.mRayVector * len - gContext.mModel.v.position;
+            vec_t localPos;
+            if (!TryGetRotationPlanePosition(gContext.mTranslationPlan, localPos))
+            {
+               return false;
+            }
             gContext.mRotationVectorSource = Normalized(localPos);
-            gContext.mRotationAngleOrigin = ComputeAngleOnPlan();
+            bool validAngle;
+            const float initialAngle = ComputeAngleOnPlan(&validAngle);
+            if (!validAngle)
+            {
+               return false;
+            }
+            gContext.mRotationAngleOrigin = initialAngle;
+            gContext.mRotationAngleDisplay = 0.f;
+            gContext.mRotationAngleDisplayPrevious = initialAngle;
+            gContext.mbUsing = true;
+            gContext.mEditingID = gContext.mActualID;
+            gContext.mCurrentOperation = type;
          }
       }
 
@@ -2343,12 +2427,35 @@ namespace IMGUIZMO_NAMESPACE
 #else
          ImGui::CaptureMouseFromApp();
 #endif
-         gContext.mRotationAngle = ComputeAngleOnPlan();
+         bool validAngle;
+         const float angle = ComputeAngleOnPlan(&validAngle);
+         if (!validAngle) // Preserve the last rotation and still allow release on an invalid frame.
+         {
+            type = gContext.mCurrentOperation;
+            if (!io.MouseDown[0])
+            {
+               gContext.mbUsing = false;
+               gContext.mEditingID = -1;
+            }
+            return false;
+         }
+         gContext.mRotationAngle = angle;
          if (snap)
          {
             float snapInRadian = snap[0] * DEG2RAD;
             ComputeSnap(&gContext.mRotationAngle, snapInRadian);
          }
+         float displayDelta = gContext.mRotationAngle - gContext.mRotationAngleDisplayPrevious;
+         if (displayDelta > ZPI)
+         {
+            displayDelta -= 2.f * ZPI;
+         }
+         else if (displayDelta < -ZPI)
+         {
+            displayDelta += 2.f * ZPI;
+         }
+         gContext.mRotationAngleDisplay += displayDelta;
+         gContext.mRotationAngleDisplayPrevious = gContext.mRotationAngle;
          vec_t rotationAxisLocalSpace;
 
          rotationAxisLocalSpace.TransformVector(makeVect(gContext.mTranslationPlan.x, gContext.mTranslationPlan.y, gContext.mTranslationPlan.z, 0.f), gContext.mModelInverse);

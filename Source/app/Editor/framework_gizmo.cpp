@@ -4,6 +4,7 @@
 //   framework_gizmo_pivot.cpp  ... Pivot 解決と Mesh Surface Snap
 
 #include "framework.h"
+#include "../../RePlayEngine/Editor/Commands/EditSerial.h"
 
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Components/Core/PivotComponent.h"
@@ -53,6 +54,27 @@ namespace
         }
         return DirectX::XMFLOAT3{ DirectX::XMConvertToDegrees(euler.x),
             DirectX::XMConvertToDegrees(euler.y), DirectX::XMConvertToDegrees(euler.z) };
+    }
+
+    // グラム・シュミットでせん断を除き、右手系の回転だけを取り出す。
+    bool BoneRotationQuaternion(DirectX::FXMMATRIX matrix, DirectX::XMVECTOR& rotation)
+    {
+        using namespace DirectX;
+        XMMATRIX basis = XMMatrixIdentity();
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            XMVECTOR row = XMVectorSetW(matrix.r[axis], 0.0f);
+            for (int previous = 0; previous < axis; ++previous)
+                row = XMVectorSubtract(row, XMVectorMultiply(
+                    XMVector3Dot(row, basis.r[previous]), basis.r[previous]));
+            const float length_squared = XMVectorGetX(XMVector3LengthSq(row));
+            if (!std::isfinite(length_squared) || length_squared <= 1.0e-12f) return false;
+            basis.r[axis] = XMVectorScale(row, 1.0f / std::sqrt(length_squared));
+        }
+        if (XMVectorGetX(XMVector3Dot(XMVector3Cross(basis.r[0], basis.r[1]), basis.r[2])) < 0.0f)
+            basis.r[2] = XMVectorNegate(basis.r[2]);
+        rotation = XMQuaternionNormalize(XMQuaternionRotationMatrix(basis));
+        return !XMVector4IsNaN(rotation) && !XMVector4IsInfinite(rotation);
     }
 
     bool ProjectPoint(const DirectX::XMFLOAT3& world, DirectX::FXMMATRIX view,
@@ -122,7 +144,8 @@ bool framework::draw_object_transform_gizmo()
 {
     if (active_editor_view != editor_view::scene || !show_scene_view) return false;
     // 骨のギズモが出ている間は譲る。2 つ重なるとどちらを掴んだのか分からなくなる。
-    if (!rig_selected_bone.empty() && (show_rig_debug_draw || show_motion_rig_panel))
+    sync_rig_selection();
+    if (active_rig_gizmo_target())
         return false;
 
     ReplayEngine::Scene::Scene& scene = active_object_scene();
@@ -130,10 +153,17 @@ bool framework::draw_object_transform_gizmo()
         object_editor_context.Selection().ResolvePrimary(scene);
     if (primary == nullptr) return false;
     ImGuiWindow* scene_window = ImGui::FindWindowByName("Scene View");
-    if (scene_window == nullptr) return false;
+    if (scene_window == nullptr)
+    {
+        if (object_gizmo_dragging) cancel_gizmo_gesture();
+        return false;
+    }
 
     using namespace DirectX;
-    const ReplayEngine::Editor::GizmoOperation current = transform_gizmo.Operation();
+    const ReplayEngine::Editor::GizmoOperation current = object_gizmo_dragging
+        ? static_cast<ReplayEngine::Editor::GizmoOperation>(object_gizmo_operation)
+        : transform_gizmo.Operation();
+    if (object_gizmo_dragging) transform_gizmo.SetOperation(current);
     const ImGuizmo::OPERATION operation =
         current == ReplayEngine::Editor::GizmoOperation::Translate ? ImGuizmo::TRANSLATE
         : current == ReplayEngine::Editor::GizmoOperation::Rotate ? ImGuizmo::ROTATE
@@ -169,12 +199,18 @@ bool framework::draw_object_transform_gizmo()
     ImGuizmo::SetDrawlist(scene_window->DrawList);
     ImGuizmo::SetRect(main_viewport->Pos.x, main_viewport->Pos.y,
         main_viewport->Size.x, main_viewport->Size.y);
+    ImGuizmo::SetSizeReference(scene_view_max_x - scene_view_min_x, scene_view_max_y - scene_view_min_y);
+    ImGuizmo::SetLabelRect(scene_view_min_x, scene_view_min_y,
+        scene_view_max_x - scene_view_min_x, scene_view_max_y - scene_view_min_y);
+    ImGuizmo::SetGizmoSizeClipSpace(0.1f);
 
     float snap[3]{};
     const float* snap_values = nullptr;
     if (transform_gizmo.SnapEnabled())
     {
-        snap[0] = snap[1] = snap[2] = (std::max)(0.0001f, transform_gizmo.SnapStep());
+        const float step = operation == ImGuizmo::ROTATE
+            ? transform_gizmo.RotateSnapStep() : transform_gizmo.SnapStep();
+        snap[0] = snap[1] = snap[2] = (std::max)(0.0001f, step);
         snap_values = snap;
     }
     const XMFLOAT4X4 before = world;
@@ -183,7 +219,8 @@ bool framework::draw_object_transform_gizmo()
     scene_window->DrawList->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
         ImVec2(scene_view_max_x, scene_view_max_y), true);
     ImGuizmo::Manipulate(&view._11, &projection._11, operation,
-        gizmo_local_space ? ImGuizmo::LOCAL : ImGuizmo::WORLD, &world._11, nullptr, snap_values);
+        (object_gizmo_dragging ? object_gizmo_local_space : gizmo_local_space)
+            ? ImGuizmo::LOCAL : ImGuizmo::WORLD, &world._11, nullptr, snap_values);
     scene_window->DrawList->PopClipRect();
     const bool using_now = ImGuizmo::IsUsingID(gizmo_id_object);
 
@@ -191,6 +228,8 @@ bool framework::draw_object_transform_gizmo()
     {
         if (!object_editor_context.CanEdit()) return true;
         object_gizmo_dragging = true;
+        object_gizmo_operation = static_cast<int>(current);
+        object_gizmo_local_space = gizmo_local_space;
         object_gizmo_start_matrix = before;
         object_gizmo_states.clear();
         for (const ReplayEngine::Core::ObjectID id : object_editor_context.Selection().All())
@@ -215,21 +254,7 @@ bool framework::draw_object_transform_gizmo()
 
     if (ImGui::IsKeyPressed(VK_ESCAPE))
     {
-        for (const ObjectGizmoState& state : object_gizmo_states)
-        {
-            if (ReplayEngine::Core::GameObject* object = scene.FindGameObjectByID(state.id))
-            {
-                object->GetTransform().SetWorldPosition(state.world_position);
-                object->GetTransform().SetLocalRotationEuler(state.local_rotation);
-                object->GetTransform().SetLocalScale(state.local_scale);
-            }
-        }
-        object_editor_context.CancelEdit();
-        object_gizmo_dragging = false;
-        // ImGuizmo 側の «掴んでいる» を落とす。放置すると次のクリックまで残る。
-        ImGuizmo::Enable(false);
-        ImGuizmo::Enable(true);
-        object_editor_context.SetStatus("Gizmo操作を取り消しました");
+        cancel_gizmo_gesture();
         return true;
     }
 
@@ -365,6 +390,7 @@ bool framework::handle_normal_adjust_gizmo()
     ImGuizmo::SetDrawlist(scene_window->DrawList);
     ImGuizmo::SetRect(main_viewport->Pos.x, main_viewport->Pos.y,
         main_viewport->Size.x, main_viewport->Size.y);
+    ImGuizmo::SetGizmoSizeClipSpace(0.1f);
     ImGuizmo::SetHostHovered(scene_view_hovered || normal_adjust_gizmo_dragging ? 1 : 0);
     ImGuizmo::SetID(gizmo_id_normal_adjust);
     scene_window->DrawList->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
@@ -543,13 +569,62 @@ void framework::begin_rig_pose_edit(std::uint64_t owner, std::string label)
     rig_pose_history_label = std::move(label);
 }
 
+// 完全一致だと 270度 と -90度 が別物になる。回転は行列で比べて表現違いを吸収する。
+static bool RigPoseSame(const framework::rig_pose_override& a,
+    const framework::rig_pose_override& b)
+{
+    using namespace DirectX;
+    const auto near_same = [](const XMFLOAT3& x, const XMFLOAT3& y)
+    {
+        return std::abs(x.x - y.x) <= 1.0e-5f && std::abs(x.y - y.y) <= 1.0e-5f &&
+            std::abs(x.z - y.z) <= 1.0e-5f;
+    };
+    if (!near_same(a.translation, b.translation) || !near_same(a.scale, b.scale)) return false;
+    const auto rotation_matrix = [](const XMFLOAT3& degrees)
+    {
+        XMFLOAT4X4 m{};
+        XMStoreFloat4x4(&m, XMMatrixRotationRollPitchYaw(XMConvertToRadians(degrees.x),
+            XMConvertToRadians(degrees.y), XMConvertToRadians(degrees.z)));
+        return m;
+    };
+    const XMFLOAT4X4 ra = rotation_matrix(a.rotation);
+    const XMFLOAT4X4 rb = rotation_matrix(b.rotation);
+    for (int row = 0; row < 3; ++row)
+        for (int column = 0; column < 3; ++column)
+            if (std::abs(ra.m[row][column] - rb.m[row][column]) > 1.0e-6f) return false;
+    return true;
+}
+
+// 未登録の骨と、既定値だけの補正は同じものとして比べる。
+static bool RigPoseMapSame(const std::unordered_map<std::string, framework::rig_pose_override>& a,
+    const std::unordered_map<std::string, framework::rig_pose_override>& b)
+{
+    const framework::rig_pose_override identity{};
+    const auto entry_of = [&identity](
+        const std::unordered_map<std::string, framework::rig_pose_override>& map,
+        const std::string& name) -> const framework::rig_pose_override&
+    {
+        const auto found = map.find(name);
+        return found != map.end() ? found->second : identity;
+    };
+    for (const auto& pair : a)
+        if (!RigPoseSame(pair.second, entry_of(b, pair.first))) return false;
+    for (const auto& pair : b)
+        if (!RigPoseSame(pair.second, entry_of(a, pair.first))) return false;
+    return true;
+}
+
 void framework::commit_rig_pose_edit()
 {
     if (!rig_pose_history_transaction) return;
     rig_pose_history_transaction = false;
     auto& after = object_rig_pose[rig_pose_history_owner];
+    // 何も効かない補正は残さない。選んだだけで生えた既定値を履歴へ持ち込まないため。
+    const rig_pose_override identity{};
+    for (auto it = after.begin(); it != after.end(); )
+        it = RigPoseSame(it->second, identity) ? after.erase(it) : std::next(it);
     // 触っていないなら積まない。空の Undo が並ぶと戻す回数が合わなくなる。
-    if (after == rig_pose_history_before) return;
+    if (RigPoseMapSame(after, rig_pose_history_before)) return;
     rig_pose_history.resize(rig_pose_history_cursor);
     rig_pose_history.push_back({ rig_pose_history_owner, rig_pose_history_before,
         after, rig_pose_history_label });
@@ -557,30 +632,70 @@ void framework::commit_rig_pose_edit()
     if (rig_pose_history.size() > maximum_entries)
         rig_pose_history.erase(rig_pose_history.begin());
     rig_pose_history_cursor = rig_pose_history.size();
+    rig_pose_last_serial = ReplayEngine::Editor::NextEditSerial();
+}
+
+void framework::cancel_rig_pose_edit()
+{
+    if (!rig_pose_history_transaction) return;
+    rig_pose_history_transaction = false;
+    object_rig_pose[rig_pose_history_owner] = rig_pose_history_before;
 }
 
 bool framework::undo_rig_pose_edit()
 {
+    if (gizmo_gesture_active())
+    {
+        cancel_gizmo_gesture();
+        return true;
+    }
     if (rig_pose_history_cursor == 0) return false;
     const auto& entry = rig_pose_history[--rig_pose_history_cursor];
     object_rig_pose[entry.owner] = entry.before;
+    rig_pose_last_serial = ReplayEngine::Editor::NextEditSerial();
     object_editor_context.SetStatus(entry.label + u8" を戻しました");
     return true;
 }
 
 bool framework::redo_rig_pose_edit()
 {
+    if (gizmo_gesture_active())
+    {
+        cancel_gizmo_gesture();
+        return true;
+    }
     if (rig_pose_history_cursor >= rig_pose_history.size()) return false;
     const auto& entry = rig_pose_history[rig_pose_history_cursor++];
     object_rig_pose[entry.owner] = entry.after;
+    rig_pose_last_serial = ReplayEngine::Editor::NextEditSerial();
     object_editor_context.SetStatus(entry.label + u8" をやり直しました");
     return true;
 }
 
 // 骨の選択。additive なら足し引き、そうでなければ 1 本だけにする。
-void framework::select_rig_bone(const std::string& name, bool additive)
+// 根から数えた深さの間引き。描画と選択で同じ骨集合を見るために共有する。
+bool framework::rig_bone_within_depth(const std::vector<rig_debug_bone>& bones,
+    const rig_debug_bone& bone) const
 {
-    if (name.empty()) return;
+    if (rig_max_depth <= 0) return true;
+    int depth = 0;
+    int walk = bone.parent;
+    while (walk >= 0 && static_cast<std::size_t>(walk) < bones.size() && depth <= rig_max_depth)
+    {
+        ++depth;
+        walk = bones[static_cast<std::size_t>(walk)].parent;
+    }
+    return depth <= rig_max_depth;
+}
+
+void framework::select_rig_bone(std::uint64_t owner, const std::string& name, bool additive)
+{
+    if (owner == 0 || name.empty()) return;
+    if (gizmo_gesture_active()) cancel_gizmo_gesture();
+    if (rig_pose_history_transaction) commit_rig_pose_edit();
+    object_editor_context.Selection().Select(ReplayEngine::Core::ObjectID{ owner });
+    sync_rig_selection();
+    rig_selected_owner = owner;
     const auto found = std::find(rig_selected_bones.begin(), rig_selected_bones.end(), name);
     if (!additive)
     {
@@ -599,23 +714,113 @@ void framework::select_rig_bone(const std::string& name, bool additive)
     rig_selected_bone = name;
 }
 
+bool framework::active_rig_gizmo_target() const
+{
+    if (active_editor_view != editor_view::scene || !show_scene_view ||
+        !edit_mode_active || !object_editor_context.CanEdit() ||
+        rig_selected_owner == 0 || rig_selected_bone.empty() ||
+        (!show_rig_debug_draw && !show_motion_rig_panel) ||
+        object_editor_context.Selection().Primary().Value() != rig_selected_owner)
+        return false;
+    const auto* target = active_object_scene().FindGameObjectByID(
+        ReplayEngine::Core::ObjectID{ rig_selected_owner });
+    if (target == nullptr || target->PendingDestroy() || !target->ActiveInHierarchy()) return false;
+    const auto rig = object_rig_debug_bones.find(rig_selected_owner);
+    if (rig == object_rig_debug_bones.end()) return false;
+    return std::any_of(rig->second.begin(), rig->second.end(),
+        [this](const rig_debug_bone& bone) { return bone.name == rig_selected_bone; });
+}
+
+void framework::sync_rig_selection()
+{
+    const auto primary = object_editor_context.Selection().Primary();
+    const auto* target = active_object_scene().FindGameObjectByID(primary);
+    if (rig_selected_owner != 0 && (primary.Value() != rig_selected_owner ||
+        target == nullptr || target->PendingDestroy()))
+    {
+        if (rig_gizmo_dragging) cancel_gizmo_gesture();
+        if (rig_pose_history_transaction) commit_rig_pose_edit();
+        rig_selected_owner = 0;
+        rig_selected_bone.clear();
+        rig_selected_bones.clear();
+    }
+    if (rig_gizmo_dragging && (!active_rig_gizmo_target() ||
+        rig_gizmo_owner != rig_selected_owner || rig_gizmo_primary != rig_selected_bone))
+        cancel_gizmo_gesture();
+    if (object_gizmo_dragging && (target == nullptr || target->PendingDestroy() ||
+        active_editor_view != editor_view::scene || !show_scene_view ||
+        !edit_mode_active || !object_editor_context.CanEdit()))
+        cancel_gizmo_gesture();
+}
+
+bool framework::gizmo_gesture_active() const
+{
+    return rig_gizmo_dragging || object_gizmo_dragging || ImGuizmo::IsUsing();
+}
+
+void framework::cancel_gizmo_gesture()
+{
+    if (rig_gizmo_dragging)
+    {
+        cancel_rig_pose_edit();
+        rig_gizmo_dragging = false;
+        rig_gizmo_owner = 0;
+        rig_gizmo_primary.clear();
+        rig_gizmo_selection.clear();
+    }
+    if (object_gizmo_dragging)
+    {
+        auto& scene = active_object_scene();
+        for (const ObjectGizmoState& state : object_gizmo_states)
+        {
+            if (auto* object = scene.FindGameObjectByID(state.id))
+            {
+                object->GetTransform().SetWorldPosition(state.world_position);
+                object->GetTransform().SetLocalRotationEuler(state.local_rotation);
+                object->GetTransform().SetLocalScale(state.local_scale);
+            }
+        }
+        object_editor_context.CancelEdit();
+        object_gizmo_dragging = false;
+    }
+    ImGuizmo::Enable(false);
+    ImGuizmo::Enable(true);
+    object_editor_context.SetStatus(u8"ギズモ操作を取り消しました");
+}
+
+bool framework::effective_gizmo_local_space() const
+{
+    if (active_rig_gizmo_target())
+        return rig_gizmo_use_local && gizmo_local_space;
+    return gizmo_local_space;
+}
+
 // 選択中の骨のギズモ。ImGuizmo へワールド行列を渡し、返った行列から差分だけを取る。
 // 掴んでいる間は true を返して選択へ渡さない。
 bool framework::draw_bone_transform_gizmo()
 {
-    if (rig_selected_bone.empty()) return false;
-    if (!show_rig_debug_draw && !show_motion_rig_panel) return false;
+    sync_rig_selection();
+    if (!active_rig_gizmo_target()) return false;
 
     const ReplayEngine::Core::GameObject* target =
         active_object_scene().FindGameObjectByID(object_editor_context.Selection().Primary());
     if (target == nullptr) return false;
-    const std::uint64_t owner = target->ID().Value();
+    const std::uint64_t owner = rig_gizmo_dragging ? rig_gizmo_owner : target->ID().Value();
+    const std::string primary_name = rig_gizmo_dragging ? rig_gizmo_primary : rig_selected_bone;
     const auto rig = object_rig_debug_bones.find(owner);
-    if (rig == object_rig_debug_bones.end()) return false;
+    if (rig == object_rig_debug_bones.end())
+    {
+        if (rig_gizmo_dragging) cancel_gizmo_gesture();
+        return false;
+    }
     const rig_debug_bone* bone = nullptr;
     for (const rig_debug_bone& candidate : rig->second)
-        if (candidate.name == rig_selected_bone) { bone = &candidate; break; }
-    if (bone == nullptr) return false;
+        if (candidate.name == primary_name) { bone = &candidate; break; }
+    if (bone == nullptr)
+    {
+        if (rig_gizmo_dragging) cancel_gizmo_gesture();
+        return false;
+    }
 
     using namespace DirectX;
     XMFLOAT4X4 view{}, projection{};
@@ -627,68 +832,176 @@ bool framework::draw_bone_transform_gizmo()
     // ImGuizmo は描画リストの持ち主の窓が Hover されている間だけ操作を通す。
     // 背景リストを渡すと持ち主が引けず、Scene View の上で一切反応しなくなる。
     ImGuiWindow* scene_window = ImGui::FindWindowByName("Scene View");
-    if (scene_window == nullptr) return false;
+    if (scene_window == nullptr)
+    {
+        if (rig_gizmo_dragging) cancel_gizmo_gesture();
+        return false;
+    }
     const ImGuiViewport* main_viewport = ImGui::GetMainViewport();
     ImGuizmo::SetDrawlist(scene_window->DrawList);
     ImGuizmo::SetRect(main_viewport->Pos.x, main_viewport->Pos.y,
         main_viewport->Size.x, main_viewport->Size.y);
+    ImGuizmo::SetSizeReference(scene_view_max_x - scene_view_min_x, scene_view_max_y - scene_view_min_y);
+    ImGuizmo::SetLabelRect(scene_view_min_x, scene_view_min_y,
+        scene_view_max_x - scene_view_min_x, scene_view_max_y - scene_view_min_y);
+    ImGuizmo::SetGizmoSizeClipSpace(rig_gizmo_size_clip_space);
 
-    const ReplayEngine::Editor::GizmoOperation current = transform_gizmo.Operation();
+    const ReplayEngine::Editor::GizmoOperation current = rig_gizmo_dragging
+        ? static_cast<ReplayEngine::Editor::GizmoOperation>(rig_gizmo_operation)
+        : transform_gizmo.Operation();
+    if (rig_gizmo_dragging) transform_gizmo.SetOperation(current);
     const ImGuizmo::OPERATION operation =
         current == ReplayEngine::Editor::GizmoOperation::Translate ? ImGuizmo::TRANSLATE
         : current == ReplayEngine::Editor::GizmoOperation::Rotate ? ImGuizmo::ROTATE
         : ImGuizmo::SCALE;
+    float snap[3]{};
+    const float* snap_values = nullptr;
+    if (transform_gizmo.SnapEnabled())
+    {
+        const float step = operation == ImGuizmo::ROTATE
+            ? transform_gizmo.RotateSnapStep() : transform_gizmo.SnapStep();
+        snap[0] = snap[1] = snap[2] = (std::max)(0.0001f, step);
+        snap_values = snap;
+    }
+    const bool inherited_rotation = operation == ImGuizmo::ROTATE &&
+        rig_gizmo_dragging && rig_gizmo_primary_inherited;
+    // 直接回す主は操作行列を使い、祖先に運ばれる主は実際の位置と向きで描画する。
+    if (operation == ImGuizmo::ROTATE && rig_gizmo_dragging && !inherited_rotation)
+        world = rig_gizmo_matrix;
+    const XMFLOAT4X4 rotation_input = world;
     ImGuizmo::SetHostHovered(scene_view_hovered || ImGuizmo::IsUsingID(gizmo_id_bone) ? 1 : 0);
     ImGuizmo::SetID(gizmo_id_bone);
     scene_window->DrawList->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
         ImVec2(scene_view_max_x, scene_view_max_y), true);
     ImGuizmo::Manipulate(&view._11, &projection._11, operation,
-        rig_gizmo_use_local && gizmo_local_space ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
-        &world._11);
+        (rig_gizmo_dragging ? rig_gizmo_local_space : effective_gizmo_local_space())
+            ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
+        &world._11, nullptr, snap_values);
     scene_window->DrawList->PopClipRect();
-    if (!ImGuizmo::IsUsingID(gizmo_id_bone))
+    if (rig_gizmo_dragging && ImGui::IsKeyPressed(VK_ESCAPE))
     {
-        if (rig_gizmo_dragging) { rig_gizmo_dragging = false; commit_rig_pose_edit(); }
-        return false;
+        cancel_gizmo_gesture();
+        return true;
     }
+    const bool using_now = ImGuizmo::IsUsingID(gizmo_id_bone);
+    if (!using_now && !rig_gizmo_dragging) return false;
 
     auto& pose = object_rig_pose[owner];
     // ジェスチャの頭で全選択骨を控える。主の «開始からの変化量» を他へ配るため。
     if (!rig_gizmo_dragging)
     {
+        if (rig_pose_history_transaction) commit_rig_pose_edit();
         rig_gizmo_dragging = true;
+        rig_gizmo_owner = owner;
+        rig_gizmo_operation = static_cast<int>(current);
+        rig_gizmo_local_space = effective_gizmo_local_space();
+        rig_gizmo_primary = primary_name;
+        rig_gizmo_selection = rig_selected_bones;
+        rig_gizmo_primary_inherited = false;
+        for (int parent = bone->parent; parent >= 0 && parent < static_cast<int>(rig->second.size());
+            parent = rig->second[static_cast<std::size_t>(parent)].parent)
+        {
+            if (std::find(rig_gizmo_selection.begin(), rig_gizmo_selection.end(),
+                rig->second[static_cast<std::size_t>(parent)].name) != rig_gizmo_selection.end())
+            { rig_gizmo_primary_inherited = true; break; }
+        }
         begin_rig_pose_edit(owner, u8"骨のポーズ");
         rig_gizmo_start_pose.clear();
-        for (const std::string& name : rig_selected_bones) rig_gizmo_start_pose[name] = pose[name];
-        rig_gizmo_start_pose[rig_selected_bone] = pose[rig_selected_bone];
+        rig_gizmo_start_world_matrices.clear();
+        for (const std::string& name : rig_gizmo_selection)
+        {
+            const auto start = pose.find(name);
+            rig_gizmo_start_pose[name] = start != pose.end() ? start->second : rig_pose_override{};
+            const auto selected = std::find_if(rig->second.begin(), rig->second.end(),
+                [&name](const rig_debug_bone& candidate) { return candidate.name == name; });
+            if (selected != rig->second.end())
+                rig_gizmo_start_world_matrices[name] = selected->world_matrix;
+        }
+        const auto primary = pose.find(primary_name);
+        rig_gizmo_start_pose[primary_name] = primary != pose.end() ? primary->second : rig_pose_override{};
+        rig_gizmo_start_matrix = bone->world_matrix;
+        const XMFLOAT3& degrees = rig_gizmo_start_pose[primary_name].rotation;
+        XMStoreFloat4(&rig_gizmo_start_rotation, XMQuaternionRotationRollPitchYaw(
+            XMConvertToRadians(degrees.x), XMConvertToRadians(degrees.y), XMConvertToRadians(degrees.z)));
     }
 
-    rig_pose_override& entry = pose[rig_selected_bone];
-    const rig_pose_override primary_start = rig_gizmo_start_pose[rig_selected_bone];
-    // 骨のローカルと親は動いていないので、ワールドの差分がそのままポーズの差分になる。
-    const XMMATRIX edited = XMLoadFloat4x4(&world) *
-        XMMatrixInverse(nullptr, XMLoadFloat4x4(&bone->world_matrix)) *
-        BonePoseAdjust(entry.translation, entry.rotation, entry.scale);
-    XMVECTOR scale{}, rotation{}, translation{};
-    if (XMMatrixDecompose(&scale, &rotation, &translation, edited))
+    bool rotation_frame_valid = true;
+    if (inherited_rotation)
     {
-        // 行列ごと返るので分解が他の成分へ滲む。掴んでいる種類だけ書き戻す。
-        if (operation == ImGuizmo::TRANSLATE) XMStoreFloat3(&entry.translation, translation);
-        else if (operation == ImGuizmo::SCALE) XMStoreFloat3(&entry.scale, scale);
-        else entry.rotation = BoneEulerDegrees(XMMatrixRotationQuaternion(rotation));
+        XMVECTOR input_rotation{}, output_rotation{};
+        rotation_frame_valid = BoneRotationQuaternion(XMLoadFloat4x4(&rotation_input), input_rotation) &&
+            BoneRotationQuaternion(XMLoadFloat4x4(&world), output_rotation);
+        if (rotation_frame_valid)
+        {
+            // 親から受けた動きは含めず、このフレームの操作差分だけを累積する。
+            const XMVECTOR frame_delta = XMQuaternionNormalize(XMQuaternionMultiply(
+                XMQuaternionInverse(input_rotation), output_rotation));
+            XMMATRIX accumulated = XMLoadFloat4x4(&rig_gizmo_matrix) *
+                XMMatrixRotationQuaternion(frame_delta);
+            accumulated.r[3] = XMLoadFloat4x4(&world).r[3];
+            XMStoreFloat4x4(&world, accumulated);
+        }
+        else world = rig_gizmo_matrix;
     }
-    apply_rig_pose_to_selection(owner, rig->second, primary_start, entry, operation);
+    rig_gizmo_matrix = world;
+    const auto current_pose = pose.find(primary_name);
+    rig_pose_override entry = current_pose != pose.end() ? current_pose->second : rig_pose_override{};
+    const rig_pose_override primary_start = rig_gizmo_start_pose[primary_name];
+    XMVECTOR scale{}, rotation{}, translation{};
+    bool extracted = false;
+    if (operation == ImGuizmo::ROTATE)
+    {
+        XMVECTOR start_rotation{}, edited_rotation{};
+        extracted = rotation_frame_valid &&
+            BoneRotationQuaternion(XMLoadFloat4x4(&rig_gizmo_start_matrix), start_rotation) &&
+            BoneRotationQuaternion(XMLoadFloat4x4(&world), edited_rotation);
+        if (extracted)
+        {
+            const XMVECTOR delta = XMQuaternionNormalize(XMQuaternionMultiply(
+                edited_rotation, XMQuaternionInverse(start_rotation)));
+            // 行列の積 R' * inverse(R開始) * Rポーズ開始 と同じ適用順にする。
+            rotation = XMQuaternionNormalize(XMQuaternionMultiply(
+                delta, XMLoadFloat4(&rig_gizmo_start_rotation)));
+        }
+    }
+    else
+    {
+        const XMMATRIX edited = XMLoadFloat4x4(&world) *
+            XMMatrixInverse(nullptr, XMLoadFloat4x4(&bone->world_matrix)) *
+            BonePoseAdjust(entry.translation, entry.rotation, entry.scale);
+        extracted = XMMatrixDecompose(&scale, &rotation, &translation, edited);
+    }
+    if (!extracted)
+    {
+        if (object_editor_context.Status() != u8"骨の姿勢を取り出せません")
+            object_editor_context.SetStatus(u8"骨の姿勢を取り出せません");
+        if (!using_now)
+        {
+            rig_gizmo_dragging = false;
+            commit_rig_pose_edit();
+        }
+        return using_now;
+    }
+    // 掴んでいる種類だけ書き戻し、分解の影響を他の成分へ広げない。
+    if (operation == ImGuizmo::TRANSLATE) XMStoreFloat3(&entry.translation, translation);
+    else if (operation == ImGuizmo::SCALE) XMStoreFloat3(&entry.scale, scale);
+    else entry.rotation = BoneEulerDegrees(XMMatrixRotationQuaternion(rotation));
+    apply_rig_pose_to_selection(owner, rig->second, primary_start, entry, operation, rig_gizmo_local_space);
+    // 離したフレームの行列も選択全体へ適用してから確定する。
+    if (!using_now)
+    {
+        rig_gizmo_dragging = false;
+        commit_rig_pose_edit();
+    }
     // IsOver() では骨が密集した場所でギズモに隠れた骨を選び直せなくなる。
-    return true;
+    return using_now;
 }
 
-// 主の骨の «開始からの変化量» を、選択中の他の骨へ同じローカル量で配る。
-// 祖先が選択済みの骨は、その動きで既に運ばれるので触らない。
+// 凍結した選択全体へ操作空間に応じて配り、選択祖先を持つ骨は主も含めて触らない。
 void framework::apply_rig_pose_to_selection(std::uint64_t owner,
     const std::vector<rig_debug_bone>& bones, const rig_pose_override& primary_start,
-    const rig_pose_override& primary_now, int operation)
+    const rig_pose_override& primary_now, int operation, bool local_space)
 {
-    if (rig_selected_bones.size() <= 1) return;
     using namespace DirectX;
     const auto index_of = [&bones](const std::string& name) -> int
     {
@@ -712,22 +1025,43 @@ void framework::apply_rig_pose_to_selection(std::uint64_t owner,
         primary_start.scale.y != 0.0f ? primary_now.scale.y / primary_start.scale.y : 1.0f,
         primary_start.scale.z != 0.0f ? primary_now.scale.z / primary_start.scale.z : 1.0f };
 
-    auto& pose = object_rig_pose[owner];
-    for (const std::string& name : rig_selected_bones)
+    XMMATRIX world_rotation_delta = XMMatrixIdentity();
+    if (operation == ImGuizmo::ROTATE && !local_space)
     {
-        if (name == rig_selected_bone) continue;
+        XMVECTOR primary_world_start{}, primary_world_now{};
+        if (!BoneRotationQuaternion(XMLoadFloat4x4(&rig_gizmo_start_matrix), primary_world_start) ||
+            !BoneRotationQuaternion(XMLoadFloat4x4(&rig_gizmo_matrix), primary_world_now)) return;
+        world_rotation_delta = XMMatrixRotationQuaternion(XMQuaternionInverse(primary_world_start)) *
+            XMMatrixRotationQuaternion(primary_world_now);
+    }
+
+    auto& pose = object_rig_pose[owner];
+    for (const std::string& name : rig_gizmo_selection)
+    {
         bool ancestor_selected = false;
         for (int parent = index_of(name) >= 0 ? bones[static_cast<std::size_t>(index_of(name))].parent : -1;
             parent >= 0 && parent < static_cast<int>(bones.size());
             parent = bones[static_cast<std::size_t>(parent)].parent)
         {
-            if (std::find(rig_selected_bones.begin(), rig_selected_bones.end(),
-                bones[static_cast<std::size_t>(parent)].name) != rig_selected_bones.end())
+            if (std::find(rig_gizmo_selection.begin(), rig_gizmo_selection.end(),
+                bones[static_cast<std::size_t>(parent)].name) != rig_gizmo_selection.end())
             { ancestor_selected = true; break; }
         }
         if (ancestor_selected) continue;
+        if (name == rig_gizmo_primary)
+        {
+            pose[name] = primary_now;
+            continue;
+        }
         const auto start = rig_gizmo_start_pose.find(name);
         if (start == rig_gizmo_start_pose.end()) continue;
+        XMVECTOR bone_world_start{};
+        if (operation == ImGuizmo::ROTATE && !local_space)
+        {
+            const auto world_start = rig_gizmo_start_world_matrices.find(name);
+            if (world_start == rig_gizmo_start_world_matrices.end() ||
+                !BoneRotationQuaternion(XMLoadFloat4x4(&world_start->second), bone_world_start)) continue;
+        }
         rig_pose_override& other = pose[name];
         if (operation == ImGuizmo::TRANSLATE)
             other.translation = { start->second.translation.x + move_delta.x,
@@ -737,8 +1071,15 @@ void framework::apply_rig_pose_to_selection(std::uint64_t owner,
             other.scale = { start->second.scale.x * scale_ratio.x,
                 start->second.scale.y * scale_ratio.y,
                 start->second.scale.z * scale_ratio.z };
-        else
+        else if (local_space)
             other.rotation = BoneEulerDegrees(XMMatrixRotationQuaternion(
                 XMQuaternionMultiply(euler_quat(start->second.rotation), rotation_delta)));
+        else
+        {
+            // 共通のワールド差分を開始時の骨空間へ戻し、開始ポーズの左から掛ける。
+            other.rotation = BoneEulerDegrees(XMMatrixRotationQuaternion(bone_world_start) *
+                world_rotation_delta * XMMatrixRotationQuaternion(XMQuaternionInverse(bone_world_start)) *
+                XMMatrixRotationQuaternion(euler_quat(start->second.rotation)));
+        }
     }
 }

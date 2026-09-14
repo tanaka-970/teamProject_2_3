@@ -1,8 +1,9 @@
-#pragma once
+﻿#pragma once
 
 #include "../Commands/SceneEditHistory.h"
 #include "../Selection/EditorSelection.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 
@@ -57,8 +58,17 @@ namespace ReplayEngine::Editor
         // ---- 未保存変更 ----------------------------------------------------
 
         bool Dirty() const noexcept { return dirty_; }
-        void MarkDirty() noexcept { dirty_ = true; }
+        void MarkDirty() noexcept
+        {
+            dirty_ = true;
+            // Dirty は「未保存かどうか」しか表さず、一度 true になると
+            // 保存まで変化しない。Play 用 snapshot cache の invalidation には
+            // 変更のたびに進む世代番号が必要なので、こちらも必ず更新する。
+            ++content_revision_;
+            if (content_revision_ == 0) content_revision_ = 1;
+        }
         void ClearDirty() noexcept { dirty_ = false; }
+        std::uint64_t ContentRevision() const noexcept { return content_revision_; }
 
         const std::filesystem::path& ScenePath() const noexcept { return scene_path_; }
         void SetScenePath(std::filesystem::path path) { scene_path_ = std::move(path); }
@@ -95,10 +105,12 @@ namespace ReplayEngine::Editor
         void CommitEdit();
         void CommitLandscapeEdit(Core::ObjectID object,
             std::unique_ptr<Landscape::LandscapeUndoCommand> command);
+        void CommitVertexColorEdit(std::unique_ptr<VertexPaint::ColorEdit> command);
         void CancelEdit() noexcept;
 
         bool Undo();
         bool Redo();
+        std::uint64_t EditSerial() const noexcept { return edit_serial_; }
 
     private:
         Scene::Scene* scene_ = nullptr;
@@ -106,10 +118,14 @@ namespace ReplayEngine::Editor
 
         EditorSelection selection_;
         SceneEditHistory history_;
+        std::uint64_t edit_serial_ = 0;
 
         std::filesystem::path scene_path_;
         std::string status_{ "新規シーン" };
         bool dirty_ = false;
         bool play_mode_ = false;
+        // Scene の内容が Editor 操作で変わるたびに進む。
+        // Dirty フラグと違い、保存して ClearDirty() しても巻き戻さない。
+        std::uint64_t content_revision_ = 1;
     };
 }

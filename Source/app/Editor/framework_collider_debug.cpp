@@ -316,19 +316,8 @@ void framework::draw_collider_debug_overlay()
             rig_bone_total += bones.size();
             for (const rig_debug_bone& bone : bones)
             {
-                if (rig_max_depth > 0)
-                {
-                    // 根から数えた深さで間引く。指や髪まで出ると密になるため。
-                    int depth = 0;
-                    int walk = bone.parent;
-                    while (walk >= 0 && static_cast<std::size_t>(walk) < bones.size() &&
-                        depth <= rig_max_depth)
-                    {
-                        ++depth;
-                        walk = bones[static_cast<std::size_t>(walk)].parent;
-                    }
-                    if (depth > rig_max_depth) continue;
-                }
+                // 根から数えた深さで間引く。指や髪まで出ると密になるため。
+                if (!rig_bone_within_depth(bones, bone)) continue;
                 const bool picked = std::find(rig_selected_bones.begin(),
                     rig_selected_bones.end(), bone.name) != rig_selected_bones.end();
                 ImVec2 joint{};
@@ -689,10 +678,19 @@ bool framework::project_world_to_screen(const DirectX::XMMATRIX& view_projection
     const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
     ImVec2& out) const noexcept
 {
+    float depth{};
+    return project_world_to_screen(view_projection, world, origin, size, out, depth);
+}
+
+bool framework::project_world_to_screen(const DirectX::XMMATRIX& view_projection,
+    const DirectX::XMFLOAT3& world, const ImVec2& origin, const ImVec2& size,
+    ImVec2& out, float& depth) const noexcept
+{
     using namespace DirectX;
     const XMVECTOR position = XMVectorSet(world.x, world.y, world.z, 1.0f);
     const XMVECTOR clip = XMVector4Transform(position, view_projection);
     const float w = XMVectorGetW(clip);
+    depth = w;
     if (w <= 1.0e-4f) return false;
     const float x = XMVectorGetX(clip) / w;
     const float y = XMVectorGetY(clip) / w;

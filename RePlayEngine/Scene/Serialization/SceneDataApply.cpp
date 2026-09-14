@@ -1,4 +1,4 @@
-#include "SceneData.h"
+﻿#include "SceneData.h"
 #include "../../Components/Landscape/LandscapeComponent.h"
 #include "SceneDataInternal.h"
 
@@ -80,7 +80,7 @@ namespace ReplayEngine::Scene::Serialization
         void BuildComponents(const GameObjectData& source, GameObject& target,
             SceneLoadReport& report,
             const ObjectRemap* object_remap,
-            bool clear_unresolved_references)
+            bool clear_unresolved_references, SceneApplyMode mode)
         {
             const ReplayEngine::Scene::Scene* owner_scene = target.GetScene();
             const bool runtime_world = owner_scene != nullptr &&
@@ -88,6 +88,29 @@ namespace ReplayEngine::Scene::Serialization
             const Core::ComponentAvailabilityPolicy availability = runtime_world
                 ? Core::ComponentAvailabilityPolicy::Runtime
                 : Core::ComponentAvailabilityPolicy::Editor;
+
+            // Play snapshot は同一プロセス内で Capture した現在型なので、
+            // 既に記録されている type_id を直接引ける。GUID / alias / 型名の文字列検索を
+            // Component ごとに繰り返さない。通常ファイル読み込みは従来どおり Resolve を通す。
+            const auto resolve_info = [mode](const ComponentData& component_data)
+                -> const ComponentTypeInfo*
+            {
+                if (mode == SceneApplyMode::RuntimePlay &&
+                    component_data.type_id != Core::invalid_component_type_id)
+                {
+                    if (const ComponentTypeInfo* direct =
+                        ComponentRegistry::Find(component_data.type_id))
+                    {
+                        const bool guid_matches = !component_data.type_guid.IsValid() ||
+                            direct->type_guid == component_data.type_guid;
+                        const bool name_matches = component_data.type_name.empty() ||
+                            direct->type_name == component_data.type_name;
+                        if (guid_matches && name_matches) return direct;
+                    }
+                }
+                return ComponentRegistry::Resolve(
+                    component_data.type_guid, component_data.type_name);
+            };
 
             // 欠落依存の自動追加が、後続の保存 Component の StableID を
             // 先取りしないようにする。保存 ID 自体は結線時に明示復元できるので、
@@ -103,8 +126,7 @@ namespace ReplayEngine::Scene::Serialization
             std::vector<Core::ComponentTypeID> saved_types;
             for (const ComponentData& component_data : source.components)
             {
-                const ComponentTypeInfo* info = ComponentRegistry::Resolve(
-                    component_data.type_guid, component_data.type_name);
+                const ComponentTypeInfo* info = resolve_info(component_data);
                 if (info == nullptr || (runtime_world && !info->runtime_available)) continue;
                 if (std::find(saved_types.begin(), saved_types.end(), info->type_id) ==
                     saved_types.end())
@@ -117,12 +139,19 @@ namespace ReplayEngine::Scene::Serialization
             {
                 // 型の解決は必ず Resolve を通す。
                 //   type_guid -> alias_guids -> type_name の順で引く。
-                const ComponentTypeInfo* info =
-                    ComponentRegistry::Resolve(component_data.type_guid, component_data.type_name);
+                const ComponentTypeInfo* info = resolve_info(component_data);
 
-                const Reflection::PropertyBag remapped_properties =
-                    RemapReferences(component_data.properties, object_remap,
+                // RuntimePlay は編集 Scene と同じ ObjectID / ComponentStableID をそのまま
+                // 復元するため参照 remap が不要。PropertyBag を丸ごと複製する O(N) 作業を
+                // Play のたびに行わない。Prefab / File 読み込みは従来の安全な remap を使う。
+                Reflection::PropertyBag remapped_storage;
+                const Reflection::PropertyBag* applied_properties = &component_data.properties;
+                if (mode != SceneApplyMode::RuntimePlay)
+                {
+                    remapped_storage = RemapReferences(component_data.properties, object_remap,
                         clear_unresolved_references);
+                    applied_properties = &remapped_storage;
+                }
 
                 if (info == nullptr)
                 {
@@ -154,7 +183,7 @@ namespace ReplayEngine::Scene::Serialization
                     // 参照は預かるデータに対しても付け替える。
                     // Prefab として配置された Missing Component が、
                     // 配置元 Scene の GameObject を指したままにならないようにする。
-                    record.properties = remapped_properties;
+                    record.properties = *applied_properties;
 
                     static_cast<MissingComponent*>(placeholder)->SetOriginal(std::move(record));
                     placeholder->SetEnabled(component_data.enabled);
@@ -250,13 +279,30 @@ namespace ReplayEngine::Scene::Serialization
                 component->SetEnabled(component_data.enabled);
 
                 std::vector<std::string> unknown;
-                Reflection::PropertyBag saved_properties =
-                    ApplyPropertyAliases(*info, remapped_properties);
-                MigrateSavedProperties(*info, component_data.type_version, saved_properties);
-                PropertyRegistry::Apply(*component, saved_properties, &unknown);
+                if (mode == SceneApplyMode::RuntimePlay)
+                {
+                    // Capture した現在型の PropertyBag なので rename migration / type-version
+                    // migration は不要。文字列キー群の再コピーを避けて直接適用する。
+                    PropertyRegistry::Apply(*component, *applied_properties, &unknown);
+                }
+                else
+                {
+                    Reflection::PropertyBag saved_properties =
+                        ApplyPropertyAliases(*info, *applied_properties);
+                    MigrateSavedProperties(*info, component_data.type_version, saved_properties);
+                    PropertyRegistry::Apply(*component, saved_properties, &unknown);
+                }
                 if (component_data.landscape_geometry)
+                {
                     if (auto* landscape = dynamic_cast<Components::LandscapeComponent*>(component))
-                        landscape->Data().RestoreGeometry(component_data.landscape_geometry);
+                    {
+                        if (mode == SceneApplyMode::RuntimePlay)
+                            landscape->Data().RestoreGeometryForPlay(
+                                component_data.landscape_geometry);
+                        else
+                            landscape->Data().RestoreGeometry(component_data.landscape_geometry);
+                    }
+                }
                 for (const std::string& name : unknown)
                 {
                     ++report.unknown_properties;
@@ -300,7 +346,8 @@ namespace ReplayEngine::Scene::Serialization
     using Detail::ApplyObjectBasics;
     using Detail::BuildComponents;
 
-    bool ApplySceneData(const SceneData& data, Scene& scene, SceneLoadReport& report)
+    bool ApplySceneData(const SceneData& data, Scene& scene, SceneLoadReport& report,
+        SceneApplyMode mode)
     {
         report.Clear();
 
@@ -395,7 +442,7 @@ namespace ReplayEngine::Scene::Serialization
         {
             const auto found = saved_to_object.find(object_data.id);
             if (found == saved_to_object.end()) continue;
-            BuildComponents(object_data, *found->second, report, &saved_to_object);
+            BuildComponents(object_data, *found->second, report, &saved_to_object, false, mode);
         }
 
         // Scene 単位の状態を復元する。

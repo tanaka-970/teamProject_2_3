@@ -52,6 +52,18 @@ namespace ReplayEngine::Editor
             return "DX12描画: 陰影モデル本体";
         }
 
+        const char* BlendName(Rendering::ShaderLayerBlend blend) noexcept
+        {
+            using Rendering::ShaderLayerBlend;
+            switch (blend)
+            {
+            case ShaderLayerBlend::Alpha:    return "アルファ";
+            case ShaderLayerBlend::Additive: return "加算";
+            case ShaderLayerBlend::Multiply: return "乗算";
+            default:                         return "不明";
+            }
+        }
+
     }
 
     ShaderStackEditorResult ShaderStackEditor::Draw(const char* id, int& base_shader,
@@ -66,8 +78,6 @@ namespace ReplayEngine::Editor
     {
         using namespace Rendering;
         const char* shading_names[] = { "FBX標準", "PBR", "トゥーン", "アンリット", "ピクセレーション" };
-        const char* blend_names[] = { "アルファ", "加算", "乗算" };
-
         bool changed = false;
         ImGui::PushID(id);
         ImGui::TextUnformatted("シェーダースタック");
@@ -248,12 +258,23 @@ namespace ReplayEngine::Editor
                 ImGui::Indent();
                 const bool has_pass_blend = layer.Is(BuiltInShaderLayers::Outline) ||
                     layer.Is(BuiltInShaderLayers::Wireframe);
-                int blend = static_cast<int>(layer.blend);
-                if (has_pass_blend && ImGui::Combo("合成方式", &blend,
-                    blend_names, IM_ARRAYSIZE(blend_names)))
+                if (has_pass_blend && ImGui::BeginCombo("合成方式", BlendName(layer.blend)))
                 {
-                    layer.blend = static_cast<ShaderLayerBlend>(blend);
-                    changed = true;
+                    const ShaderLayerBlend blends[] = {
+                        ShaderLayerBlend::Alpha,
+                        ShaderLayerBlend::Additive,
+                        ShaderLayerBlend::Multiply };
+                    for (ShaderLayerBlend blend : blends)
+                    {
+                        const bool selected = blend == layer.blend;
+                        if (ImGui::Selectable(BlendName(blend), selected))
+                        {
+                            layer.blend = blend;
+                            changed = true;
+                        }
+                        if (selected) ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::EndCombo();
                 }
                 if (!has_pass_blend)
                     ImGui::TextDisabled(supported_dx12_layer

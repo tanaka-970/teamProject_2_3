@@ -69,6 +69,8 @@ namespace ReplayEngine::Motion
         MotionEasing easing = MotionEasing::Linear;
         MotionBezierHandles bezier;
         Reflection::AssetReference easing_curve;
+        // EaseInPower の指数。
+        float power = 2.0f;
     };
 
     struct MotionWiggle

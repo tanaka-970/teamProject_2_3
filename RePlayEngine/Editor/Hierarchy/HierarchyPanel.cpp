@@ -10,6 +10,7 @@
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
+#include "../../Components/Editor/FolderComponent.h"
 #include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../Components/Landscape/LandscapeComponent.h"
 #include "../../Components/Landscape/LandscapeRendererComponent.h"
@@ -105,10 +106,25 @@ namespace ReplayEngine::Editor
             if (ImGui::Button("複製")) DuplicateSelected(context);
             ImGui::SameLine();
             if (ImGui::Button("削除")) DestroySelected(context);
+            ImGui::SameLine();
+            if (ImGui::Button("プレハブを置く"))
+            {
+                ObjectID parent = context.Selection().Primary();
+                if (!parent.Valid() || scene->FindGameObjectByID(parent) == nullptr)
+                    parent = ObjectID::Invalid();
+                pending_asset_placement_request_ = {};
+                pending_asset_placement_request_.parent = parent;
+                pending_asset_placement_request_.browse_prefab = true;
+            }
         }
         else
         {
             ImGui::TextDisabled("実行中は階層を編集できません");
+        }
+        if (toolbar_drawer_)
+        {
+            ImGui::SameLine();
+            toolbar_drawer_();
         }
         ImGui::Separator();
 
@@ -151,15 +167,19 @@ namespace ReplayEngine::Editor
                 "移動中: %s", active_label);
         }
 
+        ImVec2 empty_area = ImGui::GetContentRegionAvail();
+        empty_area.x = (std::max)(1.0f, empty_area.x);
+        empty_area.y = (std::max)(ImGui::GetFrameHeightWithSpacing(), empty_area.y);
+        ImGui::InvisibleButton("##HierarchyEmptyArea", empty_area);
+
         // 何も無いところで右クリックしたときのメニュー。
-        if (ImGui::BeginPopupContextWindow("HierarchyBackground",
-            ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
+        if (ImGui::BeginPopupContextItem("HierarchyBackground"))
         {
             DrawContextMenu(context, nullptr);
             ImGui::EndPopup();
         }
 
-        // 空白部分へのドロップで Scene 直下へ移す。
+        // 空白へのドロップは並び替えを Scene 直下へ戻し、Asset を Scene 直下へ配置する。
         if (ImGui::BeginDragDropTarget())
         {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
@@ -177,6 +197,20 @@ namespace ReplayEngine::Editor
                         pending_reparent_child_ = ObjectID(dragged.item);
                         pending_reparent_parent_ = ObjectID::Invalid();
                         pending_drop_placement_ = DropPlacement::Root;
+                    }
+                }
+            }
+            if (editable)
+            {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(
+                    "REPLAY_ASSET_GUID"))
+                {
+                    if (payload->Data != nullptr && payload->DataSize > 1 && payload->IsDelivery())
+                    {
+                        pending_asset_placement_request_ = {};
+                        pending_asset_placement_request_.asset_guid.assign(
+                            static_cast<const char*>(payload->Data),
+                            static_cast<std::size_t>(payload->DataSize - 1));
                     }
                 }
             }
@@ -301,6 +335,7 @@ namespace ReplayEngine::Editor
 
         // 無効な GameObject は薄く表示する。
         const bool dimmed = !object.ActiveInHierarchy();
+        const ImVec4 dimmed_color(0.55f, 0.55f, 0.55f, 1.0f);
         const Assets::AssetDatabase* database = context.GetAssetDatabase();
         const bool missing_prefab = object.IsPrefabInstance() &&
             (database == nullptr || database->FindByGuid(object.PrefabSourceGUID()) == nullptr);
@@ -313,6 +348,34 @@ namespace ReplayEngine::Editor
             context.GetScene()->Services().ControlledObject() == object.ID()) node_label += "[Controlled] ";
         node_label += object.Name();
         if (missing_prefab) node_label += " [Missing]";
+
+        std::vector<EditorIconProvider::Icon> icons;
+        std::string icon_type_names;
+        const HierarchyIconDisplay icon_display = icon_display_ != nullptr
+            ? *icon_display_ : HierarchyIconDisplay::Always;
+        if (icon_provider_ != nullptr && icon_display != HierarchyIconDisplay::Hidden)
+        {
+            const bool controlled = context.GetScene() != nullptr &&
+                context.GetScene()->Services().ControlledObject() == object.ID();
+            const char* object_key = object.GetComponent<Components::FolderComponent>() != nullptr
+                ? "object.folder" : missing_prefab ? "object.prefab_missing"
+                : object.IsPrefabRoot() ? "object.prefab_root"
+                : prefab ? "object.prefab_instance" : controlled ? "object.controlled"
+                : dimmed ? "object.inactive" : "object.empty";
+            if (const auto icon = icon_provider_->Resolve(object_key)) icons.push_back(icon);
+            for (std::size_t index = 0; index < object.ComponentCount(); ++index)
+            {
+                const auto* component = object.ComponentAt(index);
+                if (component == nullptr || component->PendingDestroy()) continue;
+                const auto* info = Core::ComponentRegistry::Find(component->TypeID());
+                if (info != nullptr && info->built_in) continue;
+                if (!icon_type_names.empty()) icon_type_names += "\n";
+                icon_type_names += info != nullptr ? info->type_name : component->TypeName();
+                const auto icon = info != nullptr ? icon_provider_->ResolveComponent(*info)
+                    : icon_provider_->Resolve(component->TypeName());
+                if (icon) icons.push_back(icon);
+            }
+        }
 
         const bool dragging_this = IsReorderDragging(list_identity, sibling_index);
         const std::string visible_node_label = dragging_this
@@ -332,11 +395,12 @@ namespace ReplayEngine::Editor
                 ImGui::SetNextItemOpen(true, ImGuiCond_Always);
             if (dimmed || missing_prefab || prefab)
                 ImGui::PushStyleColor(ImGuiCol_Text,
-                    dimmed ? ImVec4(0.55f, 0.55f, 0.55f, 1.0f)
+                    dimmed ? dimmed_color
                         : (missing_prefab ? ImVec4(1.0f, 0.30f, 0.25f, 1.0f)
                             : ImVec4(0.35f, 0.65f, 1.0f, 1.0f)));
-            const bool open = ImGui::TreeNodeEx("##Node", header_flags,
-                "%s", visible_node_label.c_str());
+            const bool open = EditorIconProvider::DrawHeader("##Node",
+                visible_node_label.c_str(), header_flags, icons,
+                icon_display == HierarchyIconDisplay::Hovered, dimmed ? dimmed_color.x : 1.0f);
             if (dimmed || missing_prefab || prefab) ImGui::PopStyleColor();
 
             if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
@@ -402,6 +466,29 @@ namespace ReplayEngine::Editor
                 DrawContextMenu(context, &object);
             }, draw_drop, true);
 
+        if (editable && ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("REPLAY_ASSET_GUID"))
+            {
+                if (payload->Data != nullptr && payload->DataSize > 1 && payload->IsDelivery())
+                {
+                    pending_asset_placement_request_ = {};
+                    pending_asset_placement_request_.asset_guid.assign(
+                        static_cast<const char*>(payload->Data),
+                        static_cast<std::size_t>(payload->DataSize - 1));
+                    pending_asset_placement_request_.parent = object.ID();
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        if (item.hovered && !icons.empty() && !icon_type_names.empty())
+        {
+            ImGui::BeginTooltip();
+            ImGui::TextUnformatted(icon_type_names.c_str());
+            ImGui::EndTooltip();
+        }
+
         if (item.request.Valid() && !pending_reparent_child_.Valid() &&
             item.request.destination < siblings.size())
         {
@@ -450,6 +537,20 @@ namespace ReplayEngine::Editor
         return false;
     }
 
+    ObjectID HierarchyPanel::TakePrefabRequest()
+    {
+        const ObjectID request = pending_prefab_request_;
+        pending_prefab_request_ = ObjectID::Invalid();
+        return request;
+    }
+
+    AssetPlacementRequest HierarchyPanel::TakeAssetPlacementRequest()
+    {
+        AssetPlacementRequest request = std::move(pending_asset_placement_request_);
+        pending_asset_placement_request_ = {};
+        return request;
+    }
+
     void HierarchyPanel::DrawContextMenu(EditorContext& context, GameObject* object)
     {
         const bool editable = context.CanEdit();
@@ -482,6 +583,10 @@ namespace ReplayEngine::Editor
             CopyToBuffer(rename_buffer_, rename_buffer_size, object->Name());
         }
         if (ImGui::MenuItem("複製", "Ctrl+D", false, editable)) DuplicateSelected(context);
+        if (ImGui::MenuItem("プレハブにする", nullptr, false, editable))
+        {
+            pending_prefab_request_ = object->ID();
+        }
         if (ImGui::MenuItem("シーン直下へ移動", nullptr, false,
             editable && object->Parent() != nullptr))
         {

@@ -44,7 +44,7 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
         // 関数ポインタ表の互換番号。**末尾へ関数を足したら必ず 1 上げる。**
         // C# 側の NativeBridge.NativeApiAbiVersion と一致していないと表を拒否する。
-        inline constexpr std::uint32_t kNativeApiAbiVersion = 20;
+        inline constexpr std::uint32_t kNativeApiAbiVersion = 21;
 
         // 表の先頭に必ず置く自己記述ヘッダー。
         // 順番が 1 つずれても別関数を呼ばずに、その場で不一致として弾くために使う。
@@ -279,6 +279,18 @@ namespace ReplayEngine::Scripting::CSharp::Detail
 
             // v20 addition. Public GameObject.Find 用の active 限定検索。
             find_by_name_callback find_active_game_object_by_name = nullptr;
+
+            // v21 addition. CompositionPlayer。MotionPlayer と同じ callback 型を使い回す。
+            find_motion_player_callback find_composition_player = nullptr;
+            motion_component_callback composition_play = nullptr;
+            motion_component_callback composition_pause = nullptr;
+            motion_component_callback composition_resume = nullptr;
+            motion_component_callback composition_stop = nullptr;
+            motion_component_float_callback composition_set_time = nullptr;
+            motion_component_float_callback composition_set_speed = nullptr;
+            motion_component_float_callback composition_set_weight = nullptr;
+            motion_get_bool_callback composition_is_playing = nullptr;
+            motion_get_float_callback composition_get_time = nullptr;
         };
 
         // ヘッダー以降がすべて関数ポインタであることを、表を作る側で必ず確かめる。
@@ -291,8 +303,11 @@ namespace ReplayEngine::Scripting::CSharp::Detail
         //   表は offset で結びついている。version 番号の見た目を揃えるために
         //   途中へ挿すと、それ以降の既存 entry が全部ずれて別関数を指す。
         //   足すのは常に末尾だけ。v18 以降の追加列が末尾から動いたらここで落ちる。
+        static_assert(offsetof(NativeApiTable, composition_get_time) + sizeof(void*) ==
+            sizeof(NativeApiTable), "composition_get_time must stay the last entry");
         static_assert(offsetof(NativeApiTable, find_active_game_object_by_name) + sizeof(void*) ==
-            sizeof(NativeApiTable), "find_active_game_object_by_name must stay the last entry");
+            offsetof(NativeApiTable, find_composition_player),
+            "v21 entries must be appended after find_active_game_object_by_name");
         static_assert(offsetof(NativeApiTable, add_script_component) + sizeof(void*) ==
             offsetof(NativeApiTable, find_active_game_object_by_name),
             "v20 entry must be appended after add_script_component");
@@ -625,6 +640,18 @@ namespace ReplayEngine::Scripting::CSharp::Detail
     int NativeEventDroppedCount(std::uint64_t subscription, std::uint64_t* out) noexcept;
     int NativeGetSceneTransitionState(float* progress, int* in_progress,
         int* transition_status) noexcept;
+
+    int NativeFindCompositionPlayer(Runtime::ObjectHandle owner, const char* key,
+        Runtime::ComponentHandle* out) noexcept;
+    int NativeCompositionPlay(Runtime::ComponentHandle player) noexcept;
+    int NativeCompositionPause(Runtime::ComponentHandle player) noexcept;
+    int NativeCompositionResume(Runtime::ComponentHandle player) noexcept;
+    int NativeCompositionStop(Runtime::ComponentHandle player) noexcept;
+    int NativeCompositionSetTime(Runtime::ComponentHandle player, float seconds) noexcept;
+    int NativeCompositionSetSpeed(Runtime::ComponentHandle player, float speed) noexcept;
+    int NativeCompositionSetWeight(Runtime::ComponentHandle player, float weight) noexcept;
+    int NativeCompositionIsPlaying(Runtime::ComponentHandle player, int* out) noexcept;
+    int NativeCompositionGetTime(Runtime::ComponentHandle player, float* out) noexcept;
 
     NativeApiTable MakeNativeApiTable() noexcept;
 }

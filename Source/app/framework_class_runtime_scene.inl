@@ -61,6 +61,12 @@
         void SetEditorPlayLoading(bool loading) noexcept
         {
             editor_play_loading_ = loading;
+            if (!loading) editor_play_progress_ = 1.0f;
+        }
+
+        void SetEditorPlayProgress(float progress) noexcept
+        {
+            editor_play_progress_ = (std::max)(0.0f, (std::min)(1.0f, progress));
         }
 
         float Progress() const noexcept override;
@@ -70,47 +76,56 @@
         const ReplayEngine::Scene::SceneManager* scene_manager_ = nullptr;
         const ReplayEngine::Runtime::RuntimeSceneService* runtime_scene_ = nullptr;
         bool editor_play_loading_ = false;
+        float editor_play_progress_ = 1.0f;
     };
     loading_progress_provider object_loading_progress_provider;
+    std::unique_ptr<ReplayEngine::Scene::Scene> object_boot_logo_scene;
+    std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> object_boot_logo_runtime_context;
+    std::uint64_t object_boot_logo_frame_index{ 0 };
+    float object_boot_logo_duration{ 0.0f };
     std::unique_ptr<ReplayEngine::Scene::Scene> object_loading_scene;
     std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> object_loading_runtime_context;
     std::uint64_t object_loading_frame_index{ 0 };
-    // Editor の F5 も Loading Screen Scene を通すための一時状態。
-    // SceneData と進行値はメモリ上だけに置き、Project/Scene は保存しない。
-    struct editor_play_loading_gate final
+    // Editor Play の開始処理。
+    //
+    // 緑の「▶ 実行」を押したフレームでは重い処理を実行せず、まず Editor を 1 回描画する。
+    // その後の Update で 1 段ずつ進めることで、C# 準備 / Scene Capture / World 構築の
+    // どこが重くても「固まったように見える」前に進捗 UI が表示される。
+    enum class editor_play_start_stage : std::uint8_t
     {
-        void AdvanceTo(int target)
-        {
-            {
-                std::lock_guard<std::mutex> lock(mutex);
-                if (stage < 0 || target <= stage) return;
-                stage = target;
-            }
-            changed.notify_all();
-        }
-
-        void Cancel()
-        {
-            {
-                std::lock_guard<std::mutex> lock(mutex);
-                stage = -1;
-            }
-            changed.notify_all();
-        }
-
-        bool WaitFor(int target)
-        {
-            std::unique_lock<std::mutex> lock(mutex);
-            changed.wait(lock, [this, target]() { return stage < 0 || stage >= target; });
-            return stage >= target;
-        }
-
-        std::mutex mutex;
-        std::condition_variable changed;
-        int stage{ 0 };
+        idle = 0,
+        prepare_runtime,
+        prepare_scripts,
+        capture_scene,
+        queue_runtime_world,
+        build_runtime_world,
+        activate_runtime_world,
+        finalize_play_mode,
+        completed,
     };
+    editor_play_start_stage object_editor_play_start_stage{ editor_play_start_stage::idle };
+
+    // Play snapshot cache。編集内容が変わっていない反復 Play では
+    // PropertyRegistry::Capture を全 Component に対してやり直さない。
+    // RuntimeSceneService へも immutable shared_ptr のまま渡し、SceneData の
+    // 大きな PropertyBag / 文字列群を毎回コピーしない。
+    std::shared_ptr<const ReplayEngine::Scene::Serialization::SceneData>
+        object_editor_play_cached_snapshot;
+    std::shared_ptr<const ReplayEngine::Scene::Serialization::SceneData>
+        object_editor_play_request_snapshot;
+    ReplayEngine::Core::WorldInstanceID object_editor_play_cached_world_instance{
+        ReplayEngine::Core::invalid_world_instance_id };
+    std::uint32_t object_editor_play_cached_structure_generation{ 0 };
+    std::uint64_t object_editor_play_cached_content_revision{ 0 };
+    std::uint64_t object_editor_play_cached_script_generation{ 0 };
+    std::uint64_t object_editor_play_snapshot_cache_hits{ 0 };
+    std::uint64_t object_editor_play_snapshot_cache_misses{ 0 };
+    bool object_editor_play_snapshot_reused{ false };
+
+    std::string object_editor_play_stage_label;
+    float object_editor_play_progress{ 1.0f };
+    std::chrono::steady_clock::time_point object_editor_play_started_at{};
     bool object_editor_play_loading{ false };
-    std::shared_ptr<editor_play_loading_gate> object_editor_play_loading_gate;
 
     // AssetGUID -> Scene ファイルのパス。Runtime 層が AssetDatabase を
     // 直接 include しないための実装側。framework が所有する。
@@ -187,6 +202,7 @@
     ReplayEngine::Editor::InspectorPanel    object_inspector_panel;
     ReplayEngine::Editor::ValidationPanel   object_validation_panel;
     ReplayEngine::Rendering::RenderItemList object_render_items;
+#include "framework_class_vertex_paint.inl"
     ReplayEngine::UI::FontAtlas             ui_font_atlas;
     bool ui_pointer_down_last{ false };
     float ui_mouse_wheel_delta{ 0.0f };
@@ -223,6 +239,14 @@
     };
     std::unordered_map<std::string, cached_material_asset> object_material_cache;
     std::unordered_set<std::string> object_material_failures;
+
+    // v3 の Atlas は DDS を内包するので、毎フレーム読み直すと数 MB を舐めることになる。
+    struct cached_sprite_atlas
+    {
+        ReplayEngine::Assets::SpriteAtlasAsset atlas;
+        std::filesystem::file_time_type write_time{};
+    };
+    std::unordered_map<std::string, cached_sprite_atlas> object_sprite_atlas_cache;
 
     // Shader GUID から replay_lighting を解決できなかったもの。
     // 同じ警告を毎フレーム出さないため、Material cache と同じ寿命で保持する。
@@ -329,6 +353,7 @@
     };
     std::unordered_map<std::uint64_t, std::vector<rig_debug_bone>> object_rig_debug_bones;
     // 主の骨。複数選択でも常に rig_selected_bones に含まれる。
+    std::uint64_t   rig_selected_owner{ 0 };
     std::string      rig_selected_bone;
     std::vector<std::string> rig_selected_bones;
 
@@ -365,7 +390,19 @@
         std::unordered_map<std::string, rig_pose_override>> object_rig_pose;
     // ギズモを掴んでいる間の控え。主の変化量を他の骨へ配るのに使う。
     bool             rig_gizmo_dragging{ false };
+    std::uint64_t    rig_gizmo_owner{ 0 };
+    int              rig_gizmo_operation{ 0 };
+    int              object_gizmo_operation{ 0 };
+    bool             rig_gizmo_local_space{ false };
+    bool             object_gizmo_local_space{ false };
+    std::string      rig_gizmo_primary;
+    std::vector<std::string> rig_gizmo_selection;
     std::unordered_map<std::string, rig_pose_override> rig_gizmo_start_pose;
+    std::unordered_map<std::string, DirectX::XMFLOAT4X4> rig_gizmo_start_world_matrices;
+    bool             rig_gizmo_primary_inherited{ false };
+    DirectX::XMFLOAT4 rig_gizmo_start_rotation{ 0.0f, 0.0f, 0.0f, 1.0f };
+    DirectX::XMFLOAT4X4 rig_gizmo_start_matrix{};
+    DirectX::XMFLOAT4X4 rig_gizmo_matrix{};
     // ポーズの Undo/Redo。マップ 1 つぶんを丸ごと控えるだけで足りる。
     struct rig_pose_history_entry
     {
@@ -376,12 +413,14 @@
     };
     std::vector<rig_pose_history_entry> rig_pose_history;
     std::size_t      rig_pose_history_cursor{ 0 };
+    std::uint64_t    rig_pose_last_serial{ 0 };
     bool             rig_pose_history_transaction{ false };
     std::uint64_t    rig_pose_history_owner{ 0 };
     std::unordered_map<std::string, rig_pose_override> rig_pose_history_before;
     std::string      rig_pose_history_label;
     bool             motion_rig_panel_hovered{ false };
     bool             show_collision_diagnostics{ false };
+    bool             show_imgui_metrics{ false };
 
     // Cook に失敗した Asset。同じ警告をログへ出し続けないための記録。
     std::unordered_set<std::string> object_collision_failures;

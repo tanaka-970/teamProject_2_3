@@ -1,0 +1,243 @@
+REPLAY_SCENE 11
+SCENE "新しいシーン"
+SCENE_STATE 0
+COLLISION_STATE 2 0
+OBJECT_COUNT 3
+OBJECT
+  ID 160
+  NAME "GameObject"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SkyboxComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 27
+    PROPERTY "cubemap" assetref "649ebac27e889a3a66d83cf9b4901a2d"
+    PROPERTY "keyframes" array assetref 0
+    PROPERTY "priority" int 0
+    PROPERTY "sky_enabled" bool 1
+    PROPERTY "rotation_degrees" float 0
+    PROPERTY "intensity" float 1
+    PROPERTY "toon_environment" float 0
+    PROPERTY "time" float 0
+    PROPERTY "time_speed" float 0
+    PROPERTY "clouds_enabled" bool 1
+    PROPERTY "cloud_layer1_speed" vec2 0.0030000000260770321 0
+    PROPERTY "cloud_layer1_scale" float 3.5
+    PROPERTY "cloud_layer1_density" float 0.44999998807907104
+    PROPERTY "cloud_layer1_color" color 0.93148696422576904 0.1907995194196701 0.1907995194196701 0.75
+    PROPERTY "cloud_layer2_speed" vec2 -0.001500000013038516 0.0010000000474974513
+    PROPERTY "cloud_layer2_scale" float 7
+    PROPERTY "cloud_layer2_density" float 0.2800000011920929
+    PROPERTY "cloud_layer2_color" color 0.81999999284744263 0.87999999523162842 1 0.55000001192092896
+    PROPERTY "stars_enabled" bool 0
+    PROPERTY "star_density" float 0.34999999403953552
+    PROPERTY "star_intensity" float 2
+    PROPERTY "star_color" color 1 0.8399999737739563 0.68000000715255737 1
+    PROPERTY "moon_enabled" bool 0
+    PROPERTY "moon_direction" vec3 0.34999999403953552 0.25 0.89999997615814209
+    PROPERTY "moon_size" float 0.039999999105930328
+    PROPERTY "moon_intensity" float 5
+    PROPERTY "moon_color" color 1 0.87999999523162842 0.69999998807907104 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 161
+  NAME "GameObject (1)"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 -3.0804779529571533 6.2481913566589355 -0.37523341178894043 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "SkinnedMeshRendererComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 156
+    PROPERTY "mesh_asset" asset "2542372cc847654b67bd2db3ab271e84"
+    PROPERTY "material_asset" asset ""
+    PROPERTY "material_slot_count" int 22
+    PROPERTY "material_override" bool 0
+    PROPERTY "tint" color 1 1 1 1
+    PROPERTY "shading_model" enum 2
+    PROPERTY "outline" bool 1
+    PROPERTY "cast_shadow" bool 1
+    PROPERTY "receive_shadow" bool 1
+    PROPERTY "shadow_alpha_clip" bool 1
+    PROPERTY "shadow_alpha_cutoff" float 1
+    PROPERTY "rendering_layer" int 0
+    PROPERTY "visible" bool 1
+    PROPERTY "visual_rotation_offset" vec3 90 188.5 180
+    PROPERTY "local_position_offset" vec3 0 0 0
+    PROPERTY "local_scale_multiplier" vec3 1 1 1
+    PROPERTY "apply_fbx_coordinate_transform" bool 0
+    PROPERTY "material.base_color" color 1 1 1 1
+    PROPERTY "material.metallic" float 1
+    PROPERTY "material.roughness" float 0.55000001192092896
+    PROPERTY "material.ambient_occlusion" float 1
+    PROPERTY "material.emissive_color" vec3 0 0 0
+    PROPERTY "material.emissive_strength" float 0
+    PROPERTY "material.double_sided" bool 0
+    PROPERTY "material_slots[0].name" string "MIKU-V6_face_Albedo"
+    PROPERTY "material_slots[0].asset" asset "b765eb56b89cb8cf96dae30bed4f4d2a"
+    PROPERTY "material_slots[0].base_color_texture" asset ""
+    PROPERTY "material_slots[0].normal_texture" asset ""
+    PROPERTY "material_slots[0].orm_texture" asset ""
+    PROPERTY "material_slots[0].emissive_texture" asset ""
+    PROPERTY "material_slots[1].name" string "MIKU-V6_eyeEX_Albedo"
+    PROPERTY "material_slots[1].asset" asset ""
+    PROPERTY "material_slots[1].base_color_texture" asset ""
+    PROPERTY "material_slots[1].normal_texture" asset ""
+    PROPERTY "material_slots[1].orm_texture" asset ""
+    PROPERTY "material_slots[1].emissive_texture" asset ""
+    PROPERTY "material_slots[2].name" string "MIKU-V6_brow_Albedo"
+    PROPERTY "material_slots[2].asset" asset ""
+    PROPERTY "material_slots[2].base_color_texture" asset ""
+    PROPERTY "material_slots[2].normal_texture" asset ""
+    PROPERTY "material_slots[2].orm_texture" asset ""
+    PROPERTY "material_slots[2].emissive_texture" asset ""
+    PROPERTY "material_slots[3].name" string "none"
+    PROPERTY "material_slots[3].asset" asset ""
+    PROPERTY "material_slots[3].base_color_texture" asset ""
+    PROPERTY "material_slots[3].normal_texture" asset ""
+    PROPERTY "material_slots[3].orm_texture" asset ""
+    PROPERTY "material_slots[3].emissive_texture" asset ""
+    PROPERTY "material_slots[4].name" string "MIKU-V6_cloth_Albedo"
+    PROPERTY "material_slots[4].asset" asset ""
+    PROPERTY "material_slots[4].base_color_texture" asset ""
+    PROPERTY "material_slots[4].normal_texture" asset ""
+    PROPERTY "material_slots[4].orm_texture" asset ""
+    PROPERTY "material_slots[4].emissive_texture" asset ""
+    PROPERTY "material_slots[5].name" string "MIKU-V6_cloth2_Albedo"
+    PROPERTY "material_slots[5].asset" asset ""
+    PROPERTY "material_slots[5].base_color_texture" asset ""
+    PROPERTY "material_slots[5].normal_texture" asset ""
+    PROPERTY "material_slots[5].orm_texture" asset ""
+    PROPERTY "material_slots[5].emissive_texture" asset ""
+    PROPERTY "material_slots[6].name" string "MIKU-V6_sign_Albedo"
+    PROPERTY "material_slots[6].asset" asset ""
+    PROPERTY "material_slots[6].base_color_texture" asset ""
+    PROPERTY "material_slots[6].normal_texture" asset ""
+    PROPERTY "material_slots[6].orm_texture" asset ""
+    PROPERTY "material_slots[6].emissive_texture" asset ""
+    PROPERTY "material_slots[7].name" string "MIKU-V6_body3_Albedo"
+    PROPERTY "material_slots[7].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[7].base_color_texture" asset ""
+    PROPERTY "material_slots[7].normal_texture" asset ""
+    PROPERTY "material_slots[7].orm_texture" asset ""
+    PROPERTY "material_slots[7].emissive_texture" asset ""
+    PROPERTY "material_slots[8].name" string "MIKU-V6_hair_Albedo"
+    PROPERTY "material_slots[8].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[8].base_color_texture" asset ""
+    PROPERTY "material_slots[8].normal_texture" asset ""
+    PROPERTY "material_slots[8].orm_texture" asset ""
+    PROPERTY "material_slots[8].emissive_texture" asset ""
+    PROPERTY "material_slots[9].name" string "MIKU-V6_fronthair_Albedo"
+    PROPERTY "material_slots[9].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[9].base_color_texture" asset ""
+    PROPERTY "material_slots[9].normal_texture" asset ""
+    PROPERTY "material_slots[9].orm_texture" asset ""
+    PROPERTY "material_slots[9].emissive_texture" asset ""
+    PROPERTY "material_slots[10].name" string "服"
+    PROPERTY "material_slots[10].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[10].base_color_texture" asset ""
+    PROPERTY "material_slots[10].normal_texture" asset ""
+    PROPERTY "material_slots[10].orm_texture" asset ""
+    PROPERTY "material_slots[10].emissive_texture" asset ""
+    PROPERTY "material_slots[11].name" string "体"
+    PROPERTY "material_slots[11].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[11].base_color_texture" asset ""
+    PROPERTY "material_slots[11].normal_texture" asset ""
+    PROPERTY "material_slots[11].orm_texture" asset ""
+    PROPERTY "material_slots[11].emissive_texture" asset ""
+    PROPERTY "material_slots[12].name" string "体"
+    PROPERTY "material_slots[12].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[12].base_color_texture" asset ""
+    PROPERTY "material_slots[12].normal_texture" asset ""
+    PROPERTY "material_slots[12].orm_texture" asset ""
+    PROPERTY "material_slots[12].emissive_texture" asset ""
+    PROPERTY "material_slots[13].name" string "瞳"
+    PROPERTY "material_slots[13].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[13].base_color_texture" asset ""
+    PROPERTY "material_slots[13].normal_texture" asset ""
+    PROPERTY "material_slots[13].orm_texture" asset ""
+    PROPERTY "material_slots[13].emissive_texture" asset ""
+    PROPERTY "material_slots[14].name" string "瞳"
+    PROPERTY "material_slots[14].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[14].base_color_texture" asset ""
+    PROPERTY "material_slots[14].normal_texture" asset ""
+    PROPERTY "material_slots[14].orm_texture" asset ""
+    PROPERTY "material_slots[14].emissive_texture" asset ""
+    PROPERTY "material_slots[15].name" string "体"
+    PROPERTY "material_slots[15].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[15].base_color_texture" asset ""
+    PROPERTY "material_slots[15].normal_texture" asset ""
+    PROPERTY "material_slots[15].orm_texture" asset ""
+    PROPERTY "material_slots[15].emissive_texture" asset ""
+    PROPERTY "material_slots[16].name" string "眼球を暗くする"
+    PROPERTY "material_slots[16].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[16].base_color_texture" asset ""
+    PROPERTY "material_slots[16].normal_texture" asset ""
+    PROPERTY "material_slots[16].orm_texture" asset ""
+    PROPERTY "material_slots[16].emissive_texture" asset ""
+    PROPERTY "material_slots[17].name" string "体"
+    PROPERTY "material_slots[17].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[17].base_color_texture" asset ""
+    PROPERTY "material_slots[17].normal_texture" asset ""
+    PROPERTY "material_slots[17].orm_texture" asset ""
+    PROPERTY "material_slots[17].emissive_texture" asset ""
+    PROPERTY "material_slots[18].name" string "体"
+    PROPERTY "material_slots[18].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[18].base_color_texture" asset ""
+    PROPERTY "material_slots[18].normal_texture" asset ""
+    PROPERTY "material_slots[18].orm_texture" asset ""
+    PROPERTY "material_slots[18].emissive_texture" asset ""
+    PROPERTY "material_slots[19].name" string "服"
+    PROPERTY "material_slots[19].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[19].base_color_texture" asset ""
+    PROPERTY "material_slots[19].normal_texture" asset ""
+    PROPERTY "material_slots[19].orm_texture" asset ""
+    PROPERTY "material_slots[19].emissive_texture" asset ""
+    PROPERTY "material_slots[20].name" string "体"
+    PROPERTY "material_slots[20].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[20].base_color_texture" asset ""
+    PROPERTY "material_slots[20].normal_texture" asset ""
+    PROPERTY "material_slots[20].orm_texture" asset ""
+    PROPERTY "material_slots[20].emissive_texture" asset ""
+    PROPERTY "material_slots[21].name" string "体"
+    PROPERTY "material_slots[21].asset" asset "4fe4ca21436572fa4a0cea2f94c0a243"
+    PROPERTY "material_slots[21].base_color_texture" asset ""
+    PROPERTY "material_slots[21].normal_texture" asset ""
+    PROPERTY "material_slots[21].orm_texture" asset ""
+    PROPERTY "material_slots[21].emissive_texture" asset ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 162
+  NAME "GameObject (2)"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 1
+  COMPONENT "DirectionalLightComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 2
+    PROPERTY_COUNT 7
+    PROPERTY "color" color 0.91487771272659302 0.91486853361129761 0.91486853361129761 1
+    PROPERTY "intensity" float 1
+    PROPERTY "cast_shadows" bool 1
+    PROPERTY "shadow_strength" float 1
+    PROPERTY "shadow_depth_bias" float 0.020999999716877937
+    PROPERTY "shadow_normal_bias" float 1.3999999761581421
+    PROPERTY "shadow_distance" float 621
+  END_COMPONENT
+END_OBJECT

@@ -554,6 +554,176 @@ float3 Dx12EvaluateIbl(float3 albedo, float metallic, float roughness,
     return (diffuse + specular) * max(iblParams.w, 0.0f);
 }
 
+struct Dx12GgstSurface
+{
+    float3 shadeColor;
+    float shadingThreshold;
+    float shadingOffset;
+    float specularSize;
+    float specularIntensity;
+};
+
+float3 Dx12DefaultGgstIlm()
+{
+    // 手本のILM実測平均（R約0.22/G約0.50/B約0.06）を未設定時の基準にする。
+    return float3(0.2f, 0.5f, 0.06f);
+}
+
+Dx12GgstSurface Dx12DefaultGgstSurface()
+{
+    Dx12GgstSurface ggst;
+    ggst.shadeColor = float3(0.0f, 0.0f, 0.0f);
+    ggst.shadingThreshold = 0.5f;
+    ggst.shadingOffset = 0.0f;
+    ggst.specularSize = 0.2f;
+    ggst.specularIntensity = 10.0f;
+    return ggst;
+}
+
+float3 Dx12EvaluateGgstLight(float3 baseColor, float3 normal, float3 viewDirection,
+    float3 lightDirection, float3 lightColor, float noL, float vertexR, float3 ilmColor,
+    Dx12GgstSurface ggst)
+{
+    const float3 halfVector = normalize(lightDirection + viewDirection);
+    const float nDotH = saturate(dot(normal, halfVector));
+    const float threshold = saturate(ggst.shadingThreshold);
+    const float adjustedVertexR = saturate(vertexR);
+    const float3 ilm = saturate(ilmColor);
+    const float factor = (saturate(noL) + saturate(ggst.shadingOffset)) *
+        adjustedVertexR * 0.5f;
+    const float modifiedNoL = saturate(factor + ilm.g * 2.0f - 1.0f);
+    const float modifiedNoH = 1.0f - (1.0f - nDotH) / max(ilm.b, 0.0001f);
+    const float3 litBase = baseColor * lightColor;
+    const float3 highlightBase = lerp(1.0f.xxx, min(litBase, 1.0f.xxx), 0.9f) * ilm.r;
+    const float3 specularColor = highlightBase * lightColor * max(ggst.specularIntensity, 0.0f);
+    const float highlightFactor = modifiedNoH >= saturate(1.0f - ggst.specularSize) ? 1.0f : 0.0f;
+    const float3 baseAndSpecular = lerp(litBase, specularColor, highlightFactor);
+    const float vertexFactor = adjustedVertexR >= threshold ? 1.0f : 0.0f;
+    const float lightFactor = modifiedNoL >= threshold ? 1.0f : 0.0f;
+    // 影側にも albedo を掛ける。単色のままだと影の面積でテクスチャが消える。
+    const float3 shade = baseColor * ggst.shadeColor * lightColor;
+    return lerp(shade, baseAndSpecular, min(vertexFactor, lightFactor));
+}
+
+float3 Dx12EvaluateGgstLight(float3 baseColor, float3 normal, float3 viewDirection,
+    float3 lightDirection, float3 lightColor, float noL, float vertexR,
+    Dx12GgstSurface ggst)
+{
+    return Dx12EvaluateGgstLight(baseColor, normal, viewDirection, lightDirection, lightColor,
+        noL, vertexR, Dx12DefaultGgstIlm(), ggst);
+}
+
+float3 Dx12GgstFaceLightDirection(float3 lightDirection, bool faceLighting,
+    float3 faceRight, float3 faceFront)
+{
+    if (!faceLighting) return lightDirection;
+    const float3 right = normalize(faceRight);
+    float3 front = faceFront - right * dot(right, faceFront);
+    const float frontLength = length(front);
+    if (frontLength <= 1.0e-5f) return lightDirection;
+    front /= frontLength;
+    const float3 projected = right * dot(right, lightDirection) +
+        front * dot(front, lightDirection);
+    const float projectedLength = length(projected);
+    return projectedLength > 1.0e-5f ? projected / projectedLength : lightDirection;
+}
+
+float3 Dx12EvaluateLightingGgst(float3 worldPosition, float3 normal, float3 albedo,
+    float vertexR, float3 ilmColor, bool faceLighting, float3 faceRight, float3 faceFront,
+    bool receiveShadow, float2 noiseCoord, Dx12GgstSurface ggst)
+{
+    const float3 N = normalize(normal);
+    const float3 V = normalize(cameraPosition.xyz - worldPosition);
+    float3 bestDirection = float3(0.0f, 1.0f, 0.0f);
+    float3 bestColor = 0.0f.xxx;
+    float bestVisibility = 1.0f;
+    float bestWeight = 0.0f;
+
+    if (directionalColorFlags.w > 0.5f)
+    {
+        const float3 L = normalize(-directionalDirectionIntensity.xyz);
+        const float physicalNoL = saturate(dot(N, L));
+        const float visibility = receiveShadow ?
+            Dx12SampleCsm(worldPosition, N, physicalNoL, noiseCoord) : 1.0f;
+        const float3 lightColor = directionalColorFlags.rgb *
+            directionalDirectionIntensity.w;
+        const float weight = Dx12Luminance(lightColor * visibility);
+        if (weight > bestWeight)
+        {
+            bestDirection = L;
+            bestColor = lightColor;
+            bestVisibility = visibility;
+            bestWeight = weight;
+        }
+    }
+
+    [loop] for (uint i = 0; i < min(lightCounts.x, 8u); ++i)
+    {
+        const float3 delta = pointLights[i].positionRange.xyz - worldPosition;
+        const float distanceToLight = length(delta);
+        const float range = max(pointLights[i].positionRange.w, 1.0e-3f);
+        const float3 L = delta / max(distanceToLight, 1.0e-5f);
+        float attenuation = saturate(1.0f - distanceToLight / range);
+        attenuation *= attenuation;
+        const float physicalNoL = saturate(dot(N, L));
+        const float visibility = receiveShadow ?
+            Dx12PointShadow(pointLights[i], worldPosition, N, physicalNoL) : 1.0f;
+        const float3 lightColor = pointLights[i].colorIntensity.rgb *
+            pointLights[i].colorIntensity.w * attenuation;
+        const float weight = Dx12Luminance(lightColor * visibility);
+        if (weight > bestWeight)
+        {
+            bestDirection = L;
+            bestColor = lightColor;
+            bestVisibility = visibility;
+            bestWeight = weight;
+        }
+    }
+
+    [loop] for (uint i = 0; i < min(lightCounts.y, 4u); ++i)
+    {
+        const float3 delta = spotLights[i].positionRange.xyz - worldPosition;
+        const float distanceToLight = length(delta);
+        const float range = max(spotLights[i].positionRange.w, 1.0e-3f);
+        const float3 L = delta / max(distanceToLight, 1.0e-5f);
+        const float cone = dot(normalize(-spotLights[i].directionInner.xyz), L);
+        const float coneAttenuation = saturate((cone - spotLights[i].colorOuter.w) /
+            max(spotLights[i].directionInner.w - spotLights[i].colorOuter.w, 1.0e-4f));
+        float attenuation = saturate(1.0f - distanceToLight / range);
+        attenuation *= attenuation * coneAttenuation;
+        const float physicalNoL = saturate(dot(N, L));
+        const float visibility = receiveShadow ?
+            Dx12SpotShadow(spotLights[i], worldPosition, N, distanceToLight, physicalNoL) : 1.0f;
+        const float3 lightColor = spotLights[i].colorOuter.rgb *
+            spotLights[i].params.x * attenuation;
+        const float weight = Dx12Luminance(lightColor * visibility);
+        if (weight > bestWeight)
+        {
+            bestDirection = L;
+            bestColor = lightColor;
+            bestVisibility = visibility;
+            bestWeight = weight;
+        }
+    }
+
+    if (bestWeight <= 1.0e-6f) return albedo * ggst.shadeColor;
+    const float3 shadingDirection = Dx12GgstFaceLightDirection(
+        bestDirection, faceLighting, faceRight, faceFront);
+    const float shadingNoL = saturate(dot(N, shadingDirection));
+    const float3 lit = Dx12EvaluateGgstLight(albedo, N, V, shadingDirection, bestColor,
+        shadingNoL, vertexR, ilmColor, ggst);
+    const float3 shade = albedo * ggst.shadeColor * bestColor;
+    return lerp(shade, lit, saturate(bestVisibility));
+}
+
+float3 Dx12EvaluateLightingGgst(float3 worldPosition, float3 normal, float3 albedo,
+    float vertexR, bool receiveShadow, float2 noiseCoord, Dx12GgstSurface ggst)
+{
+    return Dx12EvaluateLightingGgst(worldPosition, normal, albedo, vertexR,
+        Dx12DefaultGgstIlm(), false, float3(1.0f, 0.0f, 0.0f),
+        float3(0.0f, 0.0f, 1.0f), receiveShadow, noiseCoord, ggst);
+}
+
 float3 Dx12EvaluateLightingToonNormalized(float3 worldPosition, float3 normal,
     float3 albedo, float metallic, float roughness, float ambientOcclusion,
     bool receiveShadow, float2 noiseCoord, Dx12ToonSurface toon)

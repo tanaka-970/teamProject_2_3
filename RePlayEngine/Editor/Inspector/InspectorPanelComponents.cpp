@@ -198,9 +198,14 @@ namespace ReplayEngine::Editor
             category_color.y, category_color.z, 0.30f));
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(category_color.x,
             category_color.y, category_color.z, 0.40f));
-        const ReorderableItemResult reorder = DrawReorderableItem(
+        const ReorderableItemResult reorder = DrawReorderableItemEx(
             component_list_identity, component_id.c_str(), component_index,
-            component_count, title.c_str(), selected, false, editable,
+            component_count, title.c_str(), selected, false, editable, 0, nullptr,
+            [&](const char* header_title, ImGuiTreeNodeFlags flags)
+            {
+                return component_header_drawer_ ? component_header_drawer_(component, header_title, flags)
+                    : ImGui::CollapsingHeader(header_title, flags);
+            },
             [&]()
             {
                 if (removable && editable && ImGui::MenuItem(
@@ -219,7 +224,7 @@ namespace ReplayEngine::Editor
                         pending_removal_label_ = title;
                     }
                 }
-            });
+            }, [](ReorderDropInfo&, const ImVec2&, const ImVec2&) {});
         ImGui::PopStyleColor(3);
         if (reorder.clicked)
         {
@@ -248,6 +253,8 @@ namespace ReplayEngine::Editor
         }
 
         ImGui::Indent();
+        // 中身も Component ごとの ID の内側で描く。同名のボタンが Component 間で衝突して押せなくなる。
+        ImGui::PushID((component_id + "#body").c_str());
 
         if (missing != nullptr)
         {
@@ -270,6 +277,7 @@ namespace ReplayEngine::Editor
             ImGui::TextDisabled(
                 u8"削除すると、預かっている内容も一緒に失われます。");
 
+            ImGui::PopID();
             ImGui::Unindent();
             draw_separator();
             return;
@@ -640,6 +648,7 @@ namespace ReplayEngine::Editor
             pending_removal_label_ = title;
         }
 
+        ImGui::PopID();
         ImGui::Unindent();
     }
 }

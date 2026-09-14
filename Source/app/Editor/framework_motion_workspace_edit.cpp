@@ -508,6 +508,77 @@ void framework::step_motion_preview_frames(int frames)
         ? "1フレーム進めました" : "1フレーム戻しました";
 }
 
+// キーへ直接飛ぶ。Track を選んでいればその Track、選んでいなければ全 Track とイベントが対象。
+void framework::step_motion_preview_key(int direction)
+{
+    if (direction == 0 || !motion_editor_loaded) return;
+
+    constexpr float epsilon = 1.0e-4f;
+    float best = 0.0f;
+    bool found = false;
+    const auto consider = [&](float candidate)
+    {
+        if (direction > 0)
+        {
+            if (candidate <= motion_preview_time + epsilon) return;
+            if (!found || candidate < best) { best = candidate; found = true; }
+        }
+        else
+        {
+            if (candidate >= motion_preview_time - epsilon) return;
+            if (!found || candidate > best) { best = candidate; found = true; }
+        }
+    };
+
+    if (const MotionTrack* selected = selected_motion_track())
+    {
+        for (const auto& key : selected->keys) consider(key.time);
+    }
+    else
+    {
+        for (const auto& track : motion_editor_asset.tracks)
+        {
+            if (!track.enabled) continue;
+            for (const auto& key : track.keys) consider(key.time);
+        }
+        for (const auto& event_track : motion_editor_asset.event_tracks)
+            for (const auto& event : event_track.events) consider(event.time);
+    }
+
+    if (!found)
+    {
+        motion_editor_status = direction > 0
+            ? "これより後ろにキーはありません" : "これより前にキーはありません";
+        return;
+    }
+
+    // 吸着で丸めるとキーからずれるため、ここでは時刻をそのまま入れる。
+    motion_preview_time = (std::min)((std::max)(0.0f, best),
+        (std::max)(0.0f, motion_editor_asset.duration));
+    apply_motion_preview_time();
+    motion_editor_status = direction > 0
+        ? "次のキーへ移動しました" : "前のキーへ移動しました";
+}
+
+// 選択中 Track のキーをすべて選ぶ。イージングの一括適用やまとめて移動の下ごしらえ。
+bool framework::select_all_motion_keys()
+{
+    MotionTrack* track = selected_motion_track();
+    if (track == nullptr || track->keys.empty())
+    {
+        motion_editor_status = "全選択できるキーがありません";
+        return false;
+    }
+
+    motion_selected_keys.clear();
+    motion_selected_keys.reserve(track->keys.size());
+    for (int index = 0; index < static_cast<int>(track->keys.size()); ++index)
+        motion_selected_keys.push_back(index);
+    motion_selected_key = motion_selected_keys.front();
+    motion_editor_status = "Trackのキーをすべて選択しました";
+    return true;
+}
+
 bool framework::undo_motion_edit()
 {
     stop_motion_preview();

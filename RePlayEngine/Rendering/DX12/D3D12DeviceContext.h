@@ -10,6 +10,7 @@
 #include "D3D12FrameConstants.h"
 #include "D3D12FrameResource.h"
 #include "D3D12MeshBuffer.h"
+#include "../../Assets/VertexColorAsset.h"
 #include "D3D12RenderItemBatch.h"
 #include "D3D12ResourceStateTracker.h"
 #include "D3D12ScreenBounds.h"
@@ -41,7 +42,7 @@ struct ImDrawData;
 namespace ReplayEngine::Rendering::DX12
 {
     // Deferred GBuffer の枚数はここだけで決める。RT を足すときはこの値を増やす。
-    inline constexpr std::uint32_t kScene3DGBufferCount = 6;
+    inline constexpr std::uint32_t kScene3DGBufferCount = 8;
     inline constexpr std::size_t kScene3DLayerPipelineCount = 12;
 
     struct D3D12StaticVertex final
@@ -61,6 +62,7 @@ namespace ReplayEngine::Rendering::DX12
         std::string key;
         std::vector<D3D12StaticVertex> vertices;
         std::vector<std::uint32_t> indices;
+        std::vector<Assets::VertexColorRgba8> vertex_colors;
         // 同じFrame slotの動的Line/Trailを再アップロードするときだけ置換する。
         // BeginFrameが該当slotのFenceを待った後なので、GPU使用中のResourceを解放しない。
         bool replace_existing = false;
@@ -72,6 +74,8 @@ namespace ReplayEngine::Rendering::DX12
         std::string key;
         std::filesystem::path source_path;
         std::vector<std::uint8_t> rgba;
+        // Sprite Atlas へ埋め込まれた DDS など、ファイルを持たない資産のバイト列。
+        std::vector<std::uint8_t> dds_bytes;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
         bool is_cube = false;
@@ -179,14 +183,19 @@ namespace ReplayEngine::Rendering::DX12
         // ResolvedMaterialBinding::TextureSemantic の bit mask。
         // slot番号だけで Toon RampMap 等を NormalMap と誤認しないために使う。
         std::uint32_t material_texture_semantic_mask = 0;
-        // BuiltIn シェーダの固有表現。x=効果ID、y/z/w=引数。0 なら何もしない。
+        // BuiltIn固有表現。GGSTはx=3、y=Threshold、z=Offset、w=SpecularSize。
         DirectX::XMFLOAT4 builtin_params{ 0.0f, 0.0f, 0.0f, 0.0f };
-        // Toon の追加枠。rgb=ShadowTint、w=RimPower。既定は効果オフ。
+        // 追加色枠。ToonはShadowTint、GGSTはShadeColor(rgb)/SpecularIntensity(w)。
         DirectX::XMFLOAT4 builtin_params1{ 0.0f, 0.0f, 0.0f, 0.0f };
-        // Toon の追加枠。rgb=RimColor、w=SpecularPower。
+        // Toonはrgb=RimColor/w=SpecularPower、GGSTはx=顔ライティング、y=顔ボーンID、z/w=軸反転。
         DirectX::XMFLOAT4 builtin_params2{ 0.0f, 0.0f, 0.0f, 1.0f };
         // Toon の追加枠。rgb=SpecularTint、w=予約。
         DirectX::XMFLOAT4 builtin_params3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        // GGST 顔ライティング用。名前は提出時にSkeletonへ解決し、basisはmesh localで運ぶ。
+        std::string ggst_face_bone_name;
+        std::int32_t ggst_face_bone_index = -1;
+        DirectX::XMFLOAT3 ggst_face_right{ 1.0f, 0.0f, 0.0f };
+        DirectX::XMFLOAT3 ggst_face_front{ 0.0f, 0.0f, 1.0f };
         DirectX::XMFLOAT4 normal_adjust_center{ 0.0f, 0.0f, 0.0f, 0.0f };
         DirectX::XMFLOAT4 normal_adjust_params{ 0.0f, 0.0f, 0.0f, 0.0f };
         std::uint32_t start_index = 0;
@@ -231,6 +240,7 @@ namespace ReplayEngine::Rendering::DX12
         std::string key;
         std::vector<D3D12SkinnedVertex> vertices;
         std::vector<std::uint32_t> indices;
+        std::vector<Assets::VertexColorRgba8> vertex_colors;
     };
 
     struct D3D12SkinnedDrawItem final
@@ -337,8 +347,18 @@ namespace ReplayEngine::Rendering::DX12
         bool final_pass_enabled = true;
     };
 
+    struct D3D12VertexColorUpdate final
+    {
+        std::string key;
+        std::shared_ptr<const Assets::VertexColorAsset> asset;
+        std::uint32_t mesh_index = 0;
+        std::uint64_t revision = 0;
+        bool skinned = false;
+    };
     struct D3D12StaticSceneSubmission final
     {
+        std::vector<D3D12VertexColorUpdate> vertex_color_updates;
+        std::uint32_t vertex_color_debug_channel = 0;
         std::vector<D3D12StaticMeshSource> mesh_sources;
         std::vector<D3D12SkinnedMeshSource> skinned_mesh_sources;
         std::vector<D3D12StaticTextureSource> texture_sources;
@@ -750,6 +770,9 @@ namespace ReplayEngine::Rendering::DX12
         // Editorが持つAsset pathを、DX12 ImGui用SRVへ遅延登録する。
         // 戻り値はD3D11 SRVポインタではなく、このContext専用の安定したID。
         void* ImGuiTextureForPath(const std::filesystem::path& source_path) noexcept;
+        // ファイルを持たない DDS 用。key は呼び出し側が決める安定した文字列。
+        void* ImGuiTextureForBytes(const std::string& key,
+            const std::vector<std::uint8_t>& dds_bytes) noexcept;
         // UI Preview offscreen SRVをImGui TextureIdとして返す。
         void* ImGuiTextureForUIPreview() const noexcept;
 #endif
@@ -1075,6 +1098,7 @@ namespace ReplayEngine::Rendering::DX12
         void ReleaseBackBufferCapture() noexcept;
         std::uint64_t SignalQueue() noexcept;
         void ReclaimDeferredDescriptors() noexcept;
+        bool UpdateVertexColors(const D3D12VertexColorUpdate& update) noexcept;
         void RetireStaticMesh(std::unique_ptr<D3D12MeshBuffer> mesh) noexcept;
         void ReleaseRetiredStaticMeshes(std::uint64_t completed_fence_value) noexcept;
         void ReportDeviceRemoved(HRESULT trigger) noexcept;
@@ -1392,6 +1416,8 @@ namespace ReplayEngine::Rendering::DX12
         {
             std::string key;
             std::filesystem::path source_path;
+            // 空でなければ、パスではなくこのバイト列から DDS として読む。
+            std::vector<std::uint8_t> dds_bytes;
         };
         Microsoft::WRL::ComPtr<ID3D12RootSignature> imgui_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> imgui_pipeline_;

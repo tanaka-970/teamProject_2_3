@@ -140,6 +140,29 @@ bool framework::initialize()
     if (!asset_database.Load(asset_database_error))
         object_editor_context.SetStatus("AssetDatabase: " + asset_database_error);
     record_initialize_stage(0);
+    editor_icon_provider.Configure(&asset_database,
+        [this](const std::filesystem::path& path)
+        { return dx12_device_context.ImGuiTextureForPath(path); }, &project_settings,
+        [this](const std::string& key, const std::vector<std::uint8_t>& bytes)
+        { return dx12_device_context.ImGuiTextureForBytes(key, bytes); });
+    object_hierarchy_panel.SetIconProvider(&editor_icon_provider, &hierarchy_icon_display);
+    object_hierarchy_panel.SetToolbarDrawer([this]
+    {
+        using ReplayEngine::Editor::HierarchyIconDisplay;
+        if (ImGui::SmallButton("表示")) ImGui::OpenPopup("階層アイコン表示");
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("種類別アイコンの表示方法");
+        if (ImGui::BeginPopup("階層アイコン表示"))
+        {
+            const char* labels[] = { "常に並べる", "カーソルを乗せた行だけ", "出さない" };
+            for (int index = 0; index < 3; ++index)
+            {
+                const auto mode = static_cast<HierarchyIconDisplay>(index);
+                if (ImGui::Selectable(labels[index], hierarchy_icon_display == mode))
+                    hierarchy_icon_display = mode;
+            }
+            ImGui::EndPopup();
+        }
+    });
 
     if (!standalone_game_mode && !profile_benchmark_mode &&
         automated_smoke_test_frames == 0 && !shutdown_regression_requested &&
@@ -196,17 +219,8 @@ bool framework::initialize()
             return true;
         });
     }
-    // Game 起動ではロゴの裏でロードを進める。Editor 起動では固定長の
-    // ロゴ待ちを省き、暗いロード画面から直接セッションを復元する。
-    if (object_boot_from_startup_scene)
-    {
-        scene_manager.SetScene(std::make_unique<ReplayEngine::Scene::BootLogoScene>());
-        scene_manager.QueueScene(std::move(loading_scene));
-    }
-    else
-    {
-        scene_manager.SetScene(std::move(loading_scene));
-    }
+    // Editor と Game のどちらもロゴの裏でロードを進める。どのロゴを出すかは Project 設定を読んだあとで決める。
+    scene_manager.QueueScene(std::move(loading_scene));
 
     scene_manager.QueueSceneFactory([this]() -> std::unique_ptr<ReplayEngine::Scene::IScene>
     {

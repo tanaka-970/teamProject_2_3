@@ -736,6 +736,50 @@ namespace ReplayEngine::Runtime::Detail
             active_runtime->Events().DroppedEventCount() == active_dropped_before,
             "専用 Scene の更新前後で Runtime World の MotionEvent 状態が不変である");
 
+        // Motion の終端通知。Asset は cache へ直に入れて、ファイルに依存しない形で確かめる。
+        {
+            using ReplayEngine::Components::MotionPlayerComponent;
+            ReplayEngine::Motion::MotionAsset finish_asset;
+            finish_asset.name = "MotionFinishProbe";
+            finish_asset.duration = 1.0f;
+            host.motion_asset_cache.insert_or_assign("motionfinishprobe",
+                std::move(finish_asset));
+
+            ReplayEngine::Scene::Scene& finish_scene =
+                host.object_runtime_scenes.ActiveWorld();
+            ReplayEngine::Core::GameObject* finish_object =
+                finish_scene.CreateGameObject("MotionFinishProbe");
+            MotionPlayerComponent* finish_player = finish_object != nullptr
+                ? finish_object->AddComponent<MotionPlayerComponent>() : nullptr;
+            Check(finish_player != nullptr, "終端通知の検証用 MotionPlayer を作れる");
+
+            if (finish_player != nullptr)
+            {
+                finish_player->motion.guid = "motionfinishprobe";
+                finish_player->wrap_mode = MotionPlayerComponent::Once;
+                finish_player->auto_stop_on_end = true;
+                finish_player->PlayFrom(0.9f);
+
+                const std::size_t pending_before =
+                    active_runtime->Events().PendingEventCount();
+                host.evaluate_motion_players(finish_scene, 0.5f, 0.5f,
+                    host.motion_mixer, active_runtime.get(), 0);
+                const std::size_t pending_after =
+                    active_runtime->Events().PendingEventCount();
+                Check(pending_after == pending_before + 1,
+                    "Motion が終端へ達すると MotionFinished が 1 件出る");
+                Check(finish_player->state == MotionPlayerComponent::Stopped,
+                    "終端で auto_stop_on_end が効いて停止している");
+
+                host.evaluate_motion_players(finish_scene, 0.5f, 0.5f,
+                    host.motion_mixer, active_runtime.get(), 1);
+                Check(active_runtime->Events().PendingEventCount() == pending_after,
+                    "終端通知は同じ再生で二度出ない");
+            }
+            if (finish_object != nullptr) finish_scene.DestroyGameObject(finish_object);
+            host.motion_asset_cache.erase("motionfinishprobe");
+        }
+
         gate->store(true, std::memory_order_release);
         host.scene_manager.Clear();
         host.object_runtime_scenes.ActiveWorld().Services().SetRuntime(nullptr);

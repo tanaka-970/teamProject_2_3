@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstring>
 #include <fstream>
+#include <sstream>
 
 namespace ReplayEngine::Assets
 {
@@ -41,7 +42,7 @@ namespace ReplayEngine::Assets
                 (static_cast<std::uint32_t>(text[3]) << 24);
         }
 
-        void WriteDdsHeader(std::ofstream& stream, int width, int height,
+        void WriteDdsHeader(std::ostream& stream, int width, int height,
             int mip_count, std::uint32_t four_cc, int block_bytes)
         {
             const std::uint32_t blocks_wide =
@@ -434,14 +435,46 @@ namespace ReplayEngine::Assets
         return result;
     }
 
-    TextureCompressor::Result TextureCompressor::CompressRgba(
-        const std::uint8_t* rgba, int width, int height,
-        const std::filesystem::path& destination, Format format)
+    TextureCompressor::Result TextureCompressor::CompressToMemory(
+        const std::filesystem::path& source,
+        std::vector<std::uint8_t>& out, Format format)
     {
+        out.clear();
         Result result{};
-        if (!rgba || width <= 0 || height <= 0 || destination.empty())
+        std::error_code error;
+        if (!std::filesystem::exists(source, error))
         {
-            result.error = "RGBA画像または出力先が不正です";
+            result.error = "入力が見つかりません";
+            return result;
+        }
+
+        int width = 0, height = 0, components = 0;
+        unsigned char* decoded = stbi_load(source.string().c_str(),
+            &width, &height, &components, 4);
+        if (!decoded || width <= 0 || height <= 0)
+        {
+            if (decoded) stbi_image_free(decoded);
+            result.error = "画像をデコードできません";
+            return result;
+        }
+
+        // ファイル名から法線用途と判断できる既存挙動を維持する。
+        if (format == Format::Auto && LooksLikeNormalMap(source)) format = Format::BC5;
+        result = CompressRgbaToMemory(decoded, width, height, out, format);
+        result.source_bytes = std::filesystem::file_size(source, error);
+        stbi_image_free(decoded);
+        return result;
+    }
+
+    TextureCompressor::Result TextureCompressor::CompressRgbaToMemory(
+        const std::uint8_t* rgba, int width, int height,
+        std::vector<std::uint8_t>& out, Format format)
+    {
+        out.clear();
+        Result result{};
+        if (!rgba || width <= 0 || height <= 0)
+        {
+            result.error = "RGBA画像が不正です";
             return result;
         }
 
@@ -475,6 +508,44 @@ namespace ReplayEngine::Assets
             chain.push_back(Downsample(chain.back()));
         result.mip_count = static_cast<int>(chain.size());
 
+        std::ostringstream stream(std::ios::binary);
+        WriteDdsHeader(stream, width, height, result.mip_count,
+            MakeFourCc(four_cc_text), block_bytes);
+        for (const Surface& level : chain)
+        {
+            const auto encoded = EncodeSurface(level, format);
+            stream.write(reinterpret_cast<const char*>(encoded.data()),
+                static_cast<std::streamsize>(encoded.size()));
+        }
+        if (!stream)
+        {
+            result.error = "DDSの組み立てに失敗しました";
+            return result;
+        }
+
+        const std::string bytes = stream.str();
+        out.assign(bytes.begin(), bytes.end());
+        result.output_bytes = out.size();
+        result.succeeded = true;
+        return result;
+    }
+
+    TextureCompressor::Result TextureCompressor::CompressRgba(
+        const std::uint8_t* rgba, int width, int height,
+        const std::filesystem::path& destination, Format format)
+    {
+        Result result{};
+        if (destination.empty())
+        {
+            result.error = "出力先が不正です";
+            return result;
+        }
+
+        std::vector<std::uint8_t> bytes;
+        result = CompressRgbaToMemory(rgba, width, height, bytes, format);
+        if (!result.succeeded) return result;
+        result.succeeded = false;
+
         std::error_code error;
         std::filesystem::create_directories(destination.parent_path(), error);
         if (error)
@@ -489,15 +560,8 @@ namespace ReplayEngine::Assets
             result.error = "出力を開けません";
             return result;
         }
-
-        WriteDdsHeader(stream, width, height, result.mip_count,
-            MakeFourCc(four_cc_text), block_bytes);
-        for (const Surface& level : chain)
-        {
-            const auto encoded = EncodeSurface(level, format);
-            stream.write(reinterpret_cast<const char*>(encoded.data()),
-                static_cast<std::streamsize>(encoded.size()));
-        }
+        stream.write(reinterpret_cast<const char*>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
         stream.close();
         if (!stream)
         {
