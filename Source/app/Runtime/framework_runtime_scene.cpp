@@ -148,8 +148,8 @@ framework::runtime_prefab_instantiator::InstantiatePrefab(
 
 float framework::loading_progress_provider::Progress() const noexcept
 {
-    if (editor_play_loading_ && runtime_scene_ != nullptr)
-        return runtime_scene_->Progress();
+    if (editor_play_loading_)
+        return editor_play_progress_;
 
     if (scene_manager_ == nullptr) return 1.0f;
     const auto* loading_scene = dynamic_cast<const ReplayEngine::Scene::LoadingScene*>(
@@ -159,8 +159,8 @@ float framework::loading_progress_provider::Progress() const noexcept
 
 bool framework::loading_progress_provider::IsLoading() const noexcept
 {
-    if (editor_play_loading_ && runtime_scene_ != nullptr)
-        return runtime_scene_->IsBusy();
+    if (editor_play_loading_)
+        return true;
 
     if (scene_manager_ == nullptr) return false;
     const auto* loading_scene = dynamic_cast<const ReplayEngine::Scene::LoadingScene*>(

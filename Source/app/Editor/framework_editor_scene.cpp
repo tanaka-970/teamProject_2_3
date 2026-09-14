@@ -329,7 +329,16 @@ void framework::draw_editor_toolbar()
         std::string(u8"▶ 実行 (") + play_shortcut + ")";
     const ImVec2 transport_size((std::max)(96.0f,
         ImGui::CalcTextSize(play_label.c_str()).x + ImGui::GetStyle().FramePadding.x * 2.0f), 0.0f);
-    if (!object_scene_play_mode)
+    if (object_editor_play_loading)
+    {
+        // Play 開始処理の途中で二重要求を入れない。進捗の本体は中央オーバーレイへ出す。
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.48f, 0.26f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.18f, 0.48f, 0.26f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.18f, 0.48f, 0.26f, 1.0f));
+        ImGui::Button(u8"… 読み込み中", transport_size);
+        ImGui::PopStyleColor(3);
+    }
+    else if (!object_scene_play_mode)
     {
         ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.16f, 0.62f, 0.28f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.22f, 0.74f, 0.36f, 1.0f));

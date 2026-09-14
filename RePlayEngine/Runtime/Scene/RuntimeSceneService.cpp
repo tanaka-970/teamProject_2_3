@@ -222,11 +222,21 @@ namespace ReplayEngine::Runtime
     SceneRequestResult RuntimeSceneService::RequestAdopt(
         const Serialization::SceneData& data, const std::string& source_guid)
     {
+        // 既存 API の参照寿命契約は維持する。呼び出し元の data を保持せず、
+        // 自前のコピーへしたうえで move 経路へ集約する。
+        Serialization::SceneData owned = data;
+        return RequestAdopt(std::move(owned), source_guid);
+    }
+
+    SceneRequestResult RuntimeSceneService::RequestAdopt(
+        Serialization::SceneData&& data, const std::string& source_guid)
+    {
         if (IsBusy()) return SceneRequestResult::Busy;
 
-        // 要求を受けた時点で複製する。
-        // 参照で持つと、Tick が走るまでの間に呼び出し側が中身を変えられる。
-        pending_data_ = data;
+        // 要求を受けた時点で所有権を受け取る。
+        // Play Mode は CaptureScene 直後の SceneData を使い切るため、ここを move にすると
+        // PropertyBag や巨大 Landscape の一時データを丸ごと再コピーせずに済む。
+        pending_data_ = std::move(data);
         pending_source_ = PendingSource::InMemory;
         pending_scene_guid_ = source_guid;
         pending_scene_path_.clear();

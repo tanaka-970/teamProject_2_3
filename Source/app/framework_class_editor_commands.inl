@@ -429,6 +429,7 @@ private:
     void apply_toon_preset(int preset);
     void reset_editor_values();
     void draw_editor();
+    void draw_editor_play_loading_overlay();
     std::string action_shortcut(std::string_view name) const;
     enum class editor_history_target
     {

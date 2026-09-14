@@ -61,6 +61,12 @@
         void SetEditorPlayLoading(bool loading) noexcept
         {
             editor_play_loading_ = loading;
+            if (!loading) editor_play_progress_ = 1.0f;
+        }
+
+        void SetEditorPlayProgress(float progress) noexcept
+        {
+            editor_play_progress_ = (std::max)(0.0f, (std::min)(1.0f, progress));
         }
 
         float Progress() const noexcept override;
@@ -70,6 +76,7 @@
         const ReplayEngine::Scene::SceneManager* scene_manager_ = nullptr;
         const ReplayEngine::Runtime::RuntimeSceneService* runtime_scene_ = nullptr;
         bool editor_play_loading_ = false;
+        float editor_play_progress_ = 1.0f;
     };
     loading_progress_provider object_loading_progress_provider;
     std::unique_ptr<ReplayEngine::Scene::Scene> object_boot_logo_scene;
@@ -79,42 +86,29 @@
     std::unique_ptr<ReplayEngine::Scene::Scene> object_loading_scene;
     std::unique_ptr<ReplayEngine::Runtime::RuntimeContext> object_loading_runtime_context;
     std::uint64_t object_loading_frame_index{ 0 };
-    // Editor の F5 も Loading Screen Scene を通すための一時状態。
-    // SceneData と進行値はメモリ上だけに置き、Project/Scene は保存しない。
-    struct editor_play_loading_gate final
+    // Editor Play の開始処理。
+    //
+    // 緑の「▶ 実行」を押したフレームでは重い処理を実行せず、まず Editor を 1 回描画する。
+    // その後の Update で 1 段ずつ進めることで、C# 準備 / Scene Capture / World 構築の
+    // どこが重くても「固まったように見える」前に進捗 UI が表示される。
+    enum class editor_play_start_stage : std::uint8_t
     {
-        void AdvanceTo(int target)
-        {
-            {
-                std::lock_guard<std::mutex> lock(mutex);
-                if (stage < 0 || target <= stage) return;
-                stage = target;
-            }
-            changed.notify_all();
-        }
-
-        void Cancel()
-        {
-            {
-                std::lock_guard<std::mutex> lock(mutex);
-                stage = -1;
-            }
-            changed.notify_all();
-        }
-
-        bool WaitFor(int target)
-        {
-            std::unique_lock<std::mutex> lock(mutex);
-            changed.wait(lock, [this, target]() { return stage < 0 || stage >= target; });
-            return stage >= target;
-        }
-
-        std::mutex mutex;
-        std::condition_variable changed;
-        int stage{ 0 };
+        idle = 0,
+        prepare_runtime,
+        prepare_scripts,
+        capture_scene,
+        queue_runtime_world,
+        build_runtime_world,
+        activate_runtime_world,
+        finalize_play_mode,
+        completed,
     };
+    editor_play_start_stage object_editor_play_start_stage{ editor_play_start_stage::idle };
+    ReplayEngine::Scene::Serialization::SceneData object_editor_play_snapshot;
+    std::string object_editor_play_stage_label;
+    float object_editor_play_progress{ 1.0f };
+    std::chrono::steady_clock::time_point object_editor_play_started_at{};
     bool object_editor_play_loading{ false };
-    std::shared_ptr<editor_play_loading_gate> object_editor_play_loading_gate;
 
     // AssetGUID -> Scene ファイルのパス。Runtime 層が AssetDatabase を
     // 直接 include しないための実装側。framework が所有する。
@@ -409,6 +403,7 @@
     std::string      rig_pose_history_label;
     bool             motion_rig_panel_hovered{ false };
     bool             show_collision_diagnostics{ false };
+    bool             show_imgui_metrics{ false };
 
     // Cook に失敗した Asset。同じ警告をログへ出し続けないための記録。
     std::unordered_set<std::string> object_collision_failures;

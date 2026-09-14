@@ -198,6 +198,10 @@ namespace ReplayEngine::Runtime
         //   （読み直す元が存在しないため、黙って別の Scene を読むことはしない）。
         SceneRequestResult RequestAdopt(const Scene::Serialization::SceneData& data,
             const std::string& source_guid);
+        // Play Mode のように呼び出し側がスナップショットを使い切る場合の move 経路。
+        // 巨大な PropertyBag / Landscape データを RequestAdopt 内で再コピーしない。
+        SceneRequestResult RequestAdopt(Scene::Serialization::SceneData&& data,
+            const std::string& source_guid);
 
         // Runtime World を空へ戻す。Play 停止で使う。
         //

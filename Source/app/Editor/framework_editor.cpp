@@ -879,6 +879,7 @@ void framework::draw_editor_main_menu()
         ImGui::MenuItem("Scene Flow", nullptr, &show_scene_flow_panel);
         ImGui::MenuItem(u8"カメラ操作プリセット", nullptr, &show_camera_preset_manager);
         ImGui::MenuItem("Collision Diagnostics", nullptr, &show_collision_diagnostics);
+        ImGui::MenuItem("ImGui Metrics", nullptr, &show_imgui_metrics);
         ImGui::Separator();
         // シェーダ資産の一覧。
         // .hlsl の #pragma がそのまま項目になることを確かめる窓。

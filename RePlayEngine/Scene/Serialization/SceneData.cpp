@@ -1,4 +1,4 @@
-// SceneData のうち「参照の付け替え」と「Scene の取り込み」だけを持つ。
+﻿// SceneData のうち「参照の付け替え」と「Scene の取り込み」だけを持つ。
 //
 //   SceneData.cpp           … 参照の付け替えと Scene の取り込み（このファイル）
 //   SceneDataInternal.h     … 分割内部で共有する適用ヘルパの宣言
@@ -247,10 +247,16 @@ namespace ReplayEngine::Scene::Serialization
 
                     // Capture の中で、預かっている未知プロパティも合流する。
                     const auto* landscape = dynamic_cast<const Components::LandscapeComponent*>(component);
-                    if (mode == SceneCaptureMode::Undo && landscape != nullptr)
+                    if (mode != SceneCaptureMode::File && landscape != nullptr)
                     {
-                        // Block retained mesh_data before Capture so an old text copy is never duplicated.
-                        component_data.properties.Set("mesh_data", Reflection::PropertyValue::MakeString(""));
+                        // Undo / Play は同一プロセス内だけで使う一時スナップショット。
+                        // Landscape を巨大な mesh_data 文字列へ変換すると、
+                        // Serialize -> string copy -> Deserialize の不要な往復が発生する。
+                        // immutable geometry を共有し、復元先だけが 1 回実データを複製する。
+                        // retained unknown property に古い mesh_data が残っている場合も、
+                        // Capture 前に空値で遮断して二重保持を防ぐ。
+                        component_data.properties.Set("mesh_data",
+                            Reflection::PropertyValue::MakeString(""));
                         PropertyRegistry::Capture(*component, component_data.properties, false);
                         component_data.properties.Remove("mesh_data");
                         component_data.landscape_geometry = landscape->Data().CaptureGeometry();

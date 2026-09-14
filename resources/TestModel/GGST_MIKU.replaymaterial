@@ -14,7 +14,7 @@ ALPHA 0 0.31400001
 DOUBLE_SIDED 0
 SHADING_MODEL 2
 SHADER_GUID "00000000000000000000000000000007"
-PROPERTY_COUNT 36
+PROPERTY_COUNT 37
 PROPERTY "prop.BaseColor" color 0.92110616 0.6877985 0.6877985 1
 PROPERTY "prop.BaseMap" assetref ""
 PROPERTY "prop.NormalMap" assetref ""
@@ -33,10 +33,11 @@ PROPERTY "prop.DoubleSided" bool 0
 PROPERTY "prop.PixelSize" float 6
 PROPERTY "prop.PixelateStrength" float 1
 PROPERTY "prop.NormalStrength" float 1
-PROPERTY "prop.ShadeColor" color 0.13333334 0.235294119 0.533333361 1
-PROPERTY "prop.ShadingThreshold" float 0.284999996
-PROPERTY "prop.ShadingOffset" float 0.589999974
+PROPERTY "prop.ShadeColor" color 0.62 0.66 0.82 1
+PROPERTY "prop.ShadingThreshold" float 0.25
+PROPERTY "prop.ShadingOffset" float 0
 PROPERTY "prop.SpecularSize" float 0.209999993
+PROPERTY "prop.SpecularIntensity" float 3
 PROPERTY "prop.IlmMap" assetref ""
 PROPERTY "prop.FaceLighting" bool 1
 PROPERTY "prop.FaceBoneIndex" float 0

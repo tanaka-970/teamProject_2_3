@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
 #include "../../Core/ObjectID/RuntimeIdentity.h"
@@ -217,7 +217,12 @@ namespace ReplayEngine::Scene::Serialization
     // ComponentRegistry で serializable=false の型も保存しない
     // （TransformComponent は GameObject 側の transform として保存済みのため）。
     std::uint64_t SceneCaptureCount() noexcept;
-    enum class SceneCaptureMode { File, Undo };
+    enum class SceneCaptureMode
+    {
+        File, // 永続保存。Landscape は mesh_data 文字列へ変換する。
+        Undo, // Editor 内部スナップショット。Landscape は immutable geometry を共有する。
+        Play  // Play 複製。Undo と同じく binary geometry を共有し、文字列化を避ける。
+    };
     void CaptureScene(const Scene& scene, SceneData& output,
         SceneCaptureMode mode = SceneCaptureMode::File);
 
