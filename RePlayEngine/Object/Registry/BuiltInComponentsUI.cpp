@@ -36,6 +36,11 @@ namespace ReplayEngine::Core::Detail
                     .Animation(Animatable::Step)
                     .Tooltip("同じ Canvas 内の兄弟 UI の描画順です。値が大きいほど手前に描きます。"));
             PropertyRegistry::Register<RectTransformComponent>(
+                MakeProperty("propagate_transform", &RectTransformComponent::propagate_transform)
+                    .Display("子へ回転・拡大を伝える")
+                    .Animation(Animatable::Step)
+                    .Tooltip("オンにすると、この要素の回転と拡大率を子孫の UI にも掛けます。"));
+            PropertyRegistry::Register<RectTransformComponent>(
                 MakeAccessorProperty<RectTransformComponent>("resolved_rect", PropertyType::Vector4,
                     [](const RectTransformComponent& component)
                     { return PropertyValue::MakeVector4(component.ResolvedRect()); },

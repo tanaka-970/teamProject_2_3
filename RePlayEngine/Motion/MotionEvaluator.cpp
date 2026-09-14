@@ -308,7 +308,7 @@ namespace ReplayEngine::Motion
         }
         else
         {
-            eased = ApplyEasing(a.easing, normalized, a.bezier);
+            eased = ApplyEasing(a.easing, normalized, a.bezier, a.power);
         }
         out = Reflection::PropertyValue::Lerp(a.value, b.value, eased);
         if (track.loop == MotionTrackLoop::Offset) ApplyOffsetLoop(track, offset_cycles, out);

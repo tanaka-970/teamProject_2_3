@@ -21,6 +21,8 @@ namespace ReplayEngine::Components
         float rotation = 0.0f;
         DirectX::XMFLOAT2 scale{ 1.0f, 1.0f };
         int sort_order = 0;
+        // true のとき、自分の回転と拡大率を子孫の UI にも掛ける。
+        bool propagate_transform = false;
 
         const DirectX::XMFLOAT4& ResolvedRect() const noexcept { return resolved_rect_; }
         const DirectX::XMFLOAT4X4& ResolvedMatrix() const noexcept { return resolved_matrix_; }

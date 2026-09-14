@@ -482,6 +482,10 @@ namespace ReplayEngine::Motion
                     {
                         input >> std::quoted(key.easing_curve.guid);
                     }
+                    else if (token == "POWER")
+                    {
+                        input >> key.power;
+                    }
                 }
 
                 current_track->keys.push_back(std::move(key));
