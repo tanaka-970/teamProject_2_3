@@ -241,6 +241,15 @@
     DirectX::XMFLOAT4 ui_preview_resize_parent_rect{ 0.0f, 0.0f, 0.0f, 0.0f };
     DirectX::XMFLOAT4X4 ui_preview_resize_start_matrix{};
 
+    // Scene View の回転ハンドル。角の外側を掴んだ 1 drag を 1 Undo にする。
+    bool ui_preview_rotate_candidate{ false };
+    bool ui_preview_rotating{ false };
+    ReplayEngine::Core::ObjectID ui_preview_rotate_object;
+    float ui_preview_rotate_start_rotation{ 0.0f };
+    float ui_preview_rotate_last_angle{ 0.0f };
+    float ui_preview_rotate_accumulated{ 0.0f };
+    DirectX::XMFLOAT2 ui_preview_rotate_pivot{ 0.0f, 0.0f };
+
     // Effect Stack の適用範囲は RectTransform のリサイズとは別操作にする。
     // 8方向ハンドルと回転ハンドルを持つ Scene View 専用の一時状態。
     bool ui_effect_region_candidate{ false };

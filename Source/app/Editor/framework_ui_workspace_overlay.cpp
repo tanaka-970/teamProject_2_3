@@ -362,6 +362,7 @@ void framework::draw_ui_scene_overlay()
     ImVec2 resize_handle_points[8]{};
     int hovered_resize_handle = -1;
     int pressed_resize_handle = -1;
+    int pressed_rotate_handle = -1;
     int hovered_effect_region_index = -1;
     int hovered_effect_region_handle = -1;
     int pressed_effect_region_index = -1;
@@ -370,10 +371,12 @@ void framework::draw_ui_scene_overlay()
     int pressed_effect_region_point = -1;
     const ImGuiIO& input = ImGui::GetIO();
     const ImVec2 press_position = input.MouseClickedPos[ImGuiMouseButton_Left];
-    const bool press_inside_target =
-        press_position.x >= target.left && press_position.y >= target.top &&
-        press_position.x < target.left + target_width &&
-        press_position.y < target.top + target_height;
+    // 選択枠の頂点は Canvas の外へはみ出しても掴めるよう、Scene View 全体で判定する。
+    const bool press_inside_view =
+        press_position.x >= scene_view_overlay_position.x &&
+        press_position.y >= scene_view_overlay_position.y &&
+        press_position.x < scene_view_overlay_position.x + scene_view_overlay_size.x &&
+        press_position.y < scene_view_overlay_position.y + scene_view_overlay_size.y;
     if (effect_region_count() > 0)
     {
         const auto hit_effect_region_handle = [&](const ImVec2& position,
@@ -575,13 +578,20 @@ void framework::draw_ui_scene_overlay()
             resize_handle_points[ResizeBottomRight],
             resize_handle_points[ResizeTopRight],
             resize_handle_points[ResizeTopLeft] };
-        if (target_hovered)
+        if (scene_view_hovered)
             hovered_resize_handle = HitResizeBorder(resize_corners, mouse);
         // 判定はボタンを押した瞬間だけ行う。ドラッグ中は矩形が動くので角ハンドルの
         // 座標も動き、押した位置へ後から重なった時点でリサイズへ乗り換えてしまう。
-        if (input.MouseDown[ImGuiMouseButton_Left] && press_inside_target && !ui_preview_panning &&
-            !ui_preview_drag_object.Valid())
+        if (input.MouseDown[ImGuiMouseButton_Left] && press_inside_view && !ui_preview_panning &&
+            !ui_preview_drag_object.Valid() && !ui_preview_rotate_candidate)
+        {
             pressed_resize_handle = HitResizeBorder(resize_corners, press_position);
+            if (HitRotateKnob(resize_corners, press_position))
+            {
+                pressed_resize_handle = -1;
+                pressed_rotate_handle = 8;
+            }
+        }
     }
 
     // Rect Tool は UI 内部の部位操作や Object 選択より先に拾う。
@@ -607,6 +617,35 @@ void framework::draw_ui_scene_overlay()
                 logical_height / selected_canvas_scale);
             ui_preview_resize_start_matrix = selected_rect->ResolvedMatrix();
 
+            ui_preview_drag_object = Core::ObjectID::Invalid();
+            ui_preview_dragging = false;
+        }
+    }
+    if (!effect_region_click && !resize_handle_click && !ui_preview_resize_candidate &&
+        !ui_preview_rotate_candidate && pressed_rotate_handle >= 0 &&
+        input.MouseDown[ImGuiMouseButton_Left])
+    {
+        resize_handle_click = true;
+        ui_scene_view_input_consumed = true;
+        viewport_drag_selecting = false;
+        if (object_editor_context.CanEdit() && selected_transform_target != nullptr &&
+            selected_rect != nullptr)
+        {
+            const DirectX::XMFLOAT4 r = selected_rect->ResolvedRect();
+            const DirectX::XMFLOAT2 pivot = TransformPoint(selected_rect->ResolvedMatrix(),
+                r.x + r.z * selected_rect->pivot.x, r.y + r.w * selected_rect->pivot.y);
+            const float scale = (std::max)(0.0001f, selected_canvas_scale);
+            const float press_x = (press_position.x - target.left) *
+                (logical_width / target_width) / scale;
+            const float press_y = (logical_height -
+                (press_position.y - target.top) * (logical_height / target_height)) / scale;
+            ui_preview_rotate_candidate = true;
+            ui_preview_rotating = false;
+            ui_preview_rotate_object = selected_transform_target->ID();
+            ui_preview_rotate_start_rotation = selected_rect->rotation;
+            ui_preview_rotate_pivot = pivot;
+            ui_preview_rotate_last_angle = std::atan2(press_y - pivot.y, press_x - pivot.x);
+            ui_preview_rotate_accumulated = 0.0f;
             ui_preview_drag_object = Core::ObjectID::Invalid();
             ui_preview_dragging = false;
         }
@@ -1239,6 +1278,52 @@ void framework::draw_ui_scene_overlay()
         }
     }
 
+    const bool rotating_candidate = selected_rect != nullptr &&
+        selected_transform_target != nullptr && ui_preview_rotate_candidate &&
+        ui_preview_rotate_object == selected_transform_target->ID();
+    if (rotating_candidate && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 2.0f))
+    {
+        if (!ui_preview_rotating && object_editor_context.CanEdit())
+        {
+            object_editor_context.BeginEdit("UI 要素を回転");
+            ui_preview_rotating = true;
+        }
+        if (ui_preview_rotating)
+        {
+            const float scale = (std::max)(0.0001f, selected_canvas_scale);
+            const float dx = logical_mouse_x / scale - ui_preview_rotate_pivot.x;
+            const float dy = logical_mouse_y / scale - ui_preview_rotate_pivot.y;
+            if (std::abs(dx) + std::abs(dy) > 0.001f)
+            {
+                // 前フレームとの差を積む。-180/180 をまたいでも値が飛ばない。
+                const float angle = std::atan2(dy, dx);
+                float step = angle - ui_preview_rotate_last_angle;
+                if (step > DirectX::XM_PI) step -= DirectX::XM_2PI;
+                else if (step < -DirectX::XM_PI) step += DirectX::XM_2PI;
+                ui_preview_rotate_accumulated += step;
+                ui_preview_rotate_last_angle = angle;
+                float degrees = ui_preview_rotate_start_rotation +
+                    ui_preview_rotate_accumulated * 180.0f / DirectX::XM_PI;
+                // Shift を押している間は 15 度刻みに吸着する。
+                if (ImGui::GetIO().KeyShift) degrees = std::round(degrees / 15.0f) * 15.0f;
+                selected_rect->rotation = degrees;
+                ReplayEngine::UI::UILayout::Resolve(*scene, logical_width, logical_height);
+            }
+        }
+    }
+    if (ui_preview_rotate_candidate)
+    {
+        ui_scene_view_input_consumed = true;
+        viewport_drag_selecting = false;
+        if (!ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            if (ui_preview_rotating) object_editor_context.CommitEdit();
+            ui_preview_rotate_candidate = false;
+            ui_preview_rotating = false;
+            ui_preview_rotate_object = Core::ObjectID::Invalid();
+        }
+    }
+
     const bool dragging_candidate = selected_rect != nullptr &&
         selected_transform_target != nullptr &&
         !ui_preview_resize_candidate &&
@@ -1636,8 +1721,11 @@ void framework::draw_ui_scene_overlay()
 
         // 自由図形は通常の拡大縮小ハンドルを表示せず、頂点・Bezierハンドルだけを
         // 専用コントローラーとして表示する。通常UIのRect Toolと混同しない。
-        const int hot = !selected_custom_shape && target_hovered
+        const bool hot_knob = !selected_custom_shape && scene_view_hovered &&
+            HitRotateKnob(p, mouse);
+        const int hot = !selected_custom_shape && scene_view_hovered && !hot_knob
             ? HitResizeBorder(p, mouse) : -1;
+        const int hot_rotate = hot_knob ? 8 : -1;
         if (!selected_custom_shape)
         {
             // 枠線より前面へ 4 corner + 4 edge handle を描く。
@@ -1657,6 +1745,77 @@ void framework::draw_ui_scene_overlay()
                 draw_list->AddCircleFilled(handles[index], 5.0f, fill, 12);
                 draw_list->AddCircle(handles[index], 5.0f,
                     IM_COL32(35, 38, 44, 255), 12, 1.0f);
+            }
+        }
+        const bool rotating_this = ui_preview_rotate_candidate &&
+            ui_preview_rotate_object == selected_transform_target->ID();
+        // PowerPoint と同じ丸矢印。黒い縁の上に白を重ね、白地でも暗い地でも見えるようにする。
+        const auto draw_rotate_icon = [&](const ImVec2& center, float radius, ImU32 fill)
+        {
+            const float start = -DirectX::XM_PI * 0.30f;
+            const float end = start + DirectX::XM_2PI * 0.78f;
+            const ImU32 edge = IM_COL32(40, 44, 52, 255);
+            const ImVec2 tip_base(center.x + std::cos(end) * radius, center.y + std::sin(end) * radius);
+            const ImVec2 tangent(-std::sin(end), std::cos(end));
+            const ImVec2 normal(std::cos(end), std::sin(end));
+            const float head = radius * 0.62f;
+            const ImVec2 tip(tip_base.x + tangent.x * head, tip_base.y + tangent.y * head);
+            const ImVec2 wing_a(tip_base.x + normal.x * head, tip_base.y + normal.y * head);
+            const ImVec2 wing_b(tip_base.x - normal.x * head, tip_base.y - normal.y * head);
+            draw_list->PathArcTo(center, radius, start, end, 20);
+            draw_list->PathStroke(edge, false, 4.5f);
+            draw_list->AddTriangleFilled(tip, wing_a, wing_b, edge);
+            draw_list->AddTriangle(tip, wing_a, wing_b, edge, 2.0f);
+            draw_list->PathArcTo(center, radius, start, end, 20);
+            draw_list->PathStroke(fill, false, 2.2f);
+            const ImVec2 inner_tip(tip.x - tangent.x * 1.2f, tip.y - tangent.y * 1.2f);
+            const ImVec2 inner_a(tip_base.x + normal.x * (head - 1.6f), tip_base.y + normal.y * (head - 1.6f));
+            const ImVec2 inner_b(tip_base.x - normal.x * (head - 1.6f), tip_base.y - normal.y * (head - 1.6f));
+            draw_list->AddTriangleFilled(inner_tip, inner_a, inner_b, fill);
+        };
+        if (!selected_custom_shape)
+        {
+            // 上辺の少し上に回転ハンドルを置く。枠と一緒に回る。
+            const ImU32 icon_fill = rotating_this ? IM_COL32(255, 190, 55, 255)
+                : (hot_rotate >= 0 ? IM_COL32(255, 230, 130, 255) : IM_COL32(255, 255, 255, 255));
+            draw_rotate_icon(RotateKnobPoint(p), 7.5f, icon_fill);
+        }
+        if (hot_rotate >= 0 || rotating_this)
+        {
+            // カーソルも丸矢印に替える。
+            ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+            draw_rotate_icon(ImVec2(mouse.x, mouse.y), 8.0f, IM_COL32(255, 255, 255, 255));
+            const DirectX::XMFLOAT4 rr = selected_rect->ResolvedRect();
+            const ImVec2 pivot_point = ToSceneUIPoint(TransformPoint(selected_rect->ResolvedMatrix(),
+                rr.x + rr.z * selected_rect->pivot.x, rr.y + rr.w * selected_rect->pivot.y),
+                canvas_scale, target.left, target.top, target_width, target_height,
+                logical_width, logical_height);
+            // 回転の中心を十字で示し、今の角度を中心の横に出す。
+            const ImU32 pivot_color = IM_COL32(255, 190, 55, 255);
+            draw_list->AddLine(ImVec2(pivot_point.x - 9.0f, pivot_point.y),
+                ImVec2(pivot_point.x + 9.0f, pivot_point.y), pivot_color, 1.5f);
+            draw_list->AddLine(ImVec2(pivot_point.x, pivot_point.y - 9.0f),
+                ImVec2(pivot_point.x, pivot_point.y + 9.0f), pivot_color, 1.5f);
+            if (rotating_this)
+            {
+                draw_list->AddLine(pivot_point, mouse, IM_COL32(255, 190, 55, 150), 1.0f);
+                // 保存される加算値と、画面上の向き（0〜360 度）を両方出す。
+                float facing = std::fmod(selected_rect->rotation, 360.0f);
+                if (facing < 0.0f) facing += 360.0f;
+                if (facing >= 359.95f) facing = 0.0f;
+                char angle_text[128]{};
+                ImFormatString(angle_text, IM_ARRAYSIZE(angle_text), "加算値 %.1f 度\n向き   %.1f 度",
+                    selected_rect->rotation, facing);
+                const ImVec2 text_pos(mouse.x + 16.0f, mouse.y + 14.0f);
+                const ImVec2 text_size = ImGui::CalcTextSize(angle_text);
+                draw_list->AddRectFilled(ImVec2(text_pos.x - 4.0f, text_pos.y - 2.0f),
+                    ImVec2(text_pos.x + text_size.x + 4.0f, text_pos.y + text_size.y + 2.0f),
+                    IM_COL32(30, 33, 40, 230), 3.0f);
+                draw_list->AddText(text_pos, IM_COL32(255, 230, 130, 255), angle_text);
+            }
+            else
+            {
+                ImGui::SetTooltip("ドラッグで回転（Shift で 15 度刻み）");
             }
         }
         if (hot >= 0)

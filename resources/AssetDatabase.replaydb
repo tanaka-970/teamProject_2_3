@@ -1,4 +1,4 @@
-REPLAY_ASSET_DB 2 710
+REPLAY_ASSET_DB 2 712
 "60412424bb1443240b2bf2160eee6923" 1 "ExampleStage" "resources/Stage/ExampleStage.cereal" "resources/.replay_cache/models/f9fffac39252a621_v0.replaycache"
 "1bd1358040255f5bd18f3be0d79fbe3c" 1 "AllAnimation1" "resources/AnimationModel/AllAnimation1.cereal" "resources/.replay_cache/models/6a20e727f78fb359_v0.replaycache"
 "e5c4168feb92f8fd7357f6cbc1f66e22" 1 "scene" "resources/Stage/city_3d_model_gltf/scene.gltf" "resources/.replay_cache/models/98fd72a862da8c8f_v0.replaycache"
@@ -709,3 +709,5 @@ REPLAY_ASSET_DB 2 710
 "b07100601eaa4f1ea9d3b0f0cae51001" 5 "RePlayEngine Boot Logo (Exact)" "resources/RePlayEngine/BootLogoExact/BootLogoExact.replayscene" ""
 "b07100601eaa4f1ea9d3b0f0cae51002" 10 "RePlayEngine Boot Logo (Exact)" "resources/RePlayEngine/BootLogoExact/BootLogoExact.replaymotion" ""
 "d465c01ddc7ad7122c10f1c830d0b3a7" 5 "BootLogoHand" "resources/RePlayEngine/BootLogo/BootLogoHand.replayscene" ""
+"05610aee09b9b342e26c574bec25ce5f" 1 "arknights_endfield_-perlica-" "resources/TestModel/arknights_endfield_-perlica-.glb" ""
+"33c694b1cf4541ca094c9ce8de9e5e41" 5 "test" "resources/RePlayEngine/test.replayscene" ""
