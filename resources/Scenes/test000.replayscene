@@ -2,7 +2,7 @@ REPLAY_SCENE 11
 SCENE "新しいシーン"
 SCENE_STATE 0
 COLLISION_STATE 2 0
-OBJECT_COUNT 10
+OBJECT_COUNT 17
 OBJECT
   ID 4
   NAME "MIKU-V6"
@@ -16,7 +16,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 44
+    PROPERTY_COUNT 84
     PROPERTY "mesh_asset" asset "8e547552c509008115944a791d38b886"
     PROPERTY "material_asset" asset ""
     PROPERTY "material_slot_count" int 10
@@ -43,24 +43,64 @@ OBJECT
     PROPERTY "material.double_sided" bool 0
     PROPERTY "material_slots[0].name" string "MIKU-V6_face_Albedo"
     PROPERTY "material_slots[0].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[0].base_color_texture" asset ""
+    PROPERTY "material_slots[0].normal_texture" asset ""
+    PROPERTY "material_slots[0].orm_texture" asset ""
+    PROPERTY "material_slots[0].emissive_texture" asset ""
     PROPERTY "material_slots[1].name" string "MIKU-V6_eyeEX_Albedo"
     PROPERTY "material_slots[1].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[1].base_color_texture" asset ""
+    PROPERTY "material_slots[1].normal_texture" asset ""
+    PROPERTY "material_slots[1].orm_texture" asset ""
+    PROPERTY "material_slots[1].emissive_texture" asset ""
     PROPERTY "material_slots[2].name" string "MIKU-V6_brow_Albedo"
     PROPERTY "material_slots[2].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[2].base_color_texture" asset ""
+    PROPERTY "material_slots[2].normal_texture" asset ""
+    PROPERTY "material_slots[2].orm_texture" asset ""
+    PROPERTY "material_slots[2].emissive_texture" asset ""
     PROPERTY "material_slots[3].name" string "none"
     PROPERTY "material_slots[3].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[3].base_color_texture" asset ""
+    PROPERTY "material_slots[3].normal_texture" asset ""
+    PROPERTY "material_slots[3].orm_texture" asset ""
+    PROPERTY "material_slots[3].emissive_texture" asset ""
     PROPERTY "material_slots[4].name" string "MIKU-V6_cloth_Albedo"
     PROPERTY "material_slots[4].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[4].base_color_texture" asset ""
+    PROPERTY "material_slots[4].normal_texture" asset ""
+    PROPERTY "material_slots[4].orm_texture" asset ""
+    PROPERTY "material_slots[4].emissive_texture" asset ""
     PROPERTY "material_slots[5].name" string "MIKU-V6_cloth2_Albedo"
     PROPERTY "material_slots[5].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[5].base_color_texture" asset ""
+    PROPERTY "material_slots[5].normal_texture" asset ""
+    PROPERTY "material_slots[5].orm_texture" asset ""
+    PROPERTY "material_slots[5].emissive_texture" asset ""
     PROPERTY "material_slots[6].name" string "MIKU-V6_sign_Albedo"
     PROPERTY "material_slots[6].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[6].base_color_texture" asset ""
+    PROPERTY "material_slots[6].normal_texture" asset ""
+    PROPERTY "material_slots[6].orm_texture" asset ""
+    PROPERTY "material_slots[6].emissive_texture" asset ""
     PROPERTY "material_slots[7].name" string "MIKU-V6_body3_Albedo"
     PROPERTY "material_slots[7].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[7].base_color_texture" asset ""
+    PROPERTY "material_slots[7].normal_texture" asset ""
+    PROPERTY "material_slots[7].orm_texture" asset ""
+    PROPERTY "material_slots[7].emissive_texture" asset ""
     PROPERTY "material_slots[8].name" string "MIKU-V6_hair_Albedo"
     PROPERTY "material_slots[8].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[8].base_color_texture" asset ""
+    PROPERTY "material_slots[8].normal_texture" asset ""
+    PROPERTY "material_slots[8].orm_texture" asset ""
+    PROPERTY "material_slots[8].emissive_texture" asset ""
     PROPERTY "material_slots[9].name" string "MIKU-V6_fronthair_Albedo"
     PROPERTY "material_slots[9].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[9].base_color_texture" asset ""
+    PROPERTY "material_slots[9].normal_texture" asset ""
+    PROPERTY "material_slots[9].orm_texture" asset ""
+    PROPERTY "material_slots[9].emissive_texture" asset ""
   END_COMPONENT
   COMPONENT "RectTransformComponent" 1
     STABLE_ID 3
@@ -352,7 +392,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 22
+    PROPERTY_COUNT 26
     PROPERTY "primitive_type" enum 1
     PROPERTY "material_asset" asset ""
     PROPERTY "material_slot_count" int 1
@@ -375,6 +415,234 @@ OBJECT
     PROPERTY "material.double_sided" bool 0
     PROPERTY "material_slots[0].name" string ""
     PROPERTY "material_slots[0].asset" asset "8c79019a77ccdf4e86ee19f2337f683f"
+    PROPERTY "material_slots[0].base_color_texture" asset ""
+    PROPERTY "material_slots[0].normal_texture" asset ""
+    PROPERTY "material_slots[0].orm_texture" asset ""
+    PROPERTY "material_slots[0].emissive_texture" asset ""
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 37
+  NAME "GameObject"
+  ENABLED 1
+  PARENT 8
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 12
+  COMPONENT "RotatorBehaviour" 1
+    STABLE_ID 3
+    TYPE_GUID "b0000000000000000000000000000001"
+    TYPE_MODULE "Game.Behaviours"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "axis" vec3 0 1 0
+    PROPERTY "degrees_per_second" float 90
+    PROPERTY "use_unscaled_time" bool 0
+  END_COMPONENT
+  COMPONENT "TriggerCounterBehaviour" 1
+    STABLE_ID 4
+    TYPE_GUID "b0000000000000000000000000000002"
+    TYPE_MODULE "Game.Behaviours"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 2
+    PROPERTY "accepted_layer" layer -1
+    PROPERTY "count_trigger_side_only" bool 0
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 13
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 17
+    PROPERTY "motion" assetref ""
+    PROPERTY "key" string ""
+    PROPERTY "play_on_start" bool 1
+    PROPERTY "trigger" enum 0
+    PROPERTY "trigger_delay" float 0
+    PROPERTY "trigger_source" compref 0 0
+    PROPERTY "trigger_state" string ""
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 0
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "blend_in_seconds" float 0
+    PROPERTY "speed" float 1
+    PROPERTY "random_seed" int 0
+    PROPERTY "time_offset_random" float 0
+    PROPERTY "speed_random" float 0
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "CompositionPlayerComponent" 1
+    STABLE_ID 14
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.BuiltIn"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 11
+    PROPERTY "composition" assetref ""
+    PROPERTY "key" string ""
+    PROPERTY "play_on_start" bool 1
+    PROPERTY "play_on_state_change" bool 0
+    PROPERTY "state_source" compref 0 0
+    PROPERTY "state_name" string ""
+    PROPERTY "loop" bool 0
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "hold_on_end" bool 1
+    PROPERTY "speed" float 1
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "PropertyLinkComponent" 1
+    STABLE_ID 15
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 12
+    PROPERTY "source_object" compref 0 0
+    PROPERTY "source_property" string ""
+    PROPERTY "target_object" compref 0 0
+    PROPERTY "target_property" string ""
+    PROPERTY "source_min" float 0
+    PROPERTY "source_max" float 1
+    PROPERTY "target_min" float 0
+    PROPERTY "target_max" float 1
+    PROPERTY "invert" bool 0
+    PROPERTY "clamp" bool 1
+    PROPERTY "easing" enum 0
+    PROPERTY "smoothing" float 0
+  END_COMPONENT
+  COMPONENT "NavAgentComponent" 1
+    STABLE_ID 16
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.BuiltIn"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "move_speed" float 3
+    PROPERTY "turn_speed_degrees" float 360
+    PROPERTY "stopping_distance" float 0.5
+    PROPERTY "path_grid_size" float 1
+    PROPERTY "path_max_range" float 24
+    PROPERTY "path_max_search_cells" int 4096
+  END_COMPONENT
+  COMPONENT "SkyboxComponent" 1
+    STABLE_ID 17
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 27
+    PROPERTY "cubemap" assetref ""
+    PROPERTY "keyframes" array assetref 0
+    PROPERTY "priority" int 0
+    PROPERTY "sky_enabled" bool 1
+    PROPERTY "rotation_degrees" float 0
+    PROPERTY "intensity" float 1
+    PROPERTY "toon_environment" float 0
+    PROPERTY "time" float 0
+    PROPERTY "time_speed" float 0
+    PROPERTY "clouds_enabled" bool 0
+    PROPERTY "cloud_layer1_speed" vec2 0.0030000000260770321 0
+    PROPERTY "cloud_layer1_scale" float 3.5
+    PROPERTY "cloud_layer1_density" float 0.44999998807907104
+    PROPERTY "cloud_layer1_color" color 1 1 1 0.75
+    PROPERTY "cloud_layer2_speed" vec2 -0.001500000013038516 0.0010000000474974513
+    PROPERTY "cloud_layer2_scale" float 7
+    PROPERTY "cloud_layer2_density" float 0.2800000011920929
+    PROPERTY "cloud_layer2_color" color 0.81999999284744263 0.87999999523162842 1 0.55000001192092896
+    PROPERTY "stars_enabled" bool 0
+    PROPERTY "star_density" float 0.34999999403953552
+    PROPERTY "star_intensity" float 2
+    PROPERTY "star_color" color 1 0.8399999737739563 0.68000000715255737 1
+    PROPERTY "moon_enabled" bool 0
+    PROPERTY "moon_direction" vec3 0.34999999403953552 0.25 0.89999997615814209
+    PROPERTY "moon_size" float 0.039999999105930328
+    PROPERTY "moon_intensity" float 5
+    PROPERTY "moon_color" color 1 0.87999999523162842 0.69999998807907104 1
+  END_COMPONENT
+  COMPONENT "TrailComponent" 1
+    STABLE_ID 18
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Optional.Effects"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 18
+    PROPERTY "emitting" bool 1
+    PROPERTY "lifetime" float 1
+    PROPERTY "min_distance" float 0.05000000074505806
+    PROPERTY "max_points" int 0
+    PROPERTY "world_space" bool 1
+    PROPERTY "width_start" float 0.10000000149011612
+    PROPERTY "width_end" float 0.10000000149011612
+    PROPERTY "billboard" bool 1
+    PROPERTY "uv_mode" enum 0
+    PROPERTY "uv_tiling" float 1
+    PROPERTY "uv_scroll" float 0
+    PROPERTY "texture" assetref ""
+    PROPERTY "fill_color" color 1 1 1 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "trim_start" float 0
+    PROPERTY "trim_end" float 1
+    PROPERTY "trim_offset" float 0
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 19
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 100 100
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UISelectableComponent" 1
+    STABLE_ID 20
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 13
+    PROPERTY "interactable" bool 1
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 0
+    PROPERTY "navigation_bias" float 2
+    PROPERTY "navigate_up" compref 0 0
+    PROPERTY "navigate_down" compref 0 0
+    PROPERTY "navigate_left" compref 0 0
+    PROPERTY "navigate_right" compref 0 0
+    PROPERTY "override_focus_style" bool 0
+    PROPERTY "focus_outline_enabled" bool 1
+    PROPERTY "focus_outline_color" color 0.25 0.77999997138977051 1 1
+    PROPERTY "focus_outline_width" float 2
+    PROPERTY "focus_corner_radius" float 4
+  END_COMPONENT
+  COMPONENT "UIButtonComponent" 1
+    STABLE_ID 21
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 13
+    PROPERTY "interactable" bool 1
+    PROPERTY "target_image" compref 0 0
+    PROPERTY "normal_color" color 1 1 1 1
+    PROPERTY "hover_color" color 0.86000001430511475 0.86000001430511475 0.86000001430511475 1
+    PROPERTY "pressed_color" color 0.62000000476837158 0.62000000476837158 0.62000000476837158 1
+    PROPERTY "disabled_color" color 0.2800000011920929 0.2800000011920929 0.2800000011920929 1
+    PROPERTY "normal_motion" assetref ""
+    PROPERTY "hover_motion" assetref ""
+    PROPERTY "pressed_motion" assetref ""
+    PROPERTY "disabled_motion" assetref ""
+    PROPERTY "navigation_enabled" bool 1
+    PROPERTY "navigation_order" int 0
+    PROPERTY "state_blend_seconds" float 0.079999998211860657
+  END_COMPONENT
+  COMPONENT "UILanguageSwitchComponent" 1
+    STABLE_ID 22
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 1
+    PROPERTY "language" string "ja"
   END_COMPONENT
 END_OBJECT
 OBJECT
@@ -390,7 +658,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 39
+    PROPERTY_COUNT 71
     PROPERTY "mesh_asset" asset "2f53b1670e8a8b53d9c7b836b02c8190"
     PROPERTY "material_asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
     PROPERTY "material_slot_count" int 8
@@ -416,20 +684,52 @@ OBJECT
     PROPERTY "material.double_sided" bool 0
     PROPERTY "material_slots[0].name" string "mat_0"
     PROPERTY "material_slots[0].asset" asset "7793d161d0f3240d4879e94ba7ee1a9c"
+    PROPERTY "material_slots[0].base_color_texture" asset ""
+    PROPERTY "material_slots[0].normal_texture" asset ""
+    PROPERTY "material_slots[0].orm_texture" asset ""
+    PROPERTY "material_slots[0].emissive_texture" asset ""
     PROPERTY "material_slots[1].name" string "mat_1"
     PROPERTY "material_slots[1].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[1].base_color_texture" asset ""
+    PROPERTY "material_slots[1].normal_texture" asset ""
+    PROPERTY "material_slots[1].orm_texture" asset ""
+    PROPERTY "material_slots[1].emissive_texture" asset ""
     PROPERTY "material_slots[2].name" string "mat_2"
     PROPERTY "material_slots[2].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[2].base_color_texture" asset ""
+    PROPERTY "material_slots[2].normal_texture" asset ""
+    PROPERTY "material_slots[2].orm_texture" asset ""
+    PROPERTY "material_slots[2].emissive_texture" asset ""
     PROPERTY "material_slots[3].name" string "mat_3"
     PROPERTY "material_slots[3].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[3].base_color_texture" asset ""
+    PROPERTY "material_slots[3].normal_texture" asset ""
+    PROPERTY "material_slots[3].orm_texture" asset ""
+    PROPERTY "material_slots[3].emissive_texture" asset ""
     PROPERTY "material_slots[4].name" string "mat_4"
     PROPERTY "material_slots[4].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[4].base_color_texture" asset ""
+    PROPERTY "material_slots[4].normal_texture" asset ""
+    PROPERTY "material_slots[4].orm_texture" asset ""
+    PROPERTY "material_slots[4].emissive_texture" asset ""
     PROPERTY "material_slots[5].name" string "mat_5"
     PROPERTY "material_slots[5].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[5].base_color_texture" asset ""
+    PROPERTY "material_slots[5].normal_texture" asset ""
+    PROPERTY "material_slots[5].orm_texture" asset ""
+    PROPERTY "material_slots[5].emissive_texture" asset ""
     PROPERTY "material_slots[6].name" string "mat_6"
     PROPERTY "material_slots[6].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[6].base_color_texture" asset ""
+    PROPERTY "material_slots[6].normal_texture" asset ""
+    PROPERTY "material_slots[6].orm_texture" asset ""
+    PROPERTY "material_slots[6].emissive_texture" asset ""
     PROPERTY "material_slots[7].name" string "mat_7"
     PROPERTY "material_slots[7].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[7].base_color_texture" asset ""
+    PROPERTY "material_slots[7].normal_texture" asset ""
+    PROPERTY "material_slots[7].orm_texture" asset ""
+    PROPERTY "material_slots[7].emissive_texture" asset ""
   END_COMPONENT
   COMPONENT "ModelEffectStackComponent" 1
     STABLE_ID 3
@@ -598,7 +898,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 62
+    PROPERTY_COUNT 138
     PROPERTY "mesh_asset" asset "933510ca5825e37064cf4d37ef755d47"
     PROPERTY "material_asset" asset ""
     PROPERTY "material_slot_count" int 19
@@ -625,42 +925,118 @@ OBJECT
     PROPERTY "material.double_sided" bool 0
     PROPERTY "material_slots[0].name" string "Body"
     PROPERTY "material_slots[0].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[0].base_color_texture" asset ""
+    PROPERTY "material_slots[0].normal_texture" asset ""
+    PROPERTY "material_slots[0].orm_texture" asset ""
+    PROPERTY "material_slots[0].emissive_texture" asset ""
     PROPERTY "material_slots[1].name" string "Glove"
     PROPERTY "material_slots[1].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[1].base_color_texture" asset ""
+    PROPERTY "material_slots[1].normal_texture" asset ""
+    PROPERTY "material_slots[1].orm_texture" asset ""
+    PROPERTY "material_slots[1].emissive_texture" asset ""
     PROPERTY "material_slots[2].name" string "7"
     PROPERTY "material_slots[2].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[2].base_color_texture" asset ""
+    PROPERTY "material_slots[2].normal_texture" asset ""
+    PROPERTY "material_slots[2].orm_texture" asset ""
+    PROPERTY "material_slots[2].emissive_texture" asset ""
     PROPERTY "material_slots[3].name" string "Hair"
     PROPERTY "material_slots[3].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[3].base_color_texture" asset ""
+    PROPERTY "material_slots[3].normal_texture" asset ""
+    PROPERTY "material_slots[3].orm_texture" asset ""
+    PROPERTY "material_slots[3].emissive_texture" asset ""
     PROPERTY "material_slots[4].name" string "lika_dress_b"
     PROPERTY "material_slots[4].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[4].base_color_texture" asset ""
+    PROPERTY "material_slots[4].normal_texture" asset ""
+    PROPERTY "material_slots[4].orm_texture" asset ""
+    PROPERTY "material_slots[4].emissive_texture" asset ""
     PROPERTY "material_slots[5].name" string "lika_dress1"
     PROPERTY "material_slots[5].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[5].base_color_texture" asset ""
+    PROPERTY "material_slots[5].normal_texture" asset ""
+    PROPERTY "material_slots[5].orm_texture" asset ""
+    PROPERTY "material_slots[5].emissive_texture" asset ""
     PROPERTY "material_slots[6].name" string "lace_b"
     PROPERTY "material_slots[6].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[6].base_color_texture" asset ""
+    PROPERTY "material_slots[6].normal_texture" asset ""
+    PROPERTY "material_slots[6].orm_texture" asset ""
+    PROPERTY "material_slots[6].emissive_texture" asset ""
     PROPERTY "material_slots[7].name" string "bara"
     PROPERTY "material_slots[7].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[7].base_color_texture" asset ""
+    PROPERTY "material_slots[7].normal_texture" asset ""
+    PROPERTY "material_slots[7].orm_texture" asset ""
+    PROPERTY "material_slots[7].emissive_texture" asset ""
     PROPERTY "material_slots[8].name" string "belt"
     PROPERTY "material_slots[8].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[8].base_color_texture" asset ""
+    PROPERTY "material_slots[8].normal_texture" asset ""
+    PROPERTY "material_slots[8].orm_texture" asset ""
+    PROPERTY "material_slots[8].emissive_texture" asset ""
     PROPERTY "material_slots[9].name" string "bow"
     PROPERTY "material_slots[9].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[9].base_color_texture" asset ""
+    PROPERTY "material_slots[9].normal_texture" asset ""
+    PROPERTY "material_slots[9].orm_texture" asset ""
+    PROPERTY "material_slots[9].emissive_texture" asset ""
     PROPERTY "material_slots[10].name" string "mcbn"
     PROPERTY "material_slots[10].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[10].base_color_texture" asset ""
+    PROPERTY "material_slots[10].normal_texture" asset ""
+    PROPERTY "material_slots[10].orm_texture" asset ""
+    PROPERTY "material_slots[10].emissive_texture" asset ""
     PROPERTY "material_slots[11].name" string "underskirt00"
     PROPERTY "material_slots[11].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[11].base_color_texture" asset ""
+    PROPERTY "material_slots[11].normal_texture" asset ""
+    PROPERTY "material_slots[11].orm_texture" asset ""
+    PROPERTY "material_slots[11].emissive_texture" asset ""
     PROPERTY "material_slots[12].name" string "s1"
     PROPERTY "material_slots[12].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[12].base_color_texture" asset ""
+    PROPERTY "material_slots[12].normal_texture" asset ""
+    PROPERTY "material_slots[12].orm_texture" asset ""
+    PROPERTY "material_slots[12].emissive_texture" asset ""
     PROPERTY "material_slots[13].name" string "s2"
     PROPERTY "material_slots[13].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[13].base_color_texture" asset ""
+    PROPERTY "material_slots[13].normal_texture" asset ""
+    PROPERTY "material_slots[13].orm_texture" asset ""
+    PROPERTY "material_slots[13].emissive_texture" asset ""
     PROPERTY "material_slots[14].name" string "白"
     PROPERTY "material_slots[14].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[14].base_color_texture" asset ""
+    PROPERTY "material_slots[14].normal_texture" asset ""
+    PROPERTY "material_slots[14].orm_texture" asset ""
+    PROPERTY "material_slots[14].emissive_texture" asset ""
     PROPERTY "material_slots[15].name" string "金1"
     PROPERTY "material_slots[15].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[15].base_color_texture" asset ""
+    PROPERTY "material_slots[15].normal_texture" asset ""
+    PROPERTY "material_slots[15].orm_texture" asset ""
+    PROPERTY "material_slots[15].emissive_texture" asset ""
     PROPERTY "material_slots[16].name" string "none"
     PROPERTY "material_slots[16].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[16].base_color_texture" asset ""
+    PROPERTY "material_slots[16].normal_texture" asset ""
+    PROPERTY "material_slots[16].orm_texture" asset ""
+    PROPERTY "material_slots[16].emissive_texture" asset ""
     PROPERTY "material_slots[17].name" string "hair2"
     PROPERTY "material_slots[17].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[17].base_color_texture" asset ""
+    PROPERTY "material_slots[17].normal_texture" asset ""
+    PROPERTY "material_slots[17].orm_texture" asset ""
+    PROPERTY "material_slots[17].emissive_texture" asset ""
     PROPERTY "material_slots[18].name" string "Hair2"
     PROPERTY "material_slots[18].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[18].base_color_texture" asset ""
+    PROPERTY "material_slots[18].normal_texture" asset ""
+    PROPERTY "material_slots[18].orm_texture" asset ""
+    PROPERTY "material_slots[18].emissive_texture" asset ""
   END_COMPONENT
   COMPONENT "ModelEffectStackComponent" 1
     STABLE_ID 3
@@ -982,7 +1358,7 @@ OBJECT
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
-    PROPERTY_COUNT 34
+    PROPERTY_COUNT 54
     PROPERTY "mesh_asset" asset "2b0cefc53d0ef76e853dab5555225f4f"
     PROPERTY "material_asset" asset ""
     PROPERTY "material_slot_count" int 5
@@ -1009,14 +1385,34 @@ OBJECT
     PROPERTY "material.double_sided" bool 0
     PROPERTY "material_slots[0].name" string "pc003_01_bottom"
     PROPERTY "material_slots[0].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[0].base_color_texture" asset ""
+    PROPERTY "material_slots[0].normal_texture" asset ""
+    PROPERTY "material_slots[0].orm_texture" asset ""
+    PROPERTY "material_slots[0].emissive_texture" asset ""
     PROPERTY "material_slots[1].name" string "pc003_01_body"
     PROPERTY "material_slots[1].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[1].base_color_texture" asset ""
+    PROPERTY "material_slots[1].normal_texture" asset ""
+    PROPERTY "material_slots[1].orm_texture" asset ""
+    PROPERTY "material_slots[1].emissive_texture" asset ""
     PROPERTY "material_slots[2].name" string "pc003_23_hair00"
     PROPERTY "material_slots[2].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[2].base_color_texture" asset ""
+    PROPERTY "material_slots[2].normal_texture" asset ""
+    PROPERTY "material_slots[2].orm_texture" asset ""
+    PROPERTY "material_slots[2].emissive_texture" asset ""
     PROPERTY "material_slots[3].name" string "pc003_01_top"
     PROPERTY "material_slots[3].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[3].base_color_texture" asset ""
+    PROPERTY "material_slots[3].normal_texture" asset ""
+    PROPERTY "material_slots[3].orm_texture" asset ""
+    PROPERTY "material_slots[3].emissive_texture" asset ""
     PROPERTY "material_slots[4].name" string "pc003_face1"
     PROPERTY "material_slots[4].asset" asset "c8e395b312df7c84d7941ba4b85ffeb9"
+    PROPERTY "material_slots[4].base_color_texture" asset ""
+    PROPERTY "material_slots[4].normal_texture" asset ""
+    PROPERTY "material_slots[4].orm_texture" asset ""
+    PROPERTY "material_slots[4].emissive_texture" asset ""
   END_COMPONENT
   COMPONENT "ModelEffectStackComponent" 1
     STABLE_ID 3
@@ -1088,5 +1484,316 @@ OBJECT
     PROPERTY "effects[0].brush_pattern_weight_14" float 0
     PROPERTY "effects[0].brush_pattern_weight_15" float 0
     PROPERTY "effects[0].waveform" enum 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 31
+  NAME "GameObject (3)"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "SkyboxComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 27
+    PROPERTY "cubemap" assetref "649ebac27e889a3a66d83cf9b4901a2d"
+    PROPERTY "keyframes" array assetref 0
+    PROPERTY "priority" int 0
+    PROPERTY "sky_enabled" bool 1
+    PROPERTY "rotation_degrees" float 0
+    PROPERTY "intensity" float 1
+    PROPERTY "toon_environment" float 0
+    PROPERTY "time" float 0
+    PROPERTY "time_speed" float 0
+    PROPERTY "clouds_enabled" bool 0
+    PROPERTY "cloud_layer1_speed" vec2 0.0030000000260770321 0
+    PROPERTY "cloud_layer1_scale" float 3.5
+    PROPERTY "cloud_layer1_density" float 0.44999998807907104
+    PROPERTY "cloud_layer1_color" color 1 1 1 0.75
+    PROPERTY "cloud_layer2_speed" vec2 -0.001500000013038516 0.0010000000474974513
+    PROPERTY "cloud_layer2_scale" float 7
+    PROPERTY "cloud_layer2_density" float 0.2800000011920929
+    PROPERTY "cloud_layer2_color" color 0.81999999284744263 0.87999999523162842 1 0.55000001192092896
+    PROPERTY "stars_enabled" bool 0
+    PROPERTY "star_density" float 0.34999999403953552
+    PROPERTY "star_intensity" float 2
+    PROPERTY "star_color" color 1 0.8399999737739563 0.68000000715255737 1
+    PROPERTY "moon_enabled" bool 0
+    PROPERTY "moon_direction" vec3 0.34999999403953552 0.25 0.89999997615814209
+    PROPERTY "moon_size" float 0.039999999105930328
+    PROPERTY "moon_intensity" float 5
+    PROPERTY "moon_color" color 1 0.87999999523162842 0.69999998807907104 1
+  END_COMPONENT
+  COMPONENT "AudioListenerComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 1
+    PROPERTY "priority" int 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 30
+  NAME "フォルダ"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 7
+  COMPONENT "FolderComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "ede6f6a2c701477f95c48042111d559b"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 0
+  END_COMPONENT
+  COMPONENT "CharacterMotorComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 14
+    PROPERTY "primary_collider_key" colliderref 0
+    PROPERTY "move_speed" float 6
+    PROPERTY "acceleration" float 30
+    PROPERTY "deceleration" float 20
+    PROPERTY "air_control" float 0.34999999403953552
+    PROPERTY "gravity" float 18
+    PROPERTY "jump_power" float 8
+    PROPERTY "maximum_fall_speed" float 55
+    PROPERTY "jump_requested" bool 0
+    PROPERTY "fallback_ground_y" float 0
+    PROPERTY "lock_plane_z" bool 0
+    PROPERTY "plane_z" float 0
+    PROPERTY "max_step_height" float 0.40000000596046448
+    PROPERTY "vertical_physics" bool 0
+  END_COMPONENT
+  COMPONENT "PlayerControllerComponent" 1
+    STABLE_ID 6
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "turn_speed_degrees" float 720
+    PROPERTY "dash_multiplier" float 1
+    PROPERTY "camera_relative" bool 1
+    PROPERTY "rotate_towards_movement" bool 1
+  END_COMPONENT
+  COMPONENT "PlayerInputComponent" 1
+    STABLE_ID 7
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "input_enabled" bool 1
+    PROPERTY "input_source" int 0
+    PROPERTY "local_player_slot" int 0
+  END_COMPONENT
+  COMPONENT "StateComponent" 1
+    STABLE_ID 8
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 3
+    PROPERTY "state_count" int 2
+    PROPERTY "states[0].name" string "State0"
+    PROPERTY "states[1].name" string "State1"
+  END_COMPONENT
+  COMPONENT "MotionPlayerComponent" 1
+    STABLE_ID 9
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 17
+    PROPERTY "motion" assetref ""
+    PROPERTY "key" string ""
+    PROPERTY "play_on_start" bool 1
+    PROPERTY "trigger" enum 0
+    PROPERTY "trigger_delay" float 0
+    PROPERTY "trigger_source" compref 0 0
+    PROPERTY "trigger_state" string ""
+    PROPERTY "loop" bool 0
+    PROPERTY "wrap_mode" enum 0
+    PROPERTY "auto_stop_on_end" bool 0
+    PROPERTY "ignore_time_scale" bool 0
+    PROPERTY "blend_in_seconds" float 0
+    PROPERTY "speed" float 1
+    PROPERTY "random_seed" int 0
+    PROPERTY "time_offset_random" float 0
+    PROPERTY "speed_random" float 0
+    PROPERTY "weight" float 1
+  END_COMPONENT
+  COMPONENT "SpawnPointComponent" 1
+    STABLE_ID 10
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE "RePlayEngine.Template.ActionPlatformer"
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "spawn_id" int 0
+    PROPERTY "team" int 0
+    PROPERTY "priority" int 0
+    PROPERTY "debug_draw" bool 1
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 32
+  NAME "GameObject (4)"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 0
+END_OBJECT
+OBJECT
+  ID 33
+  NAME "Canvas"
+  ENABLED 1
+  PARENT 0
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "CanvasComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 6
+    PROPERTY "reference_resolution" vec2 1920 1080
+    PROPERTY "render_mode" enum 0
+    PROPERTY "scale_mode" enum 1
+    PROPERTY "match_width_or_height" float 0.5
+    PROPERTY "sort_order" int 0
+    PROPERTY "opacity" float 1
+  END_COMPONENT
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0 0
+    PROPERTY "anchor_max" vec2 1 1
+    PROPERTY "anchored_position" vec2 0 0
+    PROPERTY "size_delta" vec2 0 0
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 34
+  NAME "自由図形 Image"
+  ENABLED 1
+  PARENT 33
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 3
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -528 -46
+    PROPERTY "size_delta" vec2 160 100
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 19
+    PROPERTY "sprite" assetref ""
+    PROPERTY "atlas" assetref ""
+    PROPERTY "atlas_region" string ""
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "fill_angle" float 0
+    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
+  END_COMPONENT
+  COMPONENT "UIShapeImageComponent" 1
+    STABLE_ID 4
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 4
+    PROPERTY "path_closed" bool 1
+    PROPERTY "path_points" array vec2 6 0.11999999731779099 0.11999999731779099 0.25624999403953552 0.18999999761581421 0.87999999523162842 0.11999999731779099 0.87999999523162842 0.87999999523162842 -0.11874999850988388 2.5299999713897705 -0.16875000298023224 0.23000000417232513
+    PROPERTY "path_in_handles" array vec2 6 0 0 -0.11959013342857361 0 0 0 0 0 0 0 0 0.14700186252593994
+    PROPERTY "path_out_handles" array vec2 6 0 0 0.22489893436431885 0 0 0 0 0 0 0 0 -0.21846771240234375
+  END_COMPONENT
+END_OBJECT
+OBJECT
+  ID 35
+  NAME "Image"
+  ENABLED 1
+  PARENT 33
+  TRANSFORM 0 0 0 0 0 0 1 1 1
+  PREFAB "" 0 0
+  COMPONENT_COUNT 2
+  COMPONENT "RectTransformComponent" 1
+    STABLE_ID 2
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 8
+    PROPERTY "anchor_min" vec2 0.5 0.5
+    PROPERTY "anchor_max" vec2 0.5 0.5
+    PROPERTY "anchored_position" vec2 -77.5 -243.5
+    PROPERTY "size_delta" vec2 663 551
+    PROPERTY "pivot" vec2 0.5 0.5
+    PROPERTY "rotation" float 0
+    PROPERTY "scale" vec2 1 1
+    PROPERTY "sort_order" int 0
+  END_COMPONENT
+  COMPONENT "UIImageComponent" 1
+    STABLE_ID 3
+    TYPE_GUID "00000000000000000000000000000000"
+    TYPE_MODULE ""
+    TYPE_VERSION 1
+    PROPERTY_COUNT 19
+    PROPERTY "sprite" assetref ""
+    PROPERTY "atlas" assetref "75051fcd391be0ead908e411240f6955"
+    PROPERTY "atlas_region" string "Region0"
+    PROPERTY "color" color 1 1 1 1
+    PROPERTY "fill_color_2" color 1 1 1 1
+    PROPERTY "fill_mode" enum 0
+    PROPERTY "fill_angle" float 0
+    PROPERTY "fill_center" vec2 0.5 0.5
+    PROPERTY "stroke_mode" enum 0
+    PROPERTY "stroke_color_2" color 1 1 1 1
+    PROPERTY "opacity" float 1
+    PROPERTY "fill_amount" float 1
+    PROPERTY "fill_method" enum 0
+    PROPERTY "fill_reverse" bool 0
+    PROPERTY "blend_mode" enum 0
+    PROPERTY "uv_offset" vec2 0 0
+    PROPERTY "uv_scale" vec2 1 1
+    PROPERTY "nine_slice" vec4 0 0 0 0
+    PROPERTY "preserve_aspect" bool 0
   END_COMPONENT
 END_OBJECT
