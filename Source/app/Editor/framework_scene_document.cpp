@@ -120,6 +120,7 @@ void framework::handle_viewport_selection()
         // 掴める距離。関節の見た目より少し広くしないと当てにくい。
         const float pick_radius = (std::max)(6.0f, rig_joint_radius * 3.0f);
         float best_distance = pick_radius;
+        float best_depth = (std::numeric_limits<float>::max)();
         const std::string* best_name = nullptr;
         std::uint64_t best_owner = 0;
         for (const auto& rig : object_rig_debug_bones)
@@ -127,14 +128,20 @@ void framework::handle_viewport_selection()
             for (const rig_debug_bone& bone : rig.second)
             {
                 ImVec2 screen{};
+                float depth{};
                 if (!project_world_to_screen(rig_view_projection, bone.world,
-                    rig_origin, rig_size, screen))
+                    rig_origin, rig_size, screen, depth))
                     continue;
                 const float dx = screen.x - mouse.x;
                 const float dy = screen.y - mouse.y;
                 const float distance = std::sqrt(dx * dx + dy * dy);
-                if (distance >= best_distance) continue;
+                if (!std::isfinite(distance) || !std::isfinite(depth) || distance >= pick_radius) continue;
+                // 奥行きがほぼ同じ候補だけ、画面上で近い骨を優先する。
+                const float depth_tolerance = 1.0e-4f * (std::max)(1.0f, (std::max)(depth, best_depth));
+                if (best_name != nullptr && (depth > best_depth + depth_tolerance ||
+                    (std::abs(depth - best_depth) <= depth_tolerance && distance >= best_distance))) continue;
                 best_distance = distance;
+                best_depth = depth;
                 best_name = &bone.name;
                 best_owner = rig.first;
             }
@@ -536,11 +543,24 @@ void framework::save_selected_prefab(bool choose_path)
 
 void framework::load_prefab()
 {
+    load_prefab(ReplayEngine::Core::ObjectID::Invalid());
+}
+
+void framework::load_prefab(ReplayEngine::Core::ObjectID parent)
+{
     namespace Serialization = ReplayEngine::Scene::Serialization;
 
     if (object_scene_play_mode)
     {
         object_editor_context.SetStatus("実行中は Prefab を配置できません");
+        return;
+    }
+
+    ReplayEngine::Core::GameObject* parent_object = parent.Valid()
+        ? object_scene.FindGameObjectByID(parent) : nullptr;
+    if (parent.Valid() && (parent_object == nullptr || parent_object->PendingDestroy()))
+    {
+        object_editor_context.SetStatus("Prefab の配置先が見つかりません");
         return;
     }
 
@@ -567,6 +587,22 @@ void framework::load_prefab()
         object_editor_context.CancelEdit();
         object_editor_context.SetStatus("Prefab 読込失敗: " + error);
         return;
+    }
+
+    if (parent.Valid())
+    {
+        ReplayEngine::Core::GameObject* root = object_scene.FindGameObjectByID(id);
+        if (root == nullptr || !root->SetParent(parent_object, true))
+        {
+            if (root != nullptr)
+            {
+                object_scene.DestroyGameObject(root);
+                object_scene.ProcessPendingOperations();
+            }
+            object_editor_context.CancelEdit();
+            object_editor_context.SetStatus("Prefab の親を設定できませんでした");
+            return;
+        }
     }
 
     object_editor_context.CommitEdit();

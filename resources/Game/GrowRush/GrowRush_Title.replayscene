@@ -4430,7 +4430,7 @@ END_OBJECT
 OBJECT
   ID 125
   NAME "Canvas"
-  ENABLED 1
+  ENABLED 0
   PARENT 0
   TRANSFORM 0 0 0 0 0 0 1 1 1
   PREFAB "" 0 0
@@ -4749,7 +4749,7 @@ OBJECT
     PROPERTY "sprite" assetref ""
     PROPERTY "atlas" assetref ""
     PROPERTY "atlas_region" string ""
-    PROPERTY "color" color 0.25 0.99000000953674316 0.75999999046325684 1
+    PROPERTY "color" color 0.2800000011920929 0.2800000011920929 0.2800000011920929 1
     PROPERTY "fill_color_2" color 1 1 1 1
     PROPERTY "fill_mode" enum 0
     PROPERTY "fill_angle" float 0
@@ -4787,7 +4787,7 @@ OBJECT
     PROPERTY "state_blend_seconds" float 0.079999998211860657
   END_COMPONENT
   COMPONENT "UISelectableComponent" 1
-    STABLE_ID 5
+    STABLE_ID 6
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
@@ -4890,7 +4890,7 @@ OBJECT
     PROPERTY "sprite" assetref ""
     PROPERTY "atlas" assetref ""
     PROPERTY "atlas_region" string ""
-    PROPERTY "color" color 1 0.41999998688697815 0.17000000178813934 1
+    PROPERTY "color" color 0.2800000011920929 0.2800000011920929 0.2800000011920929 1
     PROPERTY "fill_color_2" color 1 1 1 1
     PROPERTY "fill_mode" enum 0
     PROPERTY "fill_angle" float 0
@@ -4928,7 +4928,7 @@ OBJECT
     PROPERTY "state_blend_seconds" float 0.079999998211860657
   END_COMPONENT
   COMPONENT "UISelectableComponent" 1
-    STABLE_ID 5
+    STABLE_ID 6
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1
@@ -5133,7 +5133,7 @@ OBJECT
     PROPERTY "sprite" assetref ""
     PROPERTY "atlas" assetref ""
     PROPERTY "atlas_region" string ""
-    PROPERTY "color" color 0.49000000953674316 0.61000001430511475 0.56999999284744263 1
+    PROPERTY "color" color 0.2800000011920929 0.2800000011920929 0.2800000011920929 1
     PROPERTY "fill_color_2" color 1 1 1 1
     PROPERTY "fill_mode" enum 0
     PROPERTY "fill_angle" float 0
@@ -5171,7 +5171,7 @@ OBJECT
     PROPERTY "state_blend_seconds" float 0.079999998211860657
   END_COMPONENT
   COMPONENT "UISelectableComponent" 1
-    STABLE_ID 5
+    STABLE_ID 6
     TYPE_GUID "00000000000000000000000000000000"
     TYPE_MODULE ""
     TYPE_VERSION 1

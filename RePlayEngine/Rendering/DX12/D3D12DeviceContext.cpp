@@ -350,13 +350,11 @@ namespace ReplayEngine::Rendering::DX12
             return true;
         }
 
-        bool DecodeDdsFile(const std::filesystem::path& path,
+        // 解析の本体。ファイルからでも埋め込みバイト列からでも同じ経路を通す。
+        bool DecodeDdsStream(std::istream& stream,
             DecodedDdsImage& image, bool require_cube) noexcept
         {
             image = {};
-            if (path.empty()) return false;
-            std::ifstream stream(path, std::ios::binary);
-            if (!stream) return false;
 
             constexpr std::uint32_t kDdsMagic = 0x20534444u;
             constexpr std::uint32_t kDx10FourCc = MakeFourCc('D', 'X', '1', '0');
@@ -447,6 +445,36 @@ namespace ReplayEngine::Rendering::DX12
                 return false;
             }
             return true;
+        }
+
+        bool DecodeDdsFile(const std::filesystem::path& path,
+            DecodedDdsImage& image, bool require_cube) noexcept
+        {
+            image = {};
+            if (path.empty()) return false;
+            std::ifstream stream(path, std::ios::binary);
+            if (!stream) return false;
+            return DecodeDdsStream(stream, image, require_cube);
+        }
+
+        // Sprite Atlas へ埋め込まれた DDS のように、ファイルを持たない資産用。
+        bool DecodeDdsMemory(const std::uint8_t* data, std::size_t size,
+            DecodedDdsImage& image, bool require_cube) noexcept
+        {
+            image = {};
+            if (data == nullptr || size == 0) return false;
+            try
+            {
+                std::istringstream stream(
+                    std::string(reinterpret_cast<const char*>(data), size),
+                    std::ios::binary);
+                return DecodeDdsStream(stream, image, require_cube);
+            }
+            catch (...)
+            {
+                image = {};
+                return false;
+            }
         }
 
         bool DecodeDds2D(const std::filesystem::path& path,
@@ -2695,10 +2723,15 @@ namespace ReplayEngine::Rendering::DX12
             std::transform(extension.begin(), extension.end(), extension.begin(),
                 [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
 
-            if (extension == ".dds")
+            // 埋め込みバイト列があればファイルより優先する。拡張子は見ない。
+            if (!source.dds_bytes.empty() || extension == ".dds")
             {
                 DecodedDdsImage decoded;
-                if (!DecodeDds2D(source.source_path, decoded))
+                const bool decoded_ok = source.dds_bytes.empty()
+                    ? DecodeDds2D(source.source_path, decoded)
+                    : DecodeDdsMemory(source.dds_bytes.data(), source.dds_bytes.size(),
+                        decoded, false);
+                if (!decoded_ok)
                 {
                     DebugMessage("[DX12] DDS texture decode failed; using white fallback.\n");
                     remember_decode_failure();

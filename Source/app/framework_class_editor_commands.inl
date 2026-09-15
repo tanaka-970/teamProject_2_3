@@ -110,50 +110,7 @@
             const bool redo_pressed = editor_action_pressed(u8"やり直し");
             if (shortcut_pressed && (undo_pressed || redo_pressed))
             {
-                bool handled = false;
-                if (sprite_atlas_editor_loaded && sprite_atlas_editor_keyboard_focus)
-                    handled = undo_pressed ? undo_sprite_atlas_edit() : redo_sprite_atlas_edit();
-                else if (active_editor_workspace == editor_workspace::motion)
-                {
-                    // Motion の履歴と骨のポーズは別物。リグパネルの上にいる間だけ
-                    // 骨側へ回す。そうしないとどちらが戻るのか予測できない。
-                    if (motion_rig_panel_hovered)
-                        handled = undo_pressed ? undo_rig_pose_edit() : redo_rig_pose_edit();
-                    if (!handled)
-                    {
-                        if (undo_pressed) undo_motion_edit();
-                        else redo_motion_edit();
-                        handled = true;
-                    }
-                }
-                else if (show_scene_flow_panel && scene_flow_editor_loaded &&
-                    !project_browser_focused)
-                {
-                    handled = undo_pressed ? undo_scene_flow_edit() : redo_scene_flow_edit();
-                }
-                else if (!project_browser_focused && material_editor_loaded &&
-                    selected_editor_object == editor_selection::asset)
-                {
-                    handled = undo_pressed ? undo_material_editor() : redo_material_editor();
-                }
-                else
-                {
-                    const bool external_context = project_browser_focused;
-                    if (external_context)
-                    {
-                        handled = undo_pressed ? undo_external_file_edit() : redo_external_file_edit();
-                        if (!handled)
-                            project_browser_status = undo_pressed
-                                ? "Projectで取り消せるファイル操作はありません"
-                                : "Projectでやり直せるファイル操作はありません";
-                    }
-                    else
-                    {
-                        if (undo_pressed) object_editor_context.Undo();
-                        else object_editor_context.Redo();
-                        handled = true;
-                    }
-                }
+                execute_editor_history(resolve_editor_history(undo_pressed), undo_pressed);
                 return 0;
             }
             if (shortcut_pressed && editor_action_pressed(u8"複製"))
@@ -473,6 +430,15 @@ private:
     void reset_editor_values();
     void draw_editor();
     std::string action_shortcut(std::string_view name) const;
+    enum class editor_history_target
+    {
+        atlas, motion, scene_flow, material, external, scene, rig_pose
+    };
+    editor_history_target resolve_editor_history(bool undo, bool menu_context = false) const;
+    bool can_edit_history(editor_history_target target, bool undo);
+    bool execute_editor_history(editor_history_target target, bool undo);
+
+    void draw_icon_settings_panel();
     void draw_editor_main_menu();
     void draw_editor_toolbar();
     void open_export_game_dialog();
@@ -509,6 +475,7 @@ private:
     void draw_search_results();
     void draw_scene_hierarchy();
     void draw_inspector();
+    void draw_prefab_asset_inspector(const ReplayEngine::Assets::AssetRecord& asset);
     void draw_material_slot_inspector();
     void draw_landscape_model_inspector(ReplayEngine::Core::Component& component);
     void draw_shader_adjustment_workspace();
@@ -557,3 +524,4 @@ private:
     // 保存した Prefab は AssetDatabase へ登録され、AssetGUID で参照できるようになる。
     void save_selected_prefab(bool choose_path);
     void load_prefab();
+    void load_prefab(ReplayEngine::Core::ObjectID parent);

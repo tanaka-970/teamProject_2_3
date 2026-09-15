@@ -224,6 +224,14 @@
     std::unordered_map<std::string, cached_material_asset> object_material_cache;
     std::unordered_set<std::string> object_material_failures;
 
+    // v3 の Atlas は DDS を内包するので、毎フレーム読み直すと数 MB を舐めることになる。
+    struct cached_sprite_atlas
+    {
+        ReplayEngine::Assets::SpriteAtlasAsset atlas;
+        std::filesystem::file_time_type write_time{};
+    };
+    std::unordered_map<std::string, cached_sprite_atlas> object_sprite_atlas_cache;
+
     // Shader GUID から replay_lighting を解決できなかったもの。
     // 同じ警告を毎フレーム出さないため、Material cache と同じ寿命で保持する。
     std::unordered_set<std::string> object_shader_lighting_failures;
@@ -366,6 +374,9 @@
     // ギズモを掴んでいる間の控え。主の変化量を他の骨へ配るのに使う。
     bool             rig_gizmo_dragging{ false };
     std::unordered_map<std::string, rig_pose_override> rig_gizmo_start_pose;
+    DirectX::XMFLOAT4 rig_gizmo_start_rotation{ 0.0f, 0.0f, 0.0f, 1.0f };
+    DirectX::XMFLOAT4X4 rig_gizmo_start_matrix{};
+    DirectX::XMFLOAT4X4 rig_gizmo_matrix{};
     // ポーズの Undo/Redo。マップ 1 つぶんを丸ごと控えるだけで足りる。
     struct rig_pose_history_entry
     {
@@ -376,6 +387,7 @@
     };
     std::vector<rig_pose_history_entry> rig_pose_history;
     std::size_t      rig_pose_history_cursor{ 0 };
+    std::uint64_t    rig_pose_last_serial{ 0 };
     bool             rig_pose_history_transaction{ false };
     std::uint64_t    rig_pose_history_owner{ 0 };
     std::unordered_map<std::string, rig_pose_override> rig_pose_history_before;

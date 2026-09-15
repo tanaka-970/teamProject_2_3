@@ -1,9 +1,11 @@
 ﻿#include "ProjectSettingsSerializer.h"
 #include "../Rendering/RenderStats.h"
 
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <istream>
+#include <limits>
 #include <locale>
 #include <ostream>
 #include <sstream>
@@ -47,6 +49,27 @@ namespace ReplayEngine::Project
 
         // v10 で追加。空 GUID は「未設定」として書き出す。
         stream << "LOADING_SCENE " << std::quoted(settings.LoadingSceneGuid()) << '\n';
+        // アイコン用アトラスは最大 4 枚。1 枚につき 1 行で並べる。
+        for (const auto& atlas_guid : settings.IconAtlasGuids())
+            stream << "ICON_ATLAS " << std::quoted(atlas_guid) << '\n';
+
+        const auto previous_precision = stream.precision();
+        stream << std::setprecision(std::numeric_limits<float>::max_digits10);
+        for (const auto& entry : settings.IconTints())
+        {
+            const auto& color = entry.second;
+            stream << "ICON_TINT " << std::quoted(entry.first) << ' ' << color.x << ' '
+                << color.y << ' ' << color.z << ' ' << color.w << '\n';
+        }
+        stream.precision(previous_precision);
+        stream << "ICON_AUTO_MATCH " << (settings.IconAutoMatchByName() ? 1 : 0) << '\n';
+        // キーごとに選んだ領域名。値が空なら「出さない」の指定。
+        for (const auto& entry : settings.IconRegions())
+        {
+            stream << "ICON_REGION " << std::quoted(entry.first) << ' '
+                << std::quoted(entry.second.region) << ' '
+                << std::quoted(entry.second.atlas_guid) << '\n';
+        }
 
         // v3 で追加。Active Scene Flow も GUID だけを保存する。
         stream << "SCENE_FLOW " << std::quoted(settings.SceneFlowGuid()) << '\n';
@@ -202,6 +225,47 @@ namespace ReplayEngine::Project
                 if (value_stream >> std::quoted(guid))
                 {
                     settings.SetLoadingSceneGuid(std::move(guid));
+                }
+            }
+            else if (keyword == "ICON_ATLAS")
+            {
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                std::string guid;
+                // 行が並ぶぶんだけ積む。上限を超えた分は AddIconAtlasGuid が捨てる。
+                if (value_stream >> std::quoted(guid))
+                    settings.AddIconAtlasGuid(std::move(guid));
+            }
+            else if (keyword == "ICON_TINT")
+            {
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                std::string key;
+                DirectX::XMFLOAT4 color{};
+                if ((value_stream >> std::quoted(key) >> color.x >> color.y >> color.z >> color.w) &&
+                    !key.empty() && std::isfinite(color.x) && std::isfinite(color.y) &&
+                    std::isfinite(color.z) && std::isfinite(color.w))
+                    settings.SetIconTint(key, color);
+            }
+            else if (keyword == "ICON_AUTO_MATCH")
+            {
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                int enabled = 0;
+                if (value_stream >> enabled) settings.SetIconAutoMatchByName(enabled != 0);
+            }
+            else if (keyword == "ICON_REGION")
+            {
+                std::istringstream value_stream(line);
+                value_stream.imbue(std::locale::classic());
+                std::string key;
+                std::string region;
+                // 3 つ目のアトラス GUID は後から足したので、無い行も読めるようにする。
+                std::string atlas_guid;
+                if ((value_stream >> std::quoted(key) >> std::quoted(region)) && !key.empty())
+                {
+                    value_stream >> std::quoted(atlas_guid);
+                    settings.SetIconRegion(key, std::move(region), std::move(atlas_guid));
                 }
             }
             else if (keyword == "SCENE_FLOW")

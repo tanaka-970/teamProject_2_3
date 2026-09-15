@@ -4,6 +4,7 @@
 //   framework_gizmo_pivot.cpp  ... Pivot 解決と Mesh Surface Snap
 
 #include "framework.h"
+#include "../../RePlayEngine/Editor/Commands/EditSerial.h"
 
 #include "../../RePlayEngine/Object/GameObject/GameObject.h"
 #include "../../RePlayEngine/Components/Core/PivotComponent.h"
@@ -53,6 +54,27 @@ namespace
         }
         return DirectX::XMFLOAT3{ DirectX::XMConvertToDegrees(euler.x),
             DirectX::XMConvertToDegrees(euler.y), DirectX::XMConvertToDegrees(euler.z) };
+    }
+
+    // グラム・シュミットでせん断を除き、右手系の回転だけを取り出す。
+    bool BoneRotationQuaternion(DirectX::FXMMATRIX matrix, DirectX::XMVECTOR& rotation)
+    {
+        using namespace DirectX;
+        XMMATRIX basis = XMMatrixIdentity();
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            XMVECTOR row = XMVectorSetW(matrix.r[axis], 0.0f);
+            for (int previous = 0; previous < axis; ++previous)
+                row = XMVectorSubtract(row, XMVectorMultiply(
+                    XMVector3Dot(row, basis.r[previous]), basis.r[previous]));
+            const float length_squared = XMVectorGetX(XMVector3LengthSq(row));
+            if (!std::isfinite(length_squared) || length_squared <= 1.0e-12f) return false;
+            basis.r[axis] = XMVectorScale(row, 1.0f / std::sqrt(length_squared));
+        }
+        if (XMVectorGetX(XMVector3Dot(XMVector3Cross(basis.r[0], basis.r[1]), basis.r[2])) < 0.0f)
+            basis.r[2] = XMVectorNegate(basis.r[2]);
+        rotation = XMQuaternionNormalize(XMQuaternionRotationMatrix(basis));
+        return !XMVector4IsNaN(rotation) && !XMVector4IsInfinite(rotation);
     }
 
     bool ProjectPoint(const DirectX::XMFLOAT3& world, DirectX::FXMMATRIX view,
@@ -557,6 +579,14 @@ void framework::commit_rig_pose_edit()
     if (rig_pose_history.size() > maximum_entries)
         rig_pose_history.erase(rig_pose_history.begin());
     rig_pose_history_cursor = rig_pose_history.size();
+    rig_pose_last_serial = ReplayEngine::Editor::NextEditSerial();
+}
+
+void framework::cancel_rig_pose_edit()
+{
+    if (!rig_pose_history_transaction) return;
+    rig_pose_history_transaction = false;
+    object_rig_pose[rig_pose_history_owner] = rig_pose_history_before;
 }
 
 bool framework::undo_rig_pose_edit()
@@ -564,6 +594,7 @@ bool framework::undo_rig_pose_edit()
     if (rig_pose_history_cursor == 0) return false;
     const auto& entry = rig_pose_history[--rig_pose_history_cursor];
     object_rig_pose[entry.owner] = entry.before;
+    rig_pose_last_serial = ReplayEngine::Editor::NextEditSerial();
     object_editor_context.SetStatus(entry.label + u8" を戻しました");
     return true;
 }
@@ -573,6 +604,7 @@ bool framework::redo_rig_pose_edit()
     if (rig_pose_history_cursor >= rig_pose_history.size()) return false;
     const auto& entry = rig_pose_history[rig_pose_history_cursor++];
     object_rig_pose[entry.owner] = entry.after;
+    rig_pose_last_serial = ReplayEngine::Editor::NextEditSerial();
     object_editor_context.SetStatus(entry.label + u8" をやり直しました");
     return true;
 }
@@ -638,6 +670,8 @@ bool framework::draw_bone_transform_gizmo()
         current == ReplayEngine::Editor::GizmoOperation::Translate ? ImGuizmo::TRANSLATE
         : current == ReplayEngine::Editor::GizmoOperation::Rotate ? ImGuizmo::ROTATE
         : ImGuizmo::SCALE;
+    // 回転中は前回のギズモ行列を使い、Euler への書き戻しを入力へ戻さない。
+    if (operation == ImGuizmo::ROTATE && rig_gizmo_dragging) world = rig_gizmo_matrix;
     ImGuizmo::SetHostHovered(scene_view_hovered || ImGuizmo::IsUsingID(gizmo_id_bone) ? 1 : 0);
     ImGuizmo::SetID(gizmo_id_bone);
     scene_window->DrawList->PushClipRect(ImVec2(scene_view_min_x, scene_view_min_y),
@@ -646,6 +680,17 @@ bool framework::draw_bone_transform_gizmo()
         rig_gizmo_use_local && gizmo_local_space ? ImGuizmo::LOCAL : ImGuizmo::WORLD,
         &world._11);
     scene_window->DrawList->PopClipRect();
+    if (rig_gizmo_dragging && ImGui::IsKeyPressed(VK_ESCAPE))
+    {
+        for (const auto& start : rig_gizmo_start_pose)
+            object_rig_pose[rig_pose_history_owner][start.first] = start.second;
+        cancel_rig_pose_edit();
+        rig_gizmo_dragging = false;
+        ImGuizmo::Enable(false);
+        ImGuizmo::Enable(true);
+        object_editor_context.SetStatus(u8"骨のギズモ操作を取り消しました");
+        return true;
+    }
     if (!ImGuizmo::IsUsingID(gizmo_id_bone))
     {
         if (rig_gizmo_dragging) { rig_gizmo_dragging = false; commit_rig_pose_edit(); }
@@ -659,24 +704,57 @@ bool framework::draw_bone_transform_gizmo()
         rig_gizmo_dragging = true;
         begin_rig_pose_edit(owner, u8"骨のポーズ");
         rig_gizmo_start_pose.clear();
-        for (const std::string& name : rig_selected_bones) rig_gizmo_start_pose[name] = pose[name];
-        rig_gizmo_start_pose[rig_selected_bone] = pose[rig_selected_bone];
+        for (const std::string& name : rig_selected_bones)
+        {
+            const auto start = pose.find(name);
+            rig_gizmo_start_pose[name] = start != pose.end() ? start->second : rig_pose_override{};
+        }
+        const auto primary = pose.find(rig_selected_bone);
+        rig_gizmo_start_pose[rig_selected_bone] = primary != pose.end() ? primary->second : rig_pose_override{};
+        rig_gizmo_start_matrix = bone->world_matrix;
+        const XMFLOAT3& degrees = rig_gizmo_start_pose[rig_selected_bone].rotation;
+        XMStoreFloat4(&rig_gizmo_start_rotation, XMQuaternionRotationRollPitchYaw(
+            XMConvertToRadians(degrees.x), XMConvertToRadians(degrees.y), XMConvertToRadians(degrees.z)));
     }
 
-    rig_pose_override& entry = pose[rig_selected_bone];
+    rig_gizmo_matrix = world;
+    const auto current_pose = pose.find(rig_selected_bone);
+    rig_pose_override entry = current_pose != pose.end() ? current_pose->second : rig_pose_override{};
     const rig_pose_override primary_start = rig_gizmo_start_pose[rig_selected_bone];
-    // 骨のローカルと親は動いていないので、ワールドの差分がそのままポーズの差分になる。
-    const XMMATRIX edited = XMLoadFloat4x4(&world) *
-        XMMatrixInverse(nullptr, XMLoadFloat4x4(&bone->world_matrix)) *
-        BonePoseAdjust(entry.translation, entry.rotation, entry.scale);
     XMVECTOR scale{}, rotation{}, translation{};
-    if (XMMatrixDecompose(&scale, &rotation, &translation, edited))
+    bool extracted = false;
+    if (operation == ImGuizmo::ROTATE)
     {
-        // 行列ごと返るので分解が他の成分へ滲む。掴んでいる種類だけ書き戻す。
-        if (operation == ImGuizmo::TRANSLATE) XMStoreFloat3(&entry.translation, translation);
-        else if (operation == ImGuizmo::SCALE) XMStoreFloat3(&entry.scale, scale);
-        else entry.rotation = BoneEulerDegrees(XMMatrixRotationQuaternion(rotation));
+        XMVECTOR start_rotation{}, edited_rotation{};
+        extracted = BoneRotationQuaternion(XMLoadFloat4x4(&rig_gizmo_start_matrix), start_rotation) &&
+            BoneRotationQuaternion(XMLoadFloat4x4(&world), edited_rotation);
+        if (extracted)
+        {
+            const XMVECTOR delta = XMQuaternionNormalize(XMQuaternionMultiply(
+                edited_rotation, XMQuaternionInverse(start_rotation)));
+            // 行列の積 R' * inverse(R開始) * Rポーズ開始 と同じ適用順にする。
+            rotation = XMQuaternionNormalize(XMQuaternionMultiply(
+                delta, XMLoadFloat4(&rig_gizmo_start_rotation)));
+        }
     }
+    else
+    {
+        const XMMATRIX edited = XMLoadFloat4x4(&world) *
+            XMMatrixInverse(nullptr, XMLoadFloat4x4(&bone->world_matrix)) *
+            BonePoseAdjust(entry.translation, entry.rotation, entry.scale);
+        extracted = XMMatrixDecompose(&scale, &rotation, &translation, edited);
+    }
+    if (!extracted)
+    {
+        if (object_editor_context.Status() != u8"骨の姿勢を取り出せません")
+            object_editor_context.SetStatus(u8"骨の姿勢を取り出せません");
+        return true;
+    }
+    // 掴んでいる種類だけ書き戻し、分解の影響を他の成分へ広げない。
+    if (operation == ImGuizmo::TRANSLATE) XMStoreFloat3(&entry.translation, translation);
+    else if (operation == ImGuizmo::SCALE) XMStoreFloat3(&entry.scale, scale);
+    else entry.rotation = BoneEulerDegrees(XMMatrixRotationQuaternion(rotation));
+    pose[rig_selected_bone] = entry;
     apply_rig_pose_to_selection(owner, rig->second, primary_start, entry, operation);
     // IsOver() では骨が密集した場所でギズモに隠れた骨を選び直せなくなる。
     return true;

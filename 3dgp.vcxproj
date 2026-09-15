@@ -487,6 +487,7 @@
     <ClCompile Include="RePlayEngine\Editor\Commands\FileEditHistory.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Help\EditorHelp.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Commands\EditSerial.cpp" />
     <ClCompile Include="RePlayEngine\Motion\EasingCurveAsset.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionEasing.cpp" />
     <ClCompile Include="RePlayEngine\Motion\MotionAsset.cpp" />
@@ -534,6 +535,7 @@
     <ClCompile Include="Source\game\camera_basis_provider.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp" />
+    <ClCompile Include="RePlayEngine\Editor\Icons\EditorIconProvider.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Style\EditorStyle.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Validation\SceneValidator.cpp" />
     <ClCompile Include="RePlayEngine\Editor\Validation\ValidationPanel.cpp" />
@@ -779,6 +781,7 @@
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayCommon.h" />
     <ClInclude Include="RePlayEngine\Components\Gameplay\StageGameplayComponents.h" />
     <ClInclude Include="RePlayEngine\Components\Editor\EditorNoteComponent.h" />
+    <ClInclude Include="RePlayEngine\Components\Editor\FolderComponent.h" />
     <ClInclude Include="RePlayEngine\Audio\AudioService.h" />
     <ClInclude Include="RePlayEngine\Audio\AudioSystem.h" />
     <ClInclude Include="RePlayEngine\Object\Registry\BuiltInComponents.h" />
@@ -793,6 +796,7 @@
     <ClInclude Include="RePlayEngine\Editor\Commands\FileEditHistory.h" />
     <ClInclude Include="RePlayEngine\Editor\Help\EditorHelp.h" />
     <ClInclude Include="RePlayEngine\Editor\Commands\MotionEditHistory.h" />
+    <ClInclude Include="RePlayEngine\Editor\Commands\EditSerial.h" />
     <ClInclude Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\InspectorPanel.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\PropertyDrawer.h" />
@@ -826,6 +830,7 @@
     <ClInclude Include="Source\game\camera_basis_provider.h" />
     <ClInclude Include="RePlayEngine\Editor\Inspector\PlayerCompositionValidator.h" />
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.h" />
+    <ClInclude Include="RePlayEngine\Editor\Icons\EditorIconProvider.h" />
     <ClInclude Include="RePlayEngine\Editor\Style\EditorStyle.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\SceneValidator.h" />
     <ClInclude Include="RePlayEngine\Editor\Validation\ValidationPanel.h" />

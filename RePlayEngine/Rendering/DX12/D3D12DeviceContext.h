@@ -72,6 +72,8 @@ namespace ReplayEngine::Rendering::DX12
         std::string key;
         std::filesystem::path source_path;
         std::vector<std::uint8_t> rgba;
+        // Sprite Atlas へ埋め込まれた DDS など、ファイルを持たない資産のバイト列。
+        std::vector<std::uint8_t> dds_bytes;
         std::uint32_t width = 0;
         std::uint32_t height = 0;
         bool is_cube = false;
@@ -750,6 +752,9 @@ namespace ReplayEngine::Rendering::DX12
         // Editorが持つAsset pathを、DX12 ImGui用SRVへ遅延登録する。
         // 戻り値はD3D11 SRVポインタではなく、このContext専用の安定したID。
         void* ImGuiTextureForPath(const std::filesystem::path& source_path) noexcept;
+        // ファイルを持たない DDS 用。key は呼び出し側が決める安定した文字列。
+        void* ImGuiTextureForBytes(const std::string& key,
+            const std::vector<std::uint8_t>& dds_bytes) noexcept;
         // UI Preview offscreen SRVをImGui TextureIdとして返す。
         void* ImGuiTextureForUIPreview() const noexcept;
 #endif
@@ -1392,6 +1397,8 @@ namespace ReplayEngine::Rendering::DX12
         {
             std::string key;
             std::filesystem::path source_path;
+            // 空でなければ、パスではなくこのバイト列から DDS として読む。
+            std::vector<std::uint8_t> dds_bytes;
         };
         Microsoft::WRL::ComPtr<ID3D12RootSignature> imgui_root_signature_;
         Microsoft::WRL::ComPtr<ID3D12PipelineState> imgui_pipeline_;

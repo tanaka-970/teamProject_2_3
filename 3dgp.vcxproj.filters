@@ -82,6 +82,9 @@
     <Filter Include="RePlayEngine\Editor\Rendering">
       <UniqueIdentifier>{23c5c4f9-8df4-41b3-8314-85e0567d6e2f}</UniqueIdentifier>
     </Filter>
+    <Filter Include="RePlayEngine\Editor\Icons">
+      <UniqueIdentifier>{a7c78a10-1785-4edc-9331-e4bb69d1c7f5}</UniqueIdentifier>
+    </Filter>
     <Filter Include="RePlayEngine\Editor\Style">
       <UniqueIdentifier>{de8d5c16-b5f0-4fe8-a1b0-5fa2b4b587bc}</UniqueIdentifier>
     </Filter>
@@ -969,6 +972,9 @@
     <ClCompile Include="RePlayEngine\Editor\Commands\MotionEditHistory.cpp">
       <Filter>RePlayEngine\Editor\Commands</Filter>
     </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Commands\EditSerial.cpp">
+      <Filter>RePlayEngine\Editor\Commands</Filter>
+    </ClCompile>
     <ClCompile Include="RePlayEngine\Motion\EasingCurveAsset.cpp">
       <Filter>RePlayEngine\Motion</Filter>
     </ClCompile>
@@ -1109,6 +1115,9 @@
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.cpp">
       <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="RePlayEngine\Editor\Icons\EditorIconProvider.cpp">
+      <Filter>RePlayEngine\Editor\Icons</Filter>
     </ClCompile>
     <ClCompile Include="RePlayEngine\Editor\Style\EditorStyle.cpp">
       <Filter>RePlayEngine\Editor\Style</Filter>
@@ -1763,6 +1772,9 @@
     <ClInclude Include="RePlayEngine\Components\Editor\EditorNoteComponent.h">
       <Filter>RePlayEngine\Components</Filter>
     </ClInclude>
+    <ClInclude Include="RePlayEngine\Components\Editor\FolderComponent.h">
+      <Filter>RePlayEngine\Components</Filter>
+    </ClInclude>
     <ClInclude Include="RePlayEngine\Audio\AudioService.h">
       <Filter>RePlayEngine\Audio</Filter>
     </ClInclude>
@@ -1803,6 +1815,9 @@
       <Filter>RePlayEngine\Editor</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Commands\MotionEditHistory.h">
+      <Filter>RePlayEngine\Editor\Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Commands\EditSerial.h">
       <Filter>RePlayEngine\Editor\Commands</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Hierarchy\HierarchyPanel.h">
@@ -1903,6 +1918,9 @@
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Viewport\EditorViewportCamera.h">
       <Filter>RePlayEngine\Editor\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="RePlayEngine\Editor\Icons\EditorIconProvider.h">
+      <Filter>RePlayEngine\Editor\Icons</Filter>
     </ClInclude>
     <ClInclude Include="RePlayEngine\Editor\Style\EditorStyle.h">
       <Filter>RePlayEngine\Editor\Style</Filter>

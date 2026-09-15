@@ -4,6 +4,7 @@
 #include "../../Assets/AssetDatabase.h"
 #include "../../Object/GameObject/GameObject.h"
 #include "../../Object/Registry/ComponentRegistry.h"
+#include "../../Components/Editor/FolderComponent.h"
 #include "../../Components/Rendering/MeshRendererComponent.h"
 #include "../../Components/Rendering/PrimitiveMeshRendererComponent.h"
 #include "../../Components/Landscape/LandscapeComponent.h"
@@ -273,6 +274,30 @@ namespace ReplayEngine::Editor
         if (ImGui::MenuItem("空の GameObject"))
         {
             CreateEmptyGameObject(context, parent);
+        }
+        if (ImGui::MenuItem("フォルダ"))
+        {
+            Scene::Scene* scene = context.GetScene();
+            if (scene == nullptr) return;
+
+            context.BeginEdit("フォルダを作成");
+            GameObject* created = scene->CreateGameObject(UniqueObjectName(*scene, parent, "フォルダ"));
+            if (created == nullptr)
+            {
+                context.CancelEdit();
+                return;
+            }
+            if (parent != nullptr) created->SetParent(parent, false);
+            if (created->AddComponent<Components::FolderComponent>() == nullptr)
+            {
+                scene->DestroyGameObject(created->ID());
+                context.CancelEdit();
+                return;
+            }
+
+            context.CommitEdit();
+            context.Selection().Select(created->ID(), false);
+            context.SetStatus("フォルダを作成しました");
         }
 
         if (ImGui::BeginMenu("3D Object"))

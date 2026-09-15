@@ -54,6 +54,19 @@
     bool editor_layout_dirty{ true };
     bool editor_hide_requested{ false };
     bool editor_session_active{ false };
+    ReplayEngine::Editor::EditorIconProvider editor_icon_provider;
+
+    // 単体表示。描画から外すだけで Scene のデータは触らない。
+    bool object_isolate_active{ false };
+    ReplayEngine::Core::ObjectID object_isolate_root{};
+    // 抜けたときに戻す編集カメラ。入った最初の 1 回だけ控える。
+    DirectX::XMFLOAT3 object_isolate_return_position{ 0.0f, 0.0f, 0.0f };
+    float object_isolate_return_yaw{ 0.0f };
+    float object_isolate_return_pitch{ 0.0f };
+    ReplayEngine::Editor::HierarchyIconDisplay hierarchy_icon_display{
+        ReplayEngine::Editor::HierarchyIconDisplay::Always };
+    bool editor_icons_reload_pending{ true };
+    bool show_icon_settings_window{ false };
     bool show_hierarchy_panel{ true };
     bool show_inspector_panel{ true };
     bool show_project_panel{ true };
@@ -371,6 +384,20 @@ private:
     int asset_type_filter{ 0 };
     std::string selected_asset_guid;
     bool asset_drop_add_collider{ false };
+    struct PrefabInspectorObject
+    {
+        ReplayEngine::Core::ObjectID id;
+        ReplayEngine::Core::ObjectID parent_id;
+        std::string name;
+        std::vector<std::string> component_types;
+    };
+    std::string prefab_inspector_guid;
+    std::filesystem::path prefab_inspector_path;
+    std::filesystem::file_time_type prefab_inspector_write_time{};
+    bool prefab_inspector_write_time_valid{ false };
+    bool prefab_inspector_loaded{ false };
+    std::string prefab_inspector_error;
+    std::vector<PrefabInspectorObject> prefab_inspector_objects;
     char new_csharp_behaviour_name[128]{ "NewBehaviour" };
     char new_csharp_namespace[128]{ "Game" };
     bool csharp_scripts_dirty{ false };
