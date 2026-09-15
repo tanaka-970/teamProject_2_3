@@ -188,6 +188,12 @@ namespace ReplayEngine::Rendering::Validation
             "不明な旧 shading_model を勝手に丸めない");
         check.Expect(!BuiltInShaders::TryGetLightingModel(ShaderID{}, not_found),
             "無効な ShaderID を勝手に丸めない");
+        ShaderLightingModel ggst_lighting = ShaderLightingModel::Pbr;
+        check.Expect(BuiltInShaders::TryGetLightingModel(BuiltInShaders::Ggst, ggst_lighting) &&
+            ggst_lighting == ShaderLightingModel::Toon,
+            "GGST は ShaderID から Toon 照明モデルを引ける");
+        check.Expect(!BuiltInShaders::TryGetLightingModelFromShadingModel(-1, not_found),
+            "GGST 用に legacy shading_model -1 を作らない");
 
         // ---- 4. 実ファイルとCatalog --------------------------------------
         const std::filesystem::path root = std::filesystem::current_path();
@@ -204,14 +210,14 @@ namespace ReplayEngine::Rendering::Validation
                 }
             });
         const ShaderLibrary::ScanReport report = library.ScanAll(root);
-        check.Expect(report.scanned >= 5,
-            "組み込み5種を含むShaderフォルダを走査できる");
+        check.Expect(report.scanned >= 7,
+            "組み込み7種を含むShaderフォルダを走査できる");
         check.Expect(report.duplicate_ids == 0,
             "Shader GUID の重複が無い");
 
         // Catalogは編集中の壊れた自作Shaderを抱えたままでも起動を継続する。
         // そのため、ここでは全ShaderのError件数を完了条件にしない。
-        // 下で組み込み5種が実際に登録され、宣言が一致することを個別に検査する。
+        // 下でlegacy対応BuiltInが実際に登録され、宣言が一致することを個別に検査する。
 
         for (const BuiltInExpectation& expected : ExpectedBuiltIns())
         {

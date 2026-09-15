@@ -3,13 +3,15 @@ cbuffer ObjectCB : register(b0)
     row_major float4x4 world;
     row_major float4x4 previousWorld;
     float4 morph;
+    float4 faceRightLocal;
+    float4 faceFrontLocal;
 };
 cbuffer SceneCB : register(b1)
 {
     row_major float4x4 viewProjection;
     row_major float4x4 previousViewProjection;
 };
-struct VSIn { float3 position : POSITION; float3 normal : NORMAL; float2 uv : TEXCOORD0; };
+struct VSIn { float3 position : POSITION; float3 normal : NORMAL; float2 uv : TEXCOORD0; float4 vertexColor : COLOR0; };
 struct VSOut
 {
     float4 position : SV_POSITION;
@@ -19,6 +21,9 @@ struct VSOut
     float4 currentClip : TEXCOORD3;
     float4 previousClip : TEXCOORD4;
     float4 tangent : TEXCOORD5;
+    float3 faceRight : TEXCOORD6;
+    float3 faceFront : TEXCOORD7;
+    float4 vertexColor : COLOR0;
 };
 VSOut main(VSIn input)
 {
@@ -33,6 +38,11 @@ VSOut main(VSIn input)
     o.normal = normalize(mul(float4(input.normal, 0.0f), world).xyz);
     // static_mesh の既存 ABI は tangent を持たない。PS 側で安定した basis を構築する。
     o.tangent = 0.0f.xxxx;
+    const float faceRightSign = morph.z >= 0.5f ? -1.0f : 1.0f;
+    const float faceFrontSign = morph.w >= 0.5f ? -1.0f : 1.0f;
+    o.faceRight = normalize(mul(float4(faceRightLocal.xyz * faceRightSign, 0.0f), world).xyz);
+    o.faceFront = normalize(mul(float4(faceFrontLocal.xyz * faceFrontSign, 0.0f), world).xyz);
     o.uv = input.uv;
+    o.vertexColor = input.vertexColor;
     return o;
 }

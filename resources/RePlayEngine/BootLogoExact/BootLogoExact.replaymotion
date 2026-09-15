@@ -1,0 +1,507 @@
+MOTION "RePlayEngine Boot Logo (Exact)"
+MOTION_VERSION 7
+DURATION 3.87
+
+TRACK "Streak0 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak0"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp((0.70711*((-297+((-300)+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))+(-1060+(((-600)+(2600-(-600))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),(0.70711*((-1060+(((-600)+(2600-(-600))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))-(-297+((-300)+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),i)"
+KEY 0 VEC2 0 0 EASING Linear
+END_TRACK
+
+TRACK "Streak0 大きさ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak0"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "size_delta"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp(1500*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),620*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),i)"
+KEY 0 VEC2 1500 620 EASING Linear
+END_TRACK
+
+TRACK "Streak0 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak0"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "0.75*(1-step(0.6001,t))"
+KEY 0 FLOAT 0.75 EASING Linear
+END_TRACK
+
+TRACK "Streak1 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak1"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp((0.70711*((-297+((-880)+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))+(-1060+(((-1500)+(2600-(-1500))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),(0.70711*((-1060+(((-1500)+(2600-(-1500))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))-(-297+((-880)+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),i)"
+KEY 0 VEC2 0 0 EASING Linear
+END_TRACK
+
+TRACK "Streak1 大きさ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak1"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "size_delta"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp(900*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),120*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),i)"
+KEY 0 VEC2 900 120 EASING Linear
+END_TRACK
+
+TRACK "Streak1 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak1"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "1*(1-step(0.6001,t))"
+KEY 0 FLOAT 1 EASING Linear
+END_TRACK
+
+TRACK "Streak2 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak2"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp((0.70711*((-297+(560+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))+(-1060+(((-2600)+(2600-(-2600))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),(0.70711*((-1060+(((-2600)+(2600-(-2600))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))-(-297+(560+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),i)"
+KEY 0 VEC2 0 0 EASING Linear
+END_TRACK
+
+TRACK "Streak2 大きさ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak2"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "size_delta"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp(1300*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),200*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),i)"
+KEY 0 VEC2 1300 200 EASING Linear
+END_TRACK
+
+TRACK "Streak2 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak2"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "1*(1-step(0.6001,t))"
+KEY 0 FLOAT 1 EASING Linear
+END_TRACK
+
+TRACK "Streak3 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak3"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp((0.70711*((-297+((-1180)+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))+(-1060+(((-3400)+(2600-(-3400))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),(0.70711*((-1060+(((-3400)+(2600-(-3400))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))-(-297+((-1180)+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),i)"
+KEY 0 VEC2 0 0 EASING Linear
+END_TRACK
+
+TRACK "Streak3 大きさ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak3"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "size_delta"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp(1100*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),70*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),i)"
+KEY 0 VEC2 1100 70 EASING Linear
+END_TRACK
+
+TRACK "Streak3 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak3"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "0.95*(1-step(0.6001,t))"
+KEY 0 FLOAT 0.95 EASING Linear
+END_TRACK
+
+TRACK "Streak4 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak4"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp((0.70711*((-297+(180+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))+(-1060+(((-4200)+(2600-(-4200))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),(0.70711*((-1060+(((-4200)+(2600-(-4200))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))-(-297+(180+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),i)"
+KEY 0 VEC2 0 0 EASING Linear
+END_TRACK
+
+TRACK "Streak4 大きさ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak4"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "size_delta"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp(1800*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),300*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),i)"
+KEY 0 VEC2 1800 300 EASING Linear
+END_TRACK
+
+TRACK "Streak4 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak4"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "1*(1-step(0.6001,t))"
+KEY 0 FLOAT 1 EASING Linear
+END_TRACK
+
+TRACK "Streak5 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak5"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp((0.70711*((-297+(940+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))+(-1060+(((-5000)+(2600-(-5000))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),(0.70711*((-1060+(((-5000)+(2600-(-5000))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))-(-297+(940+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),i)"
+KEY 0 VEC2 0 0 EASING Linear
+END_TRACK
+
+TRACK "Streak5 大きさ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak5"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "size_delta"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp(1400*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),100*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),i)"
+KEY 0 VEC2 1400 100 EASING Linear
+END_TRACK
+
+TRACK "Streak5 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak5"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "0.85*(1-step(0.6001,t))"
+KEY 0 FLOAT 0.85 EASING Linear
+END_TRACK
+
+TRACK "Streak6 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak6"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp((0.70711*((-297+((-520)+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))+(-1060+(((-5800)+(2600-(-5800))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),(0.70711*((-1060+(((-5800)+(2600-(-5800))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))-(-297+((-520)+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),i)"
+KEY 0 VEC2 0 0 EASING Linear
+END_TRACK
+
+TRACK "Streak6 大きさ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak6"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "size_delta"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp(2000*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),420*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),i)"
+KEY 0 VEC2 2000 420 EASING Linear
+END_TRACK
+
+TRACK "Streak6 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak6"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "1*(1-step(0.6001,t))"
+KEY 0 FLOAT 1 EASING Linear
+END_TRACK
+
+TRACK "Streak7 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak7"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp((0.70711*((-297+(1240+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))+(-1060+(((-6600)+(2600-(-6600))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),(0.70711*((-1060+(((-6600)+(2600-(-6600))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))-(-297+(1240+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),i)"
+KEY 0 VEC2 0 0 EASING Linear
+END_TRACK
+
+TRACK "Streak7 大きさ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak7"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "size_delta"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp(1200*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),60*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),i)"
+KEY 0 VEC2 1200 60 EASING Linear
+END_TRACK
+
+TRACK "Streak7 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak7"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "0.9*(1-step(0.6001,t))"
+KEY 0 FLOAT 0.9 EASING Linear
+END_TRACK
+
+TRACK "Streak8 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak8"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp((0.70711*((-297+((-960)+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))+(-1060+(((-7400)+(2600-(-7400))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),(0.70711*((-1060+(((-7400)+(2600-(-7400))*clamp(t/0.6,0,1))+1060)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)))-(-297+((-960)+297)*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t))))),i)"
+KEY 0 VEC2 0 0 EASING Linear
+END_TRACK
+
+TRACK "Streak8 大きさ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak8"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "size_delta"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp(1600*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),240*lerp(1+7*pow(clamp((t-0.22)/0.213,0,1),2.6),1,step(0.433,t)),i)"
+KEY 0 VEC2 1600 240 EASING Linear
+END_TRACK
+
+TRACK "Streak8 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Streak8"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "0.8*(1-step(0.6001,t))"
+KEY 0 FLOAT 0.8 EASING Linear
+END_TRACK
+
+TRACK "Mark 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Mark"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp((-455)+(0.70711*(-(clamp((t-2.4)/0.57,0,1))*(clamp((t-2.4)/0.57,0,1))*3000)),20+(0.70711*(-(clamp((t-2.4)/0.57,0,1))*(clamp((t-2.4)/0.57,0,1))*3000)),i)"
+KEY 0 VEC2 -455 20 EASING Linear
+END_TRACK
+
+TRACK "Mark 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Mark"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "(step(0.433,t)*(1-step(2.97,t)))"
+KEY 0 FLOAT 1 EASING Linear
+END_TRACK
+
+TRACK "Word 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Word"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp(205+(0.70711*(-(clamp((t-2.4)/0.57,0,1))*(clamp((t-2.4)/0.57,0,1))*3000)),20+(0.70711*(-(clamp((t-2.4)/0.57,0,1))*(clamp((t-2.4)/0.57,0,1))*3000)),i)"
+KEY 0 VEC2 205 20 EASING Linear
+END_TRACK
+
+TRACK "Word 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Word"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "(step(0.433,t)*(1-step(2.97,t)))"
+KEY 0 FLOAT 1 EASING Linear
+END_TRACK
+
+TRACK "Note 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Note"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp(530+(0.70711*(-(clamp((t-2.4)/0.57,0,1))*(clamp((t-2.4)/0.57,0,1))*3000)),295+(0.70711*(-(clamp((t-2.4)/0.57,0,1))*(clamp((t-2.4)/0.57,0,1))*3000)),i)"
+KEY 0 VEC2 530 295 EASING Linear
+END_TRACK
+
+TRACK "Note 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Note"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "(step(0.433,t)*(1-step(2.97,t)))*clamp((t-0.95)/0.22,0,1)*0.8"
+KEY 0 FLOAT 0 EASING Linear
+END_TRACK
+
+TRACK "Star 位置"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Star"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "anchored_position"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp((557+(0-557)*clamp((t-2.4)/0.57,0,1)),(285+(0-285)*clamp((t-2.4)/0.57,0,1)),i)"
+KEY 0 VEC2 557 285 EASING Linear
+END_TRACK
+
+TRACK "Star 大きさ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Star"
+COMPONENT_TYPE "RectTransformComponent"
+COMPONENT_INDEX 0
+PROPERTY "size_delta"
+VALUE_TYPE VEC2
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "lerp(((150+150*clamp((t-2.4)/0.57,0,1))+4900*pow(clamp((t-2.97)/0.9,0,1),6)),((150+150*clamp((t-2.4)/0.57,0,1))+4900*pow(clamp((t-2.97)/0.9,0,1),6)),i)"
+KEY 0 VEC2 150 150 EASING Linear
+END_TRACK
+
+TRACK "Star 濃さ"
+OBJECT 100
+BINDING_ORIGIN 3
+BINDING_PATH "Star"
+COMPONENT_TYPE "UIImageComponent"
+COMPONENT_INDEX 0
+PROPERTY "opacity"
+VALUE_TYPE FLOAT
+ENABLED 1
+BLEND_MODE Override
+EXPRESSION 1 "clamp((t-0.95)/0.22,0,1)*(0.85+0.15*clamp((t-2.4)/0.57,0,1))"
+KEY 0 FLOAT 0 EASING Linear
+END_TRACK

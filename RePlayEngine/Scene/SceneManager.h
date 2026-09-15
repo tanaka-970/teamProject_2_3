@@ -30,6 +30,14 @@ namespace ReplayEngine::Scene
             if (factory) queued_factories_.push_back(std::move(factory));
         }
 
+        // ロゴを出さないときに使う。current が空のままだと Update がキューを進めない。
+        bool PromoteQueuedScene() noexcept
+        {
+            if (!queued_scene_) return false;
+            current_scene_ = std::move(queued_scene_);
+            return true;
+        }
+
         void Clear() noexcept
         {
             current_scene_.reset();

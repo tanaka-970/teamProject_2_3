@@ -235,6 +235,7 @@ void framework::update_editor_camera(float elapsed_time)
     input.right_mouse_down = ImGui::IsMouseDown(ImGuiMouseButton_Right);
     input.middle_mouse_down = ImGui::IsMouseDown(ImGuiMouseButton_Middle);
     input.left_mouse_down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+    if (vertex_paint_active() && !io.KeyAlt) input.left_mouse_down = false;
     input.mouse_x = mouse.x;
     input.mouse_y = mouse.y;
     input.wheel = io.MouseWheel;

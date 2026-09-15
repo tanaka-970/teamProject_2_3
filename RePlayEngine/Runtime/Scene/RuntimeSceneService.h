@@ -198,6 +198,17 @@ namespace ReplayEngine::Runtime
         //   （読み直す元が存在しないため、黙って別の Scene を読むことはしない）。
         SceneRequestResult RequestAdopt(const Scene::Serialization::SceneData& data,
             const std::string& source_guid);
+        // Play Mode のように呼び出し側がスナップショットを使い切る場合の move 経路。
+        // 巨大な PropertyBag / Landscape データを RequestAdopt 内で再コピーしない。
+        SceneRequestResult RequestAdopt(Scene::Serialization::SceneData&& data,
+            const std::string& source_guid);
+        // Editor の反復 Play 用。immutable な SceneData を共有所有し、
+        // Play のたびに PropertyBag / 文字列群を複製しない。
+        // Tick / Swap 完了までは service が shared_ptr を保持するため、
+        // 呼び出し側の cache が差し替わっても参照寿命は安全。
+        SceneRequestResult RequestAdoptShared(
+            std::shared_ptr<const Scene::Serialization::SceneData> data,
+            const std::string& source_guid);
 
         // Runtime World を空へ戻す。Play 停止で使う。
         //
@@ -338,10 +349,11 @@ namespace ReplayEngine::Runtime
         std::size_t progress_total_units_ = 0;
         std::string current_load_stage_;
 
-        // InMemory 要求の内容。要求を受理した時点で複製しておく。
-        // 参照だけ持つと、要求から Tick までの間に呼び出し側が
-        // SceneData を書き換えたり破棄したりできてしまう。
+        // InMemory 要求の内容。通常 API は pending_data_ が所有し、
+        // Editor の反復 Play cache は pending_shared_data_ を共有所有する。
+        // どちらも要求受理後に呼び出し側の生参照へ依存しない。
         Scene::Serialization::SceneData pending_data_;
+        std::shared_ptr<const Scene::Serialization::SceneData> pending_shared_data_;
 
         Scene::Serialization::SceneLoadReport last_report_;
         std::size_t staging_object_count_ = 0;

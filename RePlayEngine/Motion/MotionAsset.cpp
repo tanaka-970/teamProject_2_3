@@ -265,6 +265,10 @@ namespace ReplayEngine::Motion
                 {
                     file << " CURVE " << std::quoted(key.easing_curve.guid);
                 }
+                else if (key.easing == MotionEasing::EaseInPower)
+                {
+                    file << " POWER " << key.power;
+                }
                 file << '\n';
             }
 

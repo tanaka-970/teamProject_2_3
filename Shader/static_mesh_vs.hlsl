@@ -32,6 +32,8 @@ VS_OUT main(float4 position : POSITION, float4 normal : NORMAL, float2 texcoord 
 	vout.world_normal = normalize(mul(normal, world));
 
 	vout.color = material_color;
+	// 旧描画経路には色ストリームが無いため白で互換性を保つ。
+	vout.vertex_color = 1.0f.xxxx;
 	vout.texcoord = texcoord;
 
 	// 剛体なので前フレームのワールド行列を掛け直すだけでよい。

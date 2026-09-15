@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "../../Core/ObjectID/ObjectID.h"
 #include "../../Core/ObjectID/RuntimeIdentity.h"
@@ -79,7 +79,7 @@ namespace ReplayEngine::Scene::Serialization
         // プロパティ。型が解決できなかった場合も、ここへ読み込んだまま保持する
         // （MissingComponent が丸ごと預かる）。
         Reflection::PropertyBag properties;
-        // Undo-only immutable binary geometry. File captures still use mesh_data.
+        // Undo / Play 用 immutable binary geometry. File captures still use mesh_data.
         std::shared_ptr<const Landscape::LandscapeGeometry> landscape_geometry;
     };
 
@@ -217,7 +217,12 @@ namespace ReplayEngine::Scene::Serialization
     // ComponentRegistry で serializable=false の型も保存しない
     // （TransformComponent は GameObject 側の transform として保存済みのため）。
     std::uint64_t SceneCaptureCount() noexcept;
-    enum class SceneCaptureMode { File, Undo };
+    enum class SceneCaptureMode
+    {
+        File, // 永続保存。Landscape は mesh_data 文字列へ変換する。
+        Undo, // Editor 内部スナップショット。Landscape は immutable geometry を共有する。
+        Play  // Play 複製。Undo と同じく binary geometry を共有し、文字列化を避ける。
+    };
     void CaptureScene(const Scene& scene, SceneData& output,
         SceneCaptureMode mode = SceneCaptureMode::File);
 
@@ -241,7 +246,13 @@ namespace ReplayEngine::Scene::Serialization
     // OnStart / OnEnable はここでは呼ばれない。呼び出し側が Scene::Start() を呼ぶ。
     // 読み込みが途中で中断されることはなく、常に true を返す。
     // 問題があった箇所は report へ記録される。
-    bool ApplySceneData(const SceneData& data, Scene& scene, SceneLoadReport& report);
+    enum class SceneApplyMode
+    {
+        General,     // File / Prefab / validation。互換処理と参照 remap をすべて通す。
+        RuntimePlay  // 同一プロセスの Play snapshot。現在型・同一 ObjectID を前提に高速復元する。
+    };
+    bool ApplySceneData(const SceneData& data, Scene& scene, SceneLoadReport& report,
+        SceneApplyMode mode = SceneApplyMode::General);
 
     // 指定した GameObject とその子孫だけを SceneData へ写し取る。
     //

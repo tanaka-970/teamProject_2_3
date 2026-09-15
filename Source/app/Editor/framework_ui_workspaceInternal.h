@@ -195,6 +195,29 @@ namespace framework_ui_workspace_detail
         return nearest;
     }
 
+    // 上辺の外へ突き出した回転つまみの位置。枠の向きに合わせて一緒に回る。
+    inline ImVec2 RotateKnobPoint(const ImVec2 corners[4], float distance = 30.0f) noexcept
+    {
+        const ImVec2 top((corners[2].x + corners[3].x) * 0.5f, (corners[2].y + corners[3].y) * 0.5f);
+        const ImVec2 center((corners[0].x + corners[1].x + corners[2].x + corners[3].x) * 0.25f,
+            (corners[0].y + corners[1].y + corners[2].y + corners[3].y) * 0.25f);
+        float dx = top.x - center.x;
+        float dy = top.y - center.y;
+        const float length = std::sqrt(dx * dx + dy * dy);
+        if (length < 0.0001f) { dx = 0.0f; dy = -1.0f; }
+        else { dx /= length; dy /= length; }
+        return ImVec2(top.x + dx * distance, top.y + dy * distance);
+    }
+
+    inline bool HitRotateKnob(const ImVec2 corners[4], const ImVec2& mouse,
+        float radius = 11.0f) noexcept
+    {
+        const ImVec2 knob = RotateKnobPoint(corners);
+        const float dx = mouse.x - knob.x;
+        const float dy = mouse.y - knob.y;
+        return dx * dx + dy * dy <= radius * radius;
+    }
+
     inline bool InverseTransformPoint(const DirectX::XMFLOAT4X4& matrix,
         const DirectX::XMFLOAT2& point, DirectX::XMFLOAT2& output) noexcept
     {

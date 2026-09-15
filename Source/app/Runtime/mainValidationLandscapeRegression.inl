@@ -1,4 +1,4 @@
-// Included only by the headless Landscape validation translation unit.
+﻿// Included only by the headless Landscape validation translation unit.
 #include "../../../RePlayEngine/Editor/Inspector/InspectorPanel.h"
 #include "../../../RePlayEngine/Editor/Inspector/PropertyDrawer.h"
 #include "../../../RePlayEngine/Components/Rendering/PrimitiveMeshRendererComponent.h"
@@ -234,6 +234,11 @@ namespace ReplayEngine::Runtime::Detail
         check(undo_before.objects[0].components[0].landscape_geometry==shared &&
             undo_after.objects[0].components[0].landscape_geometry==shared &&
             !undo_before.objects[0].components[0].properties.Contains("mesh_data"),"502681 vertices shared without mesh text in Undo");
+        SceneData play_snapshot;
+        CaptureScene(heavy,play_snapshot,SceneCaptureMode::Play);
+        check(play_snapshot.objects[0].components[0].landscape_geometry==shared &&
+            !play_snapshot.objects[0].components[0].properties.Contains("mesh_data"),
+            "502681 vertices shared without mesh text in Play capture");
         Editor::EditorContext history;
         history.AttachScene(&heavy);
         history.BeginEdit("rename"); selected->SetName("Changed"); history.CommitEdit();

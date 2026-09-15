@@ -61,6 +61,13 @@ namespace ReplayEngine::Editor
         MarkDirty();
     }
 
+    void EditorContext::CommitVertexColorEdit(std::unique_ptr<VertexPaint::ColorEdit> command)
+    {
+        if (!CanEdit() || !command || !command->target) return;
+        history_.CommitVertexColors(std::move(command));
+        edit_serial_ = NextEditSerial();
+        MarkDirty();
+    }
     void EditorContext::CancelEdit() noexcept
     {
         history_.Cancel();

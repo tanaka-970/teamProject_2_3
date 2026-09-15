@@ -16,6 +16,7 @@ struct PixelInput
     float2 texcoord : TEXCOORD;
     float4 current_clip : TEXCOORD1;
     float4 previous_clip : TEXCOORD2;
+    float4 vertex_color : COLOR1;
 };
 float4 main(PixelInput input) : SV_TARGET
 {

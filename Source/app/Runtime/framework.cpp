@@ -1,4 +1,4 @@
-#include "framework.h"
+﻿#include "framework.h"
 #include "skinned_mesh.h"
 #include "gltf_model.h"
 #include "../Editor/GoldenImageState.h"
@@ -255,6 +255,14 @@ bool framework::uninitialize()
     // 2) LoadingScene の Task はモデル Cache へ書き込むため、
     //    Cache 解放より先に停止・join する。
     scene_manager.Clear();
+    if (object_boot_logo_scene)
+    {
+        object_boot_logo_scene->Services().SetRuntime(nullptr);
+        object_boot_logo_scene->Services().SetRuntimeScene(nullptr);
+        object_boot_logo_scene->Services().SetSceneFlow(nullptr);
+        object_boot_logo_scene.reset();
+    }
+    object_boot_logo_runtime_context.reset();
     if (object_loading_scene)
     {
         object_loading_scene->Services().SetRuntime(nullptr);

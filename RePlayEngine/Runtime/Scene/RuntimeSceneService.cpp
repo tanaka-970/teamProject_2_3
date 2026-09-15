@@ -133,6 +133,7 @@ namespace ReplayEngine::Runtime
         staging_.reset();
         staging_object_count_ = 0;
         pending_data_.Clear();
+        pending_shared_data_.reset();
         pending_scene_path_.clear();
         load_started_published_ = false;
 
@@ -172,6 +173,7 @@ namespace ReplayEngine::Runtime
         pending_scene_path_.clear();
         pending_source_ = PendingSource::AssetGuid;
         pending_data_.Clear();
+        pending_shared_data_.reset();
         state_ = SceneLoadState::Loading;
         last_status_ = RuntimeStatus::Ok;
         last_error_.clear();
@@ -197,6 +199,7 @@ namespace ReplayEngine::Runtime
             ? pending_scene_path_.generic_u8string() : source_label;
         pending_source_ = PendingSource::FilePath;
         pending_data_.Clear();
+        pending_shared_data_.reset();
         state_ = SceneLoadState::Loading;
         last_status_ = RuntimeStatus::Ok;
         last_error_.clear();
@@ -222,11 +225,51 @@ namespace ReplayEngine::Runtime
     SceneRequestResult RuntimeSceneService::RequestAdopt(
         const Serialization::SceneData& data, const std::string& source_guid)
     {
+        // 既存 API の参照寿命契約は維持する。呼び出し元の data を保持せず、
+        // 自前のコピーへしたうえで move 経路へ集約する。
+        Serialization::SceneData owned = data;
+        return RequestAdopt(std::move(owned), source_guid);
+    }
+
+    SceneRequestResult RuntimeSceneService::RequestAdopt(
+        Serialization::SceneData&& data, const std::string& source_guid)
+    {
         if (IsBusy()) return SceneRequestResult::Busy;
 
-        // 要求を受けた時点で複製する。
-        // 参照で持つと、Tick が走るまでの間に呼び出し側が中身を変えられる。
-        pending_data_ = data;
+        // 要求を受けた時点で所有権を受け取る。
+        // Play Mode は CaptureScene 直後の SceneData を使い切るため、ここを move にすると
+        // PropertyBag や巨大 Landscape の一時データを丸ごと再コピーせずに済む。
+        pending_data_ = std::move(data);
+        pending_shared_data_.reset();
+        pending_source_ = PendingSource::InMemory;
+        pending_scene_guid_ = source_guid;
+        pending_scene_path_.clear();
+
+        state_ = SceneLoadState::Loading;
+        last_status_ = RuntimeStatus::Ok;
+        last_error_.clear();
+        last_failed_stage_.clear();
+        load_started_published_ = false;
+        progress_completed_units_ = 0;
+        progress_total_units_ = 2;
+        current_load_stage_ = "BuildWorld";
+
+        PublishSceneNotification(EngineEvents::SceneLoadRequested, "SceneLoadRequested",
+            pending_scene_guid_, RuntimeStatus::Ok);
+        return SceneRequestResult::Accepted;
+    }
+
+    SceneRequestResult RuntimeSceneService::RequestAdoptShared(
+        std::shared_ptr<const Serialization::SceneData> data,
+        const std::string& source_guid)
+    {
+        if (!data) return SceneRequestResult::InvalidRequest;
+        if (IsBusy()) return SceneRequestResult::Busy;
+
+        // immutable snapshot の寿命だけを共有する。内容をコピーしない。
+        // Editor 側は同じ snapshot を次回 Play に再利用できる。
+        pending_shared_data_ = std::move(data);
+        pending_data_.Clear();
         pending_source_ = PendingSource::InMemory;
         pending_scene_guid_ = source_guid;
         pending_scene_path_.clear();
@@ -285,6 +328,7 @@ namespace ReplayEngine::Runtime
         pending_scene_guid_.clear();
         pending_scene_path_.clear();
         pending_data_.Clear();
+        pending_shared_data_.reset();
         pending_source_ = PendingSource::AssetGuid;
         last_report_ = Serialization::SceneLoadReport();
         staging_object_count_ = 0;
@@ -312,6 +356,7 @@ namespace ReplayEngine::Runtime
         pending_scene_guid_.clear();
         pending_scene_path_.clear();
         pending_data_.Clear();
+        pending_shared_data_.reset();
         pending_source_ = PendingSource::AssetGuid;
         state_ = SceneLoadState::Idle;
         load_started_published_ = false;
@@ -334,7 +379,9 @@ namespace ReplayEngine::Runtime
         if (pending_source_ == PendingSource::InMemory)
         {
             current_load_stage_ = "BuildWorld";
-            if (BuildStagingFromData(pending_data_)) ++progress_completed_units_;
+            const Serialization::SceneData* source = pending_shared_data_
+                ? pending_shared_data_.get() : &pending_data_;
+            if (BuildStagingFromData(*source)) ++progress_completed_units_;
             return;
         }
 
@@ -474,7 +521,8 @@ namespace ReplayEngine::Runtime
         //
         // ここで GameObject / Component 生成、StableID 復元、Property 反映、
         // Missing Component / Unknown Property の保持、参照解決がすべて行われる。
-        // ApplySceneData を通すので、Editor 読み込みと同じ規則が使われる。
+        // 通常ロードは Editor と同じ規則。Editor Play の immutable snapshot だけは
+        // current-process で既に解決済みの情報を使う RuntimePlay fast path を通す。
         auto staging = std::make_unique<Scene::Scene>(data.scene_name);
 
         // Component を作る「前」に Services を張る。
@@ -492,7 +540,14 @@ namespace ReplayEngine::Runtime
         if (world_lifecycle_ != nullptr) world_lifecycle_->OnWorldBuilding(*staging);
 
         Serialization::SceneLoadReport report;
-        if (!Serialization::ApplySceneData(data, *staging, report))
+        // RuntimePlay の省略経路は Editor Play が current-process で Capture した
+        // immutable snapshot にだけ使う。通常の RequestAdopt() は Validation や
+        // 外部データ復元でも使われるため、GUID remap / alias / migration を飛ばさない。
+        const Serialization::SceneApplyMode apply_mode =
+            pending_shared_data_
+                ? Serialization::SceneApplyMode::RuntimePlay
+                : Serialization::SceneApplyMode::General;
+        if (!Serialization::ApplySceneData(data, *staging, report, apply_mode))
         {
             Fail(RuntimeStatus::SceneLoadFailed, "BuildWorld",
                 "Staging World の構築に失敗しました。");
@@ -634,6 +689,7 @@ namespace ReplayEngine::Runtime
         pending_scene_guid_.clear();
         pending_scene_path_.clear();
         pending_data_.Clear();
+        pending_shared_data_.reset();
         pending_source_ = PendingSource::AssetGuid;
 
         state_ = SceneLoadState::Completed;

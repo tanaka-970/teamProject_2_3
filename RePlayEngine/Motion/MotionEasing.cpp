@@ -71,6 +71,7 @@ namespace ReplayEngine::Motion
         case MotionEasing::EaseInOutElastic: return "EaseInOutElastic";
         case MotionEasing::CustomBezier: return "CustomBezier";
         case MotionEasing::PresetCurve: return "PresetCurve";
+        case MotionEasing::EaseInPower: return "EaseInPower";
         }
         return "Linear";
     }
@@ -95,13 +96,14 @@ namespace ReplayEngine::Motion
         else if (Equals(text, "EaseInOutElastic")) out = MotionEasing::EaseInOutElastic;
         else if (Equals(text, "CustomBezier")) out = MotionEasing::CustomBezier;
         else if (Equals(text, "PresetCurve")) out = MotionEasing::PresetCurve;
+        else if (Equals(text, "EaseInPower")) out = MotionEasing::EaseInPower;
         else return false;
 
         return true;
     }
 
     float ApplyEasing(MotionEasing easing, float t,
-        const MotionBezierHandles& handles) noexcept
+        const MotionBezierHandles& handles, float power) noexcept
     {
         t = std::clamp(t, 0.0f, 1.0f);
         if (easing == MotionEasing::Step) return 0.0f;
@@ -166,6 +168,8 @@ namespace ReplayEngine::Motion
                     std::sin((20.0f * t - 11.125f) * (2.0f * pi / 4.5f))) * 0.5f + 1.0f;
         case MotionEasing::CustomBezier:
             return EvaluateBezier(t, handles);
+        case MotionEasing::EaseInPower:
+            return std::pow(t, (std::max)(0.0001f, power));
         case MotionEasing::PresetCurve:
             return t;
         case MotionEasing::Step:

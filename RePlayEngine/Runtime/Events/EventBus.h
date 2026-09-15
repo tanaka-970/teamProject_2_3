@@ -162,6 +162,9 @@ namespace ReplayEngine::Runtime
             Reflection::MakeTypeGUID("a1000000000000000000000000000022");
         inline constexpr Reflection::TypeGUID SliderValueChanged =
             Reflection::MakeTypeGUID("a1000000000000000000000000000023");
+        // Motion / Composition が終端へ達した回。Loop 中は飛ばない。
+        inline constexpr Reflection::TypeGUID MotionFinished =
+            Reflection::MakeTypeGUID("a1000000000000000000000000000024");
     }
 
     // イベントの発行と購読。

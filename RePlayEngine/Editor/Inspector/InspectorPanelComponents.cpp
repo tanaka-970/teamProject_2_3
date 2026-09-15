@@ -253,6 +253,8 @@ namespace ReplayEngine::Editor
         }
 
         ImGui::Indent();
+        // 中身も Component ごとの ID の内側で描く。同名のボタンが Component 間で衝突して押せなくなる。
+        ImGui::PushID((component_id + "#body").c_str());
 
         if (missing != nullptr)
         {
@@ -275,6 +277,7 @@ namespace ReplayEngine::Editor
             ImGui::TextDisabled(
                 u8"削除すると、預かっている内容も一緒に失われます。");
 
+            ImGui::PopID();
             ImGui::Unindent();
             draw_separator();
             return;
@@ -645,6 +648,7 @@ namespace ReplayEngine::Editor
             pending_removal_label_ = title;
         }
 
+        ImGui::PopID();
         ImGui::Unindent();
     }
 }

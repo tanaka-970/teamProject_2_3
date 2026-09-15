@@ -22,6 +22,8 @@ namespace ReplayEngine::Motion
         EaseInOutElastic,
         CustomBezier,
         PresetCurve,
+        // t の power 乗。指数はキーごとに持つ。
+        EaseInPower,
     };
 
     struct MotionBezierHandles
@@ -36,5 +38,5 @@ namespace ReplayEngine::Motion
     // t の入力範囲だけ 0..1 に丸める。Back / Elastic は意図的に 0..1 外へ出るため、
     // 返り値は丸めない。
     float ApplyEasing(MotionEasing easing, float t,
-        const MotionBezierHandles& handles = {}) noexcept;
+        const MotionBezierHandles& handles = {}, float power = 2.0f) noexcept;
 }

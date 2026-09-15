@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 // これは SceneData の分割内部で共有する実装であり、外部から使うものではない。
 
@@ -10,6 +10,7 @@ namespace ReplayEngine::Scene::Serialization::Detail
         const ObjectRemap* remap, bool clear_unresolved);
     void BuildComponents(const GameObjectData& source, Core::GameObject& target,
         SceneLoadReport& report, const ObjectRemap* object_remap = nullptr,
-        bool clear_unresolved_references = false);
+        bool clear_unresolved_references = false,
+        SceneApplyMode mode = SceneApplyMode::General);
     void ApplyObjectBasics(const GameObjectData& source, Core::GameObject& target);
 }

@@ -1,4 +1,4 @@
-// Editor 選択・Dock/Workspace・Motion/UI/Landscape/Shader/Project 状態。
+﻿// Editor 選択・Dock/Workspace・Motion/UI/Landscape/Shader/Project 状態。
 // framework_class.h の class framework 内部からのみ include する。
 
     enum class editor_selection
@@ -241,6 +241,15 @@
     DirectX::XMFLOAT4 ui_preview_resize_parent_rect{ 0.0f, 0.0f, 0.0f, 0.0f };
     DirectX::XMFLOAT4X4 ui_preview_resize_start_matrix{};
 
+    // Scene View の回転ハンドル。角の外側を掴んだ 1 drag を 1 Undo にする。
+    bool ui_preview_rotate_candidate{ false };
+    bool ui_preview_rotating{ false };
+    ReplayEngine::Core::ObjectID ui_preview_rotate_object;
+    float ui_preview_rotate_start_rotation{ 0.0f };
+    float ui_preview_rotate_last_angle{ 0.0f };
+    float ui_preview_rotate_accumulated{ 0.0f };
+    DirectX::XMFLOAT2 ui_preview_rotate_pivot{ 0.0f, 0.0f };
+
     // Effect Stack の適用範囲は RectTransform のリサイズとは別操作にする。
     // 8方向ハンドルと回転ハンドルを持つ Scene View 専用の一時状態。
     bool ui_effect_region_candidate{ false };
@@ -348,6 +357,12 @@ public:
     void request_automated_frame_capture(const std::string& name);
     void request_automated_exclusive_frame_capture(const std::string& name);
     bool automated_exclusive_frame_capture_attempted() const noexcept;
+    void set_exclusive_capture_time(float seconds) noexcept
+    {
+        exclusive_capture_time_ = seconds;
+    }
+    float exclusive_capture_time_{ -1.0f };
+    float exclusive_capture_elapsed_{ 0.0f };
     bool golden_last_capture_ok() const noexcept;
     const std::string& golden_last_capture_summary() const noexcept;
 
@@ -401,6 +416,19 @@ private:
     char new_csharp_behaviour_name[128]{ "NewBehaviour" };
     char new_csharp_namespace[128]{ "Game" };
     bool csharp_scripts_dirty{ false };
+    // Script Catalog / Schema が更新されるたびに進む。Play snapshot は
+    // ScriptComponent の serialize schema に依存するため cache key に含める。
+    std::uint64_t csharp_catalog_generation{ 1 };
+
+    // 同じ C# 入力状態で Play 前ビルドが失敗した場合の再試行抑止。
+    // 失敗したまま F5 を押すたび dotnet build を同期実行して数秒止まる事故を防ぐ。
+    // ソース / csproj / Managed API のいずれかが変われば input revision が変わり、
+    // 次の Play で自動的に再試行される。手動 Build && Reload は常に実行できる。
+    std::uint64_t csharp_last_play_build_failed_revision{ 0 };
+    // mtime 判定が保守的に build_required を返し続けても、同じ入力で一度
+    // 成功した dotnet build を F5 ごとに繰り返さないための成功世代。
+    std::uint64_t csharp_last_play_build_succeeded_revision{ 0 };
+    std::uint64_t csharp_last_play_build_skip_logged_revision{ 0 };
 
     // .cs の保存を検出したら自動で再コンパイルするか。
     // 既定で有効。コンパイル失敗時は直前に成功した Assembly が

@@ -1,3 +1,5 @@
+#include "vertex_color_debug.hlsli"
+
 cbuffer MaterialCB : register(b2)
 {
     float4 baseColor;
@@ -7,8 +9,8 @@ cbuffer MaterialCB : register(b2)
     float4 surfaceParams; // metallic、roughness、AO、alpha cutoff
     float4 renderParams;  // alpha mode、lighting model、receive shadow、texture semantic mask
     float4 builtinParams;  // BuiltIn固有表現。x=効果ID、y/z/w=引数
-    float4 builtinParams1; // Toon。rgb=ShadowTint、w=RimPower
-    float4 builtinParams2; // Toon。rgb=RimColor、w=SpecularPower
+    float4 builtinParams1; // Toon=ShadowTint、GGST=ShadeColor(rgb)/SpecularIntensity(w)
+    float4 builtinParams2; // Toon=RimColor/SpecularPower、GGST.x=顔ライティング、y=顔ボーンID、z/w=軸反転
     float4 builtinParams3; // Toon。rgb=SpecularTint、w=予約
 };
 
@@ -22,6 +24,7 @@ cbuffer MaterialCB : register(b2)
 static const uint BUILTIN_EFFECT_NONE = 0u;
 static const uint BUILTIN_EFFECT_PIXELATE = 1u;
 static const uint BUILTIN_EFFECT_TOON = 2u;
+static const uint BUILTIN_EFFECT_GGST = 3u;
 
 Texture2D baseTexture : register(t0);
 Texture2D normalTexture : register(t1);
@@ -31,6 +34,8 @@ Texture2D emissiveTexture : register(t4);
 Texture2D occlusionTexture : register(t5);
 // t8/t9 は Bone Palette の root SRV が使うので RampMap は t10 に置く。
 Texture2D rampTexture : register(t10);
+Texture2D sssTexture : register(t11);
+Texture2D ilmTexture : register(t12);
 SamplerState materialSampler : register(s0);
 
 // 色を RGB565 へ詰めて UNORM16 の 1ch に載せる。復号は lighting pass 側。
@@ -57,6 +62,8 @@ static const uint MATERIAL_EMISSIVE_MAP = 1u << 4;
 static const uint MATERIAL_OCCLUSION_MAP = 1u << 5;
 static const uint MATERIAL_PACKED_ORM_MAP = 1u << 6;
 static const uint MATERIAL_RAMP_MAP = 1u << 7;
+static const uint MATERIAL_ILM_MAP = 1u << 8;
+static const uint MATERIAL_SSS_MAP = 1u << 9;
 
 struct PSIn
 {
@@ -67,6 +74,9 @@ struct PSIn
     float4 currentClip : TEXCOORD3;
     float4 previousClip : TEXCOORD4;
     float4 tangent : TEXCOORD5;
+    float3 faceRight : TEXCOORD6;
+    float3 faceFront : TEXCOORD7;
+    float4 vertexColor : COLOR0;
 };
 struct PSOut
 {
@@ -77,7 +87,20 @@ struct PSOut
     float2 velocity : SV_Target4;
     // Toon の色3つと指数2つを bit pack して運ぶ。Toon 以外は 0。
     float4 toon : SV_Target5;
+    float4 vertexColor : SV_Target6;
+    float4 faceBasis : SV_Target7;
 };
+
+
+float2 Dx12EncodeOctahedral(float3 direction)
+{
+    float3 n = normalize(direction);
+    n /= max(abs(n.x) + abs(n.y) + abs(n.z), 1.0e-5f);
+    float2 encoded = n.xy;
+    if (n.z < 0.0f)
+        encoded = (1.0f - abs(encoded.yx)) * sign(encoded.xy);
+    return encoded * 0.5f + 0.5f;
+}
 
 float3 ResolveNormal(PSIn input, uint semanticMask)
 {
@@ -143,8 +166,10 @@ PSOut main(PSIn input)
     // Shader/gbuffer_common.hlsliと一致させる。ModelはBase.a、ReceiveShadowはNormal.a、
     // MaterialはOcclusion/Roughness/Metalness/AO Strengthとして格納する。
     // 判定は lighting model 基準。Material Asset 無しの「描画方式=トゥーン」も拾うため。
-    const bool isToon = (uint)round(renderParams.y) == 1u;
-    const bool hasToonParams = (uint)(builtinParams.x + 0.5f) == BUILTIN_EFFECT_TOON;
+    const uint builtinEffect = (uint)(builtinParams.x + 0.5f);
+    const bool isGgst = builtinEffect == BUILTIN_EFFECT_GGST;
+    const bool isToon = (uint)round(renderParams.y) == 1u && !isGgst;
+    const bool hasToonParams = builtinEffect == BUILTIN_EFFECT_TOON;
     const float toonStepCount = hasToonParams ? builtinParams.y : 3.0f;
     const bool normalizedRamp = hasToonParams && builtinParams.w >= 0.5f;
     const float3 N = ResolveNormal(input, semanticMask);
@@ -163,7 +188,8 @@ PSOut main(PSIn input)
 
     const bool isPixelate = (uint)(builtinParams.x + 0.5f) == BUILTIN_EFFECT_PIXELATE &&
         builtinParams.z > 0.0f && builtinParams.w > 0.0f;
-    const uint lightingModelCode = (uint)round(saturate(renderParams.y / 255.0f) * 255.0f);
+    const uint lightingModelCode = isGgst ? 1u :
+        (uint)round(saturate(renderParams.y / 255.0f) * 255.0f);
     const uint encodedLightingModel = lightingModelCode + (isPixelate ? 128u : 0u);
     output.base = float4(albedo.rgb, (float)encodedLightingModel / 255.0f);
     output.emissive = float4(emissive, 1.0f);
@@ -173,10 +199,16 @@ PSOut main(PSIn input)
     // 他のシェーダでは今までどおり ao を入れるので既存の見た目は変わらない。
     const uint toonCode = (normalizedRamp ? 128u : 0u) +
         (uint)clamp(round(toonStepCount), 1.0f, 31.0f) * 4u;
-    const float toonSteps = isToon ? (float)toonCode / 255.0f : ao;
-    output.material = float4(ao, roughness, metallic, toonSteps);
+    const float toonSteps = isGgst ? (float)BUILTIN_EFFECT_GGST / 255.0f :
+        (isToon ? (float)toonCode / 255.0f : ao);
+    const float3 ggstIlm = (isGgst && (semanticMask & MATERIAL_ILM_MAP) != 0u) ?
+        ilmTexture.Sample(materialSampler, input.uv).rgb : Dx12DefaultGgstIlm();
+    output.material = isGgst ? float4(ggstIlm, toonSteps) :
+        float4(ao, roughness, metallic, toonSteps);
+    output.vertexColor = input.vertexColor;
+    output.faceBasis = 0.0f;
 
-    // 追加RTはToonのときだけ埋める。他は0で、lighting側もmodelで門を閉じている。
+    // 追加RTはToon/GGSTのときだけ埋め、lighting側もmodelで門を閉じる。
     output.toon = 0.0f;
     if (isPixelate)
     {
@@ -189,7 +221,22 @@ PSOut main(PSIn input)
         output.toon = float4(saturate(builtinParams.w),
             builtinParams1.x >= 0.5f ? 1.0f : 0.0f, 0.0f, 0.0f);
     }
-    if (isToon && hasToonParams)
+    if (isGgst)
+    {
+        const float3 ggstShadeColor = builtinParams1.rgb *
+            ((semanticMask & MATERIAL_SSS_MAP) != 0u ?
+                sssTexture.Sample(materialSampler, input.uv).rgb : 1.0f.xxx);
+        output.toon.x = Dx12PackColor565(ggstShadeColor);
+        output.toon.y = saturate(builtinParams.y);
+        output.toon.z = saturate(builtinParams.z);
+        output.toon.w = Dx12PackTwoBytes(builtinParams.w, builtinParams1.w / 20.0f);
+        if (builtinParams2.x >= 0.5f)
+        {
+            output.faceBasis.xy = Dx12EncodeOctahedral(input.faceRight);
+            output.faceBasis.zw = Dx12EncodeOctahedral(input.faceFront);
+        }
+    }
+    else if (isToon && hasToonParams)
     {
         output.toon.x = Dx12PackColor565(builtinParams1.rgb);
         output.toon.y = Dx12PackColor565(builtinParams2.rgb);

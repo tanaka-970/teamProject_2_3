@@ -120,4 +120,77 @@ namespace ReplayEngine::Scripting::CSharp::Detail
             return StatusCode(g_runtime_context->GetMotionDuration(player, *out));
         }
 
+
+// Native Composition callback の関数本体
+
+        int NativeFindCompositionPlayer(Runtime::ObjectHandle owner, const char* key,
+            Runtime::ComponentHandle* out) noexcept
+        {
+            if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            *out = Runtime::ComponentHandle::None();
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->FindCompositionPlayer(owner,
+                CString(key), *out));
+        }
+
+        int NativeCompositionPlay(Runtime::ComponentHandle player) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->CompositionPlay(player));
+        }
+
+        int NativeCompositionPause(Runtime::ComponentHandle player) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->CompositionPause(player));
+        }
+
+        int NativeCompositionResume(Runtime::ComponentHandle player) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->CompositionResume(player));
+        }
+
+        int NativeCompositionStop(Runtime::ComponentHandle player) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->CompositionStop(player));
+        }
+
+        int NativeCompositionSetTime(Runtime::ComponentHandle player, float seconds) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->SetCompositionTime(player, seconds));
+        }
+
+        int NativeCompositionSetSpeed(Runtime::ComponentHandle player, float speed) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->SetCompositionSpeed(player, speed));
+        }
+
+        int NativeCompositionSetWeight(Runtime::ComponentHandle player, float weight) noexcept
+        {
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->SetCompositionWeight(player, weight));
+        }
+
+        int NativeCompositionIsPlaying(Runtime::ComponentHandle player, int* out) noexcept
+        {
+            if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            *out = 0;
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            bool value = false;
+            const int status = StatusCode(g_runtime_context->IsCompositionPlaying(player, value));
+            *out = value ? 1 : 0;
+            return status;
+        }
+
+        int NativeCompositionGetTime(Runtime::ComponentHandle player, float* out) noexcept
+        {
+            if (out == nullptr) return StatusCode(RuntimeStatus::InvalidArgument);
+            *out = 0.0f;
+            if (g_runtime_context == nullptr) return StatusCode(ContextUnavailable());
+            return StatusCode(g_runtime_context->GetCompositionTime(player, *out));
+        }
 }

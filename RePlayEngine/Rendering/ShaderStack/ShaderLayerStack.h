@@ -24,6 +24,7 @@ namespace ReplayEngine::Rendering
         Wireframe = 4,
         Outline = 5,
         StylizedCharacter = 6,
+        Ggst = 7,
         Custom = 0xFFFFFFFFu
     };
 
@@ -47,7 +48,7 @@ namespace ReplayEngine::Rendering
 
         // ---- v2/v3 / 既存特殊パス互換 -------------------------------------
         // これらは新しい Layer Shader を追加するためには使わない。
-        // 既存 7 種の見た目を移行期間中そのまま維持する bridge。
+        // 既存互換種の見た目を移行期間中そのまま維持する bridge。
         ShaderLayerType type = ShaderLayerType::Custom;
         float opacity = 0.45f;
         float strength = 1.0f;
@@ -68,7 +69,7 @@ namespace ReplayEngine::Rendering
             return id_value.IsValid() && EffectiveShader() == id_value;
         }
 
-        // 旧 7 layer の専用描画コードへ値を渡す互換 bridge。
+        // 旧互換 layer の専用描画コードへ値を渡す互換 bridge。
         // 新しい custom layer は PropertyBag だけを使い、この値には依存しない。
         void SyncLegacyFieldsToProperties()
         {
@@ -76,7 +77,7 @@ namespace ReplayEngine::Rendering
             const ShaderID effective = EffectiveShader();
 
             // Custom Layer の PropertyBag に互換用の謎プロパティを混ぜない。
-            // legacy bridge は固定 7 種だけに限定する。
+            // legacy bridge は固定の組み込み種だけに限定する。
             if (!BuiltInShaderLayers::IsBuiltIn(effective)) return;
 
             properties.Set("prop.Opacity", PropertyValue::MakeFloat(opacity));

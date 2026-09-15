@@ -71,6 +71,18 @@ namespace ReplayEngine::Editor
         cursor_ = entries_.size();
     }
 
+    void SceneEditHistory::CommitVertexColors(std::unique_ptr<VertexPaint::ColorEdit> command)
+    {
+        if (!command || !command->target) return;
+        Cancel();
+        entries_.resize(cursor_);
+        Entry entry;
+        entry.label = u8"頂点カラーペイント";
+        entry.vertex_color_command = std::move(command);
+        entries_.push_back(std::move(entry));
+        if (entries_.size() > maximum_entries) entries_.erase(entries_.begin());
+        cursor_ = entries_.size();
+    }
     void SceneEditHistory::Cancel() noexcept
     {
         in_transaction_ = false;
@@ -144,6 +156,7 @@ namespace ReplayEngine::Editor
         {
             if (!ApplyLandscape(entry, scene, false)) return false;
         }
+        else if (entry.vertex_color_command) entry.vertex_color_command->Apply(false);
         else ApplySnapshot(entry.before, scene);
         --cursor_;
         label = entry.label;
@@ -161,6 +174,7 @@ namespace ReplayEngine::Editor
         {
             if (!ApplyLandscape(entry, scene, true)) return false;
         }
+        else if (entry.vertex_color_command) entry.vertex_color_command->Apply(true);
         else ApplySnapshot(entry.after, scene);
         label = entry.label;
         ++cursor_;

@@ -50,6 +50,90 @@ namespace
         return true;
     }
 
+    bool ReadColorRgba8(const tinygltf::Model& model, int accessor_index,
+        std::vector<ReplayEngine::Assets::VertexColorRgba8>& output)
+    {
+        output.clear();
+        if (accessor_index < 0 || accessor_index >= static_cast<int>(model.accessors.size())) return false;
+        const auto& accessor = model.accessors[static_cast<std::size_t>(accessor_index)];
+        const int components = accessor.type == TINYGLTF_TYPE_VEC3 ? 3 :
+            accessor.type == TINYGLTF_TYPE_VEC4 ? 4 : 0;
+        if (components == 0 || accessor.bufferView < 0 ||
+            accessor.bufferView >= static_cast<int>(model.bufferViews.size())) return false;
+        const auto& view = model.bufferViews[static_cast<std::size_t>(accessor.bufferView)];
+        if (view.buffer < 0 || view.buffer >= static_cast<int>(model.buffers.size())) return false;
+        const auto& buffer = model.buffers[static_cast<std::size_t>(view.buffer)];
+        std::size_t component_size = 0;
+        switch (accessor.componentType)
+        {
+        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE: component_size = 1; break;
+        case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT: component_size = 2; break;
+        case TINYGLTF_COMPONENT_TYPE_FLOAT: component_size = 4; break;
+        default: return false;
+        }
+        const int byte_stride = accessor.ByteStride(view);
+        if (byte_stride <= 0) return false;
+        const std::size_t stride = static_cast<std::size_t>(byte_stride);
+        const std::size_t element_size = component_size * static_cast<std::size_t>(components);
+        const std::size_t offset = view.byteOffset + accessor.byteOffset;
+        const std::size_t required = accessor.count == 0 ? 0 :
+            (accessor.count - 1) * stride + element_size;
+        if (stride < element_size || offset > buffer.data.size() ||
+            required > buffer.data.size() - offset) return false;
+
+        const auto component = [&accessor, component_size](const unsigned char* bytes, int index)
+        {
+            const unsigned char* value = bytes + static_cast<std::size_t>(index) * component_size;
+            switch (accessor.componentType)
+            {
+            case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+                return static_cast<float>(*reinterpret_cast<const std::uint8_t*>(value)) / 255.0f;
+            case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+                return static_cast<float>(*reinterpret_cast<const std::uint16_t*>(value)) / 65535.0f;
+            case TINYGLTF_COMPONENT_TYPE_FLOAT:
+                return *reinterpret_cast<const float*>(value);
+            default:
+                return 0.0f;
+            }
+        };
+        const auto to_byte = [](float value)
+        {
+            return static_cast<std::uint8_t>(std::clamp(value, 0.0f, 1.0f) * 255.0f + 0.5f);
+        };
+        output.resize(accessor.count);
+        const unsigned char* base = buffer.data.data() + offset;
+        for (std::size_t i = 0; i < accessor.count; ++i)
+        {
+            const unsigned char* value = base + i * stride;
+            output[i] = { to_byte(component(value, 0)), to_byte(component(value, 1)),
+                to_byte(component(value, 2)), components == 4 ? to_byte(component(value, 3)) : static_cast<std::uint8_t>(255) };
+        }
+        return true;
+    }
+
+    bool ReadUsefulColorRgba8(const tinygltf::Model& model,
+        const tinygltf::Primitive& primitive, const char* attribute_name,
+        std::size_t vertex_count,
+        std::vector<ReplayEngine::Assets::VertexColorRgba8>& output)
+    {
+        output.clear();
+        const auto found = primitive.attributes.find(attribute_name);
+        if (found == primitive.attributes.end()) return false;
+        std::vector<ReplayEngine::Assets::VertexColorRgba8> candidate;
+        if (!ReadColorRgba8(model, found->second, candidate) ||
+            candidate.size() != vertex_count || candidate.size() < 2) return false;
+        const auto& first = candidate.front();
+        const bool varies = std::any_of(candidate.begin() + 1, candidate.end(),
+            [&first](const auto& value)
+            {
+                return value.r != first.r || value.g != first.g ||
+                    value.b != first.b || value.a != first.a;
+            });
+        if (!varies) return false;
+        output = std::move(candidate);
+        return true;
+    }
+
     bool ReadIndices(const tinygltf::Model& model, int accessor_index, std::vector<uint32_t>& output)
     {
         if (accessor_index < 0 || accessor_index >= static_cast<int>(model.accessors.size())) return false;
@@ -358,11 +442,14 @@ bool gltf_model::Load(const std::string& filename)
             const auto position_it = source.attributes.find("POSITION");
             if (position_it == source.attributes.end()) continue;
             std::vector<float> positions, normals, texcoords;
+            std::vector<ReplayEngine::Assets::VertexColorRgba8> vertex_colors;
             if (!ReadFloatVector(model, position_it->second, 3, positions)) continue;
             const auto normal_it = source.attributes.find("NORMAL");
             const auto texcoord_it = source.attributes.find("TEXCOORD_0");
             const bool has_normals = normal_it != source.attributes.end() && ReadFloatVector(model, normal_it->second, 3, normals);
             if (texcoord_it != source.attributes.end()) ReadFloatVector(model, texcoord_it->second, 2, texcoords);
+            if (!ReadUsefulColorRgba8(model, source, "COLOR_1", positions.size() / 3, vertex_colors))
+                ReadUsefulColorRgba8(model, source, "COLOR_0", positions.size() / 3, vertex_colors);
             std::vector<Vertex> vertices(positions.size() / 3);
             for (size_t i = 0; i < vertices.size(); ++i)
             {
@@ -391,6 +478,8 @@ bool gltf_model::Load(const std::string& filename)
             // LOD生成に使う原型データ。BuildLods後に解放する。
             primitive.source_vertices = vertices;
             primitive.source_indices = indices;
+            if (vertex_colors.size() == vertices.size())
+                primitive.source_vertex_colors = std::move(vertex_colors);
 
             const XMMATRIX node_transform = XMLoadFloat4x4(&primitive.node_transform);
 

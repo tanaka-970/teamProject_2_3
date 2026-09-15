@@ -4,6 +4,7 @@
 #include "mainInternal.h"
 
 #include <cmath>
+#include <filesystem>
 #include <cstdio>
 #include <sstream>
 #include <string>
@@ -22,6 +23,10 @@
 #include "../../../RePlayEngine/Components/Physics/RigidbodyComponent.h"
 #include "../../../RePlayEngine/Components/Physics/SphereColliderComponent.h"
 #include "../../../RePlayEngine/Components/UI/CanvasComponent.h"
+#include "../../../RePlayEngine/Components/UI/RectTransformComponent.h"
+#include "../../../RePlayEngine/Motion/MotionAsset.h"
+#include "../../../RePlayEngine/Motion/MotionEasing.h"
+#include "../../../RePlayEngine/UI/UILayout.h"
 #include "../../../RePlayEngine/Object/Registry/BuiltInComponents.h"
 #include "../../../RePlayEngine/Reflection/Registry/PropertyRegistry.h"
 #include "../../../RePlayEngine/Physics/PhysicsDynamicsWorld.h"
@@ -109,6 +114,129 @@ namespace ReplayEngine::Runtime::Detail
         else
         {
             lines.push_back("SCENE_SETUP NG");
+        }
+
+        // EaseInPower は pow(t, 指数) と一致し、POWER が保存で往復する。
+        {
+            using ReplayEngine::Motion::MotionEasing;
+            const float eased = ReplayEngine::Motion::ApplyEasing(
+                MotionEasing::EaseInPower, 0.5f, {}, 2.6f);
+            const bool power_value = std::fabs(eased - std::pow(0.5f, 2.6f)) <= 1.0e-6f;
+            MotionEasing parsed = MotionEasing::Linear;
+            const bool power_name =
+                ReplayEngine::Motion::TryParseMotionEasing("EaseInPower", parsed) &&
+                parsed == MotionEasing::EaseInPower &&
+                std::string(ReplayEngine::Motion::ToString(parsed)) == "EaseInPower";
+
+            ReplayEngine::Motion::MotionAsset source;
+            ReplayEngine::Motion::MotionTrack power_track;
+            power_track.name = "PowerTrack";
+            power_track.binding.origin = static_cast<int>(
+                ReplayEngine::Motion::MotionBindingOrigin::Self);
+            power_track.binding.component_type =
+                ReplayEngine::Components::RectTransformComponent::StaticTypeID();
+            power_track.binding.property = "scale";
+            power_track.value_type = ReplayEngine::Reflection::PropertyType::Vector2;
+            ReplayEngine::Motion::MotionKeyframe power_key;
+            power_key.time = 0.0f;
+            power_key.value = ReplayEngine::Reflection::PropertyValue::MakeVector2({ 1.0f, 1.0f });
+            power_key.easing = MotionEasing::EaseInPower;
+            power_key.power = 2.6f;
+            ReplayEngine::Motion::MotionKeyframe end_key = power_key;
+            end_key.time = 1.0f;
+            end_key.easing = MotionEasing::Linear;
+            end_key.power = 2.0f;
+            power_track.keys = { power_key, end_key };
+            source.tracks.push_back(power_track);
+            const std::filesystem::path power_path =
+                std::filesystem::temp_directory_path() / "replay_power_easing.replaymotion";
+            std::string power_error;
+            ReplayEngine::Motion::MotionAsset loaded;
+            const bool power_roundtrip =
+                ReplayEngine::Motion::MotionAsset::SaveToFile(power_path, source, power_error) &&
+                ReplayEngine::Motion::MotionAsset::LoadFromFile(power_path, loaded, power_error) &&
+                loaded.tracks.size() == 1 && loaded.tracks[0].keys.size() == 2 &&
+                loaded.tracks[0].keys[0].easing == MotionEasing::EaseInPower &&
+                std::fabs(loaded.tracks[0].keys[0].power - 2.6f) <= 1.0e-5f;
+            std::error_code remove_error;
+            std::filesystem::remove(power_path, remove_error);
+
+            ok = ok && power_value && power_name && power_roundtrip;
+            lines.push_back(std::string("EASE_IN_POWER_VALUE ") + (power_value ? "OK" : "NG"));
+            lines.push_back(std::string("EASE_IN_POWER_NAME ") + (power_name ? "OK" : "NG"));
+            lines.push_back(std::string("EASE_IN_POWER_ROUNDTRIP ") + (power_roundtrip ? "OK" : "NG"));
+        }
+
+        // 親の回転・拡大率は propagate_transform がオンのときだけ子へ伝わる。
+        {
+            using ReplayEngine::Components::RectTransformComponent;
+            const auto child_offset = [](bool propagate, float& out_dx, float& out_dy,
+                float& out_width)
+            {
+                ReplayEngine::Scene::Scene ui_scene("PropagateTransformValidation");
+                auto* canvas_object = ui_scene.CreateGameObject("Canvas");
+                auto* parent_object = ui_scene.CreateGameObject("Group");
+                auto* child_object = ui_scene.CreateGameObject("Child");
+                if (canvas_object == nullptr || parent_object == nullptr || child_object == nullptr)
+                    return false;
+                auto* canvas = canvas_object->AddComponent<ReplayEngine::Components::CanvasComponent>();
+                auto* canvas_rect = canvas_object->AddComponent<RectTransformComponent>();
+                auto* parent_rect = parent_object->AddComponent<RectTransformComponent>();
+                auto* child_rect = child_object->AddComponent<RectTransformComponent>();
+                if (canvas == nullptr || canvas_rect == nullptr || parent_rect == nullptr ||
+                    child_rect == nullptr) return false;
+                canvas->reference_resolution = { 1920.0f, 1080.0f };
+                canvas_rect->anchor_min = { 0.0f, 0.0f };
+                canvas_rect->anchor_max = { 1.0f, 1.0f };
+                canvas_rect->size_delta = { 0.0f, 0.0f };
+                parent_object->SetParent(canvas_object);
+                child_object->SetParent(parent_object);
+                parent_rect->size_delta = { 0.0f, 0.0f };
+                parent_rect->rotation = 90.0f;
+                parent_rect->scale = { 2.0f, 2.0f };
+                parent_rect->propagate_transform = propagate;
+                child_rect->anchored_position = { 10.0f, 0.0f };
+                child_rect->size_delta = { 4.0f, 4.0f };
+                ReplayEngine::UI::UILayout::Resolve(ui_scene, 1920.0f, 1080.0f);
+
+                const auto to_world = [](const RectTransformComponent& rect, float x, float y)
+                {
+                    const DirectX::XMVECTOR point = DirectX::XMVector3TransformCoord(
+                        DirectX::XMVectorSet(x, y, 0.0f, 1.0f),
+                        DirectX::XMLoadFloat4x4(&rect.ResolvedMatrix()));
+                    return DirectX::XMFLOAT2{ DirectX::XMVectorGetX(point), DirectX::XMVectorGetY(point) };
+                };
+                const DirectX::XMFLOAT4 pr = parent_rect->ResolvedRect();
+                const DirectX::XMFLOAT4 cr = child_rect->ResolvedRect();
+                const DirectX::XMFLOAT2 parent_pivot = to_world(*parent_rect,
+                    pr.x + pr.z * 0.5f, pr.y + pr.w * 0.5f);
+                const DirectX::XMFLOAT2 child_center = to_world(*child_rect,
+                    cr.x + cr.z * 0.5f, cr.y + cr.w * 0.5f);
+                const DirectX::XMFLOAT2 child_left = to_world(*child_rect, cr.x, cr.y + cr.w * 0.5f);
+                const DirectX::XMFLOAT2 child_right = to_world(*child_rect, cr.x + cr.z, cr.y + cr.w * 0.5f);
+                out_dx = child_center.x - parent_pivot.x;
+                out_dy = child_center.y - parent_pivot.y;
+                out_width = std::sqrt((child_right.x - child_left.x) * (child_right.x - child_left.x) +
+                    (child_right.y - child_left.y) * (child_right.y - child_left.y));
+                return true;
+            };
+            float on_dx = 0.0f, on_dy = 0.0f, on_width = 0.0f;
+            float off_dx = 0.0f, off_dy = 0.0f, off_width = 0.0f;
+            const bool on_built = child_offset(true, on_dx, on_dy, on_width);
+            const bool off_built = child_offset(false, off_dx, off_dy, off_width);
+            const bool propagate_on = on_built && std::fabs(on_dx) <= 0.01f &&
+                std::fabs(std::fabs(on_dy) - 20.0f) <= 0.01f && std::fabs(on_width - 8.0f) <= 0.01f;
+            const bool propagate_off = off_built && std::fabs(off_dx - 10.0f) <= 0.01f &&
+                std::fabs(off_dy) <= 0.01f && std::fabs(off_width - 4.0f) <= 0.01f;
+            ok = ok && propagate_on && propagate_off;
+            lines.push_back(std::string("PROPAGATE_TRANSFORM_ON ") + (propagate_on ? "OK" : "NG") +
+                " dx=" + std::to_string(on_dx) + " dy=" + std::to_string(on_dy) +
+                " width=" + std::to_string(on_width));
+            lines.push_back(std::string("PROPAGATE_TRANSFORM_OFF ") + (propagate_off ? "OK" : "NG") +
+                " dx=" + std::to_string(off_dx) + " dy=" + std::to_string(off_dy) +
+                " width=" + std::to_string(off_width));
+            if (!propagate_on || !propagate_off)
+                std::fprintf(stderr, "%s\n%s\n", lines[lines.size() - 2].c_str(), lines.back().c_str());
         }
 
         WriteValidationResultFile("MotionTrigger.txt",

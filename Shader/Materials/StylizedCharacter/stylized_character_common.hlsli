@@ -41,8 +41,9 @@ float3 shift_hue(float3 color, float shift)
 }
 
 float3 stylized_character_shade(float3 base, float3 normal, float3 tangent,
-    float3 world_position)
+    float3 world_position, float vertex_face_weight = 1.0f)
 {
+    float face_weight = face_params.w * vertex_face_weight;
     float3 N = normalize(normal);
     float3 T = normalize(tangent - N * dot(N, tangent));
     float3 L = normalize(-light_direction.xyz);
@@ -51,25 +52,25 @@ float3 stylized_character_shade(float3 base, float3 normal, float3 tangent,
 
     float threshold = general_params.x;
     float softness = max(general_params.y + skin_params.z * skin_params.w +
-        face_params.y * face_params.w, 0.001f);
+        face_params.y * face_weight, 0.001f);
     float shadow_strength = general_params.z;
     float saturation = general_params.w;
 
     float wrap = skin_params.x * skin_params.w;
     float wrapped_light = saturate((dot(N, L) + wrap) / (1.0f + wrap));
-    float face_bias = face_params.x * face_params.w;
+    float face_bias = face_params.x * face_weight;
     float toon_light = smoothstep(threshold - softness, threshold + softness,
         wrapped_light + face_bias);
     float bands = max(artistic_params.x, 1.0f);
     toon_light = bands > 1.0f ? round(toon_light * (bands - 1.0f)) / (bands - 1.0f)
         : toon_light;
-    float3 shadow_color = lerp(skin_shadow_tint.rgb, face_shadow_tint.rgb, face_params.w);
+    float3 shadow_color = lerp(skin_shadow_tint.rgb, face_shadow_tint.rgb, face_weight);
     float3 color = base * lerp(shadow_color, skin_tint.rgb,
         lerp(1.0f - shadow_strength, 1.0f, toon_light));
 
     float back_scatter = pow(saturate(dot(-N, L)), 3.0f) * skin_params.y * skin_params.w;
     color += skin_tint.rgb * back_scatter;
-    color += base * face_params.z * face_params.w;
+    color += base * face_params.z * face_weight;
 
     float tangent_half = saturate(1.0f - abs(dot(T, H)));
     float hair_specular = pow(tangent_half, max(hair_params.x, 1.0f));

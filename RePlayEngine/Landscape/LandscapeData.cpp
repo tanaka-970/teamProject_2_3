@@ -1,4 +1,4 @@
-// LandscapeData のうち「初期化・形状情報・Chunk 管理」だけを持つ。
+﻿// LandscapeData のうち「初期化・形状情報・Chunk 管理」だけを持つ。
 //
 //   LandscapeData.cpp               … 初期化・形状情報・Raycast・Chunk 管理（このファイル）
 //   LandscapeDataInternal.h         … 分割内部で共有するベクトル演算
@@ -531,7 +531,7 @@ namespace ReplayEngine::Landscape
     }
 
     // 三角形を XZ で区切って束ねる。任意 topology なので格子は前提にせず、重心で振り分ける。
-    void LandscapeData::BuildChunks()
+    void LandscapeData::BuildChunks(bool build_topology_edit_cache)
     {
         topology_revision_ = NextGeometryRevision();
         chunks_.clear();
@@ -539,6 +539,7 @@ namespace ReplayEngine::Landscape
         vertex_chunks_.clear();
         vertex_faces_.clear();
         vertex_neighbors_.clear();
+        topology_edit_cache_ready_ = build_topology_edit_cache;
         chunk_divisions_ = 1;
         if (vertices_.empty() || indices_.size() < 3) return;
 
@@ -558,9 +559,12 @@ namespace ReplayEngine::Landscape
         face_chunk_offsets_.resize(FaceCount());
         chunk_topology_dirty_.assign(chunks_.size(),0);
         subdivision_repartition_pending_ = false;
-        vertex_chunks_.resize(vertices_.size());
-        vertex_faces_.resize(vertices_.size());
-        vertex_neighbors_.resize(vertices_.size());
+        if (build_topology_edit_cache)
+        {
+            vertex_chunks_.resize(vertices_.size());
+            vertex_faces_.resize(vertices_.size());
+            vertex_neighbors_.resize(vertices_.size());
+        }
         for (int z = 0; z < divisions; ++z)
         {
             for (int x = 0; x < divisions; ++x)
@@ -595,25 +599,35 @@ namespace ReplayEngine::Landscape
             chunk.indices.push_back(indices_[offset + 1]);
             chunk.indices.push_back(indices_[offset + 2]);
             chunk_faces_[chunk_index].push_back(static_cast<std::uint32_t>(offset / 3u));
-            for (int corner = 0; corner < 3; ++corner)
+            if (build_topology_edit_cache)
             {
-                vertex_chunks_[indices_[offset + corner]].push_back(chunk_index);
-                vertex_faces_[indices_[offset + corner]].push_back(static_cast<std::uint32_t>(offset / 3));
-                for (int other=0; other<3; ++other)
-                    if (indices_[offset+corner] != indices_[offset+other])
-                        vertex_neighbors_[indices_[offset+corner]].push_back(indices_[offset+other]);
+                for (int corner = 0; corner < 3; ++corner)
+                {
+                    vertex_chunks_[indices_[offset + corner]].push_back(chunk_index);
+                    vertex_faces_[indices_[offset + corner]].push_back(
+                        static_cast<std::uint32_t>(offset / 3));
+                    for (int other = 0; other < 3; ++other)
+                        if (indices_[offset + corner] != indices_[offset + other])
+                            vertex_neighbors_[indices_[offset + corner]].push_back(
+                                indices_[offset + other]);
+                }
             }
         }
 
-        for (auto& memberships : vertex_chunks_)
+        if (build_topology_edit_cache)
         {
-            std::sort(memberships.begin(), memberships.end());
-            memberships.erase(std::unique(memberships.begin(), memberships.end()), memberships.end());
-        }
-        for (auto& neighbors : vertex_neighbors_)
-        {
-            std::sort(neighbors.begin(), neighbors.end());
-            neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
+            for (auto& memberships : vertex_chunks_)
+            {
+                std::sort(memberships.begin(), memberships.end());
+                memberships.erase(std::unique(memberships.begin(), memberships.end()),
+                    memberships.end());
+            }
+            for (auto& neighbors : vertex_neighbors_)
+            {
+                std::sort(neighbors.begin(), neighbors.end());
+                neighbors.erase(std::unique(neighbors.begin(), neighbors.end()),
+                    neighbors.end());
+            }
         }
         chunk_remap_.assign(vertices_.size(),UINT32_MAX);
         for (std::size_t chunk=0;chunk<chunks_.size();++chunk)
@@ -622,6 +636,50 @@ namespace ReplayEngine::Landscape
             RecalculateChunkBounds(chunks_[chunk]);
         }
         horizontal_travel_ = 0.0f;
+    }
+
+    void LandscapeData::BuildTopologyEditCache()
+    {
+        vertex_chunks_.assign(vertices_.size(), {});
+        vertex_faces_.assign(vertices_.size(), {});
+        vertex_neighbors_.assign(vertices_.size(), {});
+        for (std::size_t offset = 0; offset + 2 < indices_.size(); offset += 3)
+        {
+            const std::size_t face = offset / 3u;
+            const std::uint32_t chunk_index = face < face_chunks_.size()
+                ? face_chunks_[face] : 0u;
+            for (int corner = 0; corner < 3; ++corner)
+            {
+                const std::uint32_t vertex = indices_[offset + corner];
+                if (vertex >= vertices_.size()) continue;
+                if (chunk_index < chunks_.size())
+                    vertex_chunks_[vertex].push_back(chunk_index);
+                vertex_faces_[vertex].push_back(static_cast<std::uint32_t>(face));
+                for (int other = 0; other < 3; ++other)
+                {
+                    const std::uint32_t neighbor = indices_[offset + other];
+                    if (neighbor != vertex) vertex_neighbors_[vertex].push_back(neighbor);
+                }
+            }
+        }
+        for (auto& memberships : vertex_chunks_)
+        {
+            std::sort(memberships.begin(), memberships.end());
+            memberships.erase(std::unique(memberships.begin(), memberships.end()),
+                memberships.end());
+        }
+        for (auto& neighbors : vertex_neighbors_)
+        {
+            std::sort(neighbors.begin(), neighbors.end());
+            neighbors.erase(std::unique(neighbors.begin(), neighbors.end()), neighbors.end());
+        }
+        topology_edit_cache_ready_ = true;
+    }
+
+    void LandscapeData::EnsureTopologyEditCache()
+    {
+        if (topology_edit_cache_ready_) return;
+        BuildTopologyEditCache();
     }
 
     void LandscapeData::RebuildChunkLayout(std::size_t index)
@@ -645,6 +703,7 @@ namespace ReplayEngine::Landscape
     void LandscapeData::UpdateSubdivisionAdjacency(std::size_t face, std::uint32_t a,
         std::uint32_t b, std::uint32_t c, std::uint32_t first_vertex, std::size_t first_face)
     {
+        EnsureTopologyEditCache();
         if (face >= face_chunks_.size() || chunks_.empty()) return;
         const auto chunk_index=face_chunks_[face];
         if(chunk_index>=chunks_.size()) return;
@@ -692,12 +751,14 @@ namespace ReplayEngine::Landscape
 
     const std::vector<std::uint32_t>& LandscapeData::AdjacentFaces(std::size_t vertex) const noexcept
     {
+        const_cast<LandscapeData*>(this)->EnsureTopologyEditCache();
         static const std::vector<std::uint32_t> empty;
         return vertex < vertex_faces_.size() ? vertex_faces_[vertex] : empty;
     }
 
     const std::vector<std::uint32_t>& LandscapeData::AdjacentVertices(std::size_t vertex) const noexcept
     {
+        const_cast<LandscapeData*>(this)->EnsureTopologyEditCache();
         static const std::vector<std::uint32_t> empty;
         return vertex < vertex_neighbors_.size() ? vertex_neighbors_[vertex] : empty;
     }
@@ -776,6 +837,10 @@ namespace ReplayEngine::Landscape
         {
             auto snapshot = std::make_shared<LandscapeGeometry>();
             snapshot->width = width_; snapshot->height = height_; snapshot->cell_size = cell_size_;
+            snapshot->revision = revision_;
+            snapshot->topology_revision = topology_revision_;
+            snapshot->bounds_min = bounds_min_;
+            snapshot->bounds_max = bounds_max_;
             snapshot->vertices = vertices_; snapshot->indices = indices_;
             geometry_snapshot_ = std::move(snapshot);
         }
@@ -786,7 +851,62 @@ namespace ReplayEngine::Landscape
     {
         if (!geometry) return;
         if (InitializeMesh(geometry->vertices, geometry->indices, geometry->cell_size,
-            geometry->width, geometry->height)) geometry_snapshot_ = geometry;
+            geometry->width, geometry->height))
+        {
+            // Play / Undo の immutable snapshot は同一 geometry の clone。
+            // 毎回新しい revision を振ると、Landscape collision cook cache が
+            // 「別 geometry」と判定して同じ三角形を毎回 Cook し直してしまう。
+            if (geometry->revision != 0) revision_ = geometry->revision;
+            if (geometry->topology_revision != 0)
+                topology_revision_ = geometry->topology_revision;
+            for (LandscapeChunk& chunk : chunks_) chunk.revision = revision_;
+            geometry_snapshot_ = geometry;
+        }
+    }
+
+    void LandscapeData::RestoreGeometryForPlay(
+        const std::shared_ptr<const LandscapeGeometry>& geometry)
+    {
+        if (!geometry) return;
+        // CaptureGeometry() が同一プロセス内の有効な LandscapeData から作った
+        // immutable snapshot だけがこの入口へ来る。外部ファイルは RestoreGeometry()
+        // を通すため、ここで頂点 / index を再度 O(N) 検証する必要はない。
+        if (geometry->vertices.size() < 3 || geometry->indices.size() < 3 ||
+            geometry->indices.size() % 3 != 0) return;
+
+        width_ = (std::max)(0, geometry->width);
+        height_ = (std::max)(0, geometry->height);
+        cell_size_ = geometry->cell_size;
+        vertices_ = geometry->vertices;
+        indices_ = geometry->indices;
+        revision_ = geometry->revision != 0 ? geometry->revision : NextGeometryRevision();
+        topology_revision_ = geometry->topology_revision != 0
+            ? geometry->topology_revision : revision_;
+        bounds_min_ = geometry->bounds_min;
+        bounds_max_ = geometry->bounds_max;
+        geometry_snapshot_ = geometry;
+        touched_vertices_.clear();
+        chunk_dirty_marks_.clear();
+        normal_marks_.clear();
+        normal_vertices_.clear();
+        horizontal_travel_ = 0.0f;
+        subdivision_repartition_pending_ = false;
+        topology_batch_depth_ = 0;
+        topology_batch_dirty_ = false;
+
+        // Renderer / Collider / Raycast に必要な chunk は今作るが、Sculpt / Topology
+        // 編集専用の vertex adjacency は Play 開始には不要。初めて編集 API が呼ばれた
+        // 時点で BuildTopologyEditCache() が作る。
+        BuildChunks(false);
+        topology_revision_ = geometry->topology_revision != 0
+            ? geometry->topology_revision : topology_revision_;
+        for (LandscapeChunk& chunk : chunks_)
+        {
+            chunk.revision = revision_;
+            chunk.render_dirty = true;
+            chunk.collision_dirty = true;
+        }
+        geometry_snapshot_ = geometry;
     }
 
     void LandscapeData::FinishSculpt()

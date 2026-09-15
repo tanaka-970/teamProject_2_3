@@ -32,6 +32,7 @@ namespace ReplayEngine::Editor
             return NearlyEqual(a.time, b.time) &&
                 a.easing == b.easing &&
                 a.easing_curve.guid == b.easing_curve.guid &&
+                NearlyEqual(a.power, b.power) &&
                 NearlyEqual(a.bezier.out_handle.x, b.bezier.out_handle.x) &&
                 NearlyEqual(a.bezier.out_handle.y, b.bezier.out_handle.y) &&
                 NearlyEqual(a.bezier.in_handle.x, b.bezier.in_handle.x) &&

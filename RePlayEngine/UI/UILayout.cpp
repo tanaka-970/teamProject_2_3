@@ -112,6 +112,17 @@ namespace ReplayEngine::UI
             return stored;
         }
 
+        // 親から伝わった変換があれば、自分の変換の後ろへ掛ける。
+        DirectX::XMFLOAT4X4 ComposeWithParent(const DirectX::XMFLOAT4X4& local,
+            const DirectX::XMFLOAT4X4* parent_world)
+        {
+            if (parent_world == nullptr) return local;
+            DirectX::XMFLOAT4X4 composed{};
+            DirectX::XMStoreFloat4x4(&composed, DirectX::XMMatrixMultiply(
+                DirectX::XMLoadFloat4x4(&local), DirectX::XMLoadFloat4x4(parent_world)));
+            return composed;
+        }
+
         struct ChildLayout final
         {
             Core::GameObject* object = nullptr;
@@ -333,18 +344,23 @@ namespace ReplayEngine::UI
 
         void ResolveChildren(Core::GameObject& object,
             const DirectX::XMFLOAT4& parent_rect, int depth,
-            const DirectX::XMFLOAT4* forced_rect = nullptr)
+            const DirectX::XMFLOAT4* forced_rect = nullptr,
+            const DirectX::XMFLOAT4X4* parent_world = nullptr)
         {
             if (depth > maximum_ui_depth || object.PendingDestroy()) return;
 
             DirectX::XMFLOAT4 current_parent = parent_rect;
+            DirectX::XMFLOAT4X4 world{};
+            const DirectX::XMFLOAT4X4* child_world = parent_world;
             if (RectTransformComponent* rect = object.GetComponent<RectTransformComponent>())
             {
                 const DirectX::XMFLOAT4 resolved = forced_rect != nullptr
                     ? *forced_rect : ResolveRect(*rect, parent_rect);
                 rect->SetResolvedRect(resolved);
-                rect->SetResolvedMatrix(ResolveMatrix(*rect, resolved));
+                world = ComposeWithParent(ResolveMatrix(*rect, resolved), parent_world);
+                rect->SetResolvedMatrix(world);
                 current_parent = resolved;
+                if (rect->propagate_transform) child_world = &world;
             }
 
             std::vector<ChildLayout> overrides = BuildLayoutOverrides(object, current_parent);
@@ -372,7 +388,7 @@ namespace ReplayEngine::UI
                     }
                     ApplyScrollToChild(object, *child, current_parent, effective);
                 }
-                ResolveChildren(*child, current_parent, depth + 1, forced);
+                ResolveChildren(*child, current_parent, depth + 1, forced, child_world);
             }
         }
 
@@ -949,10 +965,14 @@ namespace ReplayEngine::UI
         const float safe_scale = scale > 0.0001f ? scale : 1.0f;
         DirectX::XMFLOAT4 root_rect{ 0.0f, 0.0f,
             screen_width / safe_scale, screen_height / safe_scale };
+        DirectX::XMFLOAT4X4 canvas_matrix{};
+        const DirectX::XMFLOAT4X4* canvas_world = nullptr;
         if (RectTransformComponent* rect = canvas_object.GetComponent<RectTransformComponent>())
         {
             rect->SetResolvedRect(root_rect);
-            rect->SetResolvedMatrix(ResolveMatrix(*rect, root_rect));
+            canvas_matrix = ResolveMatrix(*rect, root_rect);
+            rect->SetResolvedMatrix(canvas_matrix);
+            if (rect->propagate_transform) canvas_world = &canvas_matrix;
         }
         const std::vector<ChildLayout> overrides = BuildLayoutOverrides(canvas_object, root_rect);
         for (Core::GameObject* child : canvas_object.Children())
@@ -967,7 +987,7 @@ namespace ReplayEngine::UI
                 if (forced == nullptr) { effective = ResolveRect(*child_rect, root_rect); forced = &effective; }
                 ApplyScrollToChild(canvas_object, *child, root_rect, effective);
             }
-            ResolveChildren(*child, root_rect, 1, forced);
+            ResolveChildren(*child, root_rect, 1, forced, canvas_world);
         }
     }
 

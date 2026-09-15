@@ -317,6 +317,28 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
         object_runtime_context->Events().Publish(std::move(record));
     };
 
+    // 終端へ達した回だけ 1 度流す。Loop / PingPong では飛ばない。
+    const auto publish_motion_finished = [&](const ReplayEngine::Core::Component& player,
+        const std::string& asset_name, const std::string& key,
+        const std::string& composition_guid, float end_time)
+    {
+        if (object_runtime_context == nullptr) return;
+        ReplayEngine::Runtime::EventRecord record;
+        record.type = ReplayEngine::Runtime::EngineEvents::MotionFinished;
+        record.type_name = "MotionFinished";
+        record.source = object_runtime_context->Resolver().MakeHandle(player.Owner());
+        record.frame_index = object_runtime_frame_index;
+        record.payload.Set("name",
+            ReplayEngine::Reflection::PropertyValue::MakeString(asset_name));
+        record.payload.Set("parameter",
+            ReplayEngine::Reflection::PropertyValue::MakeString(key));
+        record.payload.Set("composition",
+            ReplayEngine::Reflection::PropertyValue::MakeString(composition_guid));
+        record.payload.Set("time",
+            ReplayEngine::Reflection::PropertyValue::MakeFloat(end_time));
+        object_runtime_context->Events().Publish(std::move(record));
+    };
+
     const auto publish_repeated = [](long long first, long long last,
         const auto& callback)
     {
@@ -988,6 +1010,11 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
                     publish_composition_motion_events(*composition, player,
                         previous_time, player_delta_time);
                     player.Advance(composition->duration, player_delta_time);
+                    if (player.state != CompositionPlayerComponent::Playing)
+                    {
+                        publish_motion_finished(player, composition->name, player.key,
+                            player.composition.guid, player.time);
+                    }
                 }
                 std::unordered_set<std::string> recursion;
                 if (!player.composition.guid.empty()) recursion.insert(player.composition.guid);
@@ -1022,9 +1049,27 @@ void framework::evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
                 capture_snapshot(*asset, player);
             }
 
+            const int previous_player_state = player.state;
             const float previous_motion_time = player.time;
             const int previous_playback_direction = player.PlaybackDirection();
             player.Advance(asset->duration, player_delta_time);
+            // auto_stop_on_end を切っていても拾えるよう、停止と端での頭打ちの両方を見る。
+            const bool motion_stopped_now =
+                previous_player_state == MotionPlayerComponent::Playing &&
+                player.state != MotionPlayerComponent::Playing;
+            const bool motion_clamped_at_end =
+                previous_player_state == MotionPlayerComponent::Playing &&
+                player.state == MotionPlayerComponent::Playing &&
+                player.RuntimeWrapMode() == MotionPlayerComponent::Once &&
+                asset->duration > 0.0f &&
+                (previous_playback_direction >= 0
+                    ? (previous_motion_time < asset->duration && player.time >= asset->duration)
+                    : (previous_motion_time > 0.0f && player.time <= 0.0f));
+            if (motion_stopped_now || motion_clamped_at_end)
+            {
+                publish_motion_finished(player, asset->name, player.key,
+                    std::string(), player.time);
+            }
             publish_motion_events(*asset, player, previous_motion_time, player_delta_time,
                 previous_playback_direction);
             if (player.HasStopRestoreRequest())

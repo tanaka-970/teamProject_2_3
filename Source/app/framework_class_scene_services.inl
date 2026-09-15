@@ -1,4 +1,4 @@
-// Scene/Runtime/描画提出/カメラ/衝突/Project Browser 接続。
+﻿// Scene/Runtime/描画提出/カメラ/衝突/Project Browser 接続。
 // framework_class.h の class framework 内部からのみ include する。
 
     // --- GameObject / Component 基盤との接続 -------------------------------
@@ -91,9 +91,16 @@
     void cancel_editor_play_loading();
 
 public:
+    float measure_boot_logo_duration(const ReplayEngine::Scene::Scene& scene);
+    bool load_boot_logo_scene_from_path(const std::filesystem::path& path);
     bool load_exclusive_scene_from_path(const std::filesystem::path& path);
     ReplayEngine::Scene::Scene* exclusive_scene_for_render() noexcept;
     void update_exclusive_scene(float elapsed_time);
+    void evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
+        float scaled_delta_time, float unscaled_delta_time,
+        ReplayEngine::Motion::MotionMixer& mixer,
+        ReplayEngine::Runtime::RuntimeContext* runtime_context,
+        std::uint64_t frame_index);
 
 private:
 
@@ -169,11 +176,6 @@ private:
         const std::string& asset_guid);
     void prepare_material_motion_bindings(ReplayEngine::Scene::Scene& scene);
     void prepare_ui_effect_shader_schemas(ReplayEngine::Scene::Scene& scene);
-    void evaluate_motion_players(ReplayEngine::Scene::Scene& scene,
-        float scaled_delta_time, float unscaled_delta_time,
-        ReplayEngine::Motion::MotionMixer& mixer,
-        ReplayEngine::Runtime::RuntimeContext* runtime_context,
-        std::uint64_t frame_index);
     void update_ui_sprite_animators(ReplayEngine::Scene::Scene& scene, float elapsed_time,
         const ReplayEngine::Motion::MotionMixer* mixer);
     void update_ui_number_displays(ReplayEngine::Scene::Scene& scene);
@@ -377,6 +379,8 @@ private:
     bool duplicate_motion_keys();
     bool delete_motion_keys();
     bool scale_motion_key_times(float scale, int pivot_mode);
+    void step_motion_preview_key(int direction);
+    bool select_all_motion_keys();
     bool apply_motion_easing_to_selection(ReplayEngine::Motion::MotionEasing easing,
         const ReplayEngine::Reflection::AssetReference* curve = nullptr);
     void push_motion_curve_warning_once(const std::string& curve_error);
@@ -391,11 +395,19 @@ private:
     void draw_motion_timeline();
     void draw_motion_graph_editor();
     void draw_motion_rig();
+    float rig_gizmo_size_clip_space = 0.06f;
     bool draw_bone_transform_gizmo();
-    void select_rig_bone(const std::string& name, bool additive);
+    bool effective_gizmo_local_space() const;
+    bool active_rig_gizmo_target() const;
+    void sync_rig_selection();
+    bool gizmo_gesture_active() const;
+    void cancel_gizmo_gesture();
+    void select_rig_bone(std::uint64_t owner, const std::string& name, bool additive);
+    bool rig_bone_within_depth(const std::vector<rig_debug_bone>& bones,
+        const rig_debug_bone& bone) const;
     void apply_rig_pose_to_selection(std::uint64_t owner,
         const std::vector<rig_debug_bone>& bones, const rig_pose_override& primary_start,
-        const rig_pose_override& primary_now, int operation);
+        const rig_pose_override& primary_now, int operation, bool local_space);
     void begin_rig_pose_edit(std::uint64_t owner, std::string label);
     void commit_rig_pose_edit();
     void cancel_rig_pose_edit();

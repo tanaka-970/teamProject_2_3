@@ -72,6 +72,11 @@ namespace ReplayEngine::Rendering::Validation
                 { BuiltInShaders::Unlit, { "BaseColor", "BaseMap" } },
                 { BuiltInShaders::Pixelate, {
                     "PixelSize", "PixelateStrength", "PixelateOpacity" } },
+                { BuiltInShaders::Ggst, {
+                    "BaseColor", "BaseMap", "ShadeColor", "ShadingTerminator",
+                    "ShadingThreshold", "ShadingOffset", "SpecularSize", "SpecularIntensity", "IlmMap",
+                    "SssMap", "FaceLighting", "FaceBoneIndex", "FlipFaceRight",
+                    "FlipFaceFront" } },
             };
         }
     }
@@ -97,7 +102,7 @@ namespace ReplayEngine::Rendering::Validation
         //
         // 「.hlsl 側を書き換えたが C++ 側を直し忘れた」を検出する。
         // 崩れると全マテリアルの参照が切れるので、必ずここで止める。
-        check.Expect(BuiltInShaders::All().size() == 6, "組み込みは 6 種");
+        check.Expect(BuiltInShaders::All().size() == 7, "組み込みは 7 種");
         check.Expect(BuiltInShaders::FbxDefault.ToString() ==
             "00000000000000000000000000000001", "FbxDefault の GUID が固定値");
         check.Expect(BuiltInShaders::Pbr.ToString() ==
@@ -110,6 +115,8 @@ namespace ReplayEngine::Rendering::Validation
             "00000000000000000000000000000005", "Pixelate の GUID が固定値");
         check.Expect(BuiltInShaders::FlatFill.ToString() ==
             "00000000000000000000000000000006", "FlatFill の GUID が固定値");
+        check.Expect(BuiltInShaders::Ggst.ToString() ==
+            "00000000000000000000000000000007", "GGST の GUID が固定値");
 
         // ---- 3. shading_model の番号 → GUID -------------------------------
         check.Expect(BuiltInShaders::FromShadingModel(0) ==
@@ -130,9 +137,13 @@ namespace ReplayEngine::Rendering::Validation
             "知らない shading_model は無効な ID を返す（勝手に丸めない）");
         check.Expect(!BuiltInShaders::FromShadingModel(-1).IsValid(),
             "負の shading_model も無効な ID");
+        check.Expect(BuiltInShaders::FromShadingModel(-1) != BuiltInShaders::Ggst,
+            "GGST は legacy shading_model を持たない");
 
         check.Expect(BuiltInShaders::IsBuiltIn(BuiltInShaders::Toon),
             "組み込みを組み込みと判定する");
+        check.Expect(BuiltInShaders::IsBuiltIn(BuiltInShaders::Ggst),
+            "GGST を正式な組み込みと判定する");
         check.Expect(!BuiltInShaders::IsBuiltIn(ShaderID{}),
             "無効な ID を組み込みと判定しない");
 
@@ -152,7 +163,7 @@ namespace ReplayEngine::Rendering::Validation
 
         const ShaderLibrary::ScanReport report = library.ScanAll(root);
 
-        check.Expect(report.scanned >= 5, "組み込み 5 種を含めて走査できる");
+        check.Expect(report.scanned >= 7, "組み込み 7 種を含めて走査できる");
         check.Expect(report.duplicate_ids == 0,
             "GUID の重複が無い（組み込みと見本がぶつかっていない）");
 
@@ -165,7 +176,7 @@ namespace ReplayEngine::Rendering::Validation
             }
         }
 
-        // ---- 5. 5 種が Catalog に載り、両方の変種が通る ---------------------
+        // ---- 5. 全 BuiltIn が Catalog に載り、両方の変種が通る ---------------
         for (const BuiltInShaders::Definition& definition : BuiltInShaders::All())
         {
             const std::string label = definition.display_name;

@@ -228,6 +228,47 @@ namespace
         return true;
     }
 
+    bool ReadUsefulColorAccessor(const tinygltf::Model& model,
+        const tinygltf::Primitive& primitive, const char* attribute_name,
+        std::size_t vertex_count, std::vector<float>& values,
+        int& components, float& scale)
+    {
+        values.clear();
+        components = 0;
+        scale = 1.0f;
+        const auto found = primitive.attributes.find(attribute_name);
+        if (found == primitive.attributes.end() || found->second < 0 ||
+            found->second >= static_cast<int>(model.accessors.size())) return false;
+        const auto& accessor = model.accessors[static_cast<std::size_t>(found->second)];
+        const int candidate_components = ComponentCount(accessor.type);
+        if (candidate_components != 3 && candidate_components != 4) return false;
+        std::vector<float> candidate;
+        if (!ReadAccessor(model, found->second, candidate_components, candidate) ||
+            candidate.size() != vertex_count * static_cast<std::size_t>(candidate_components) ||
+            candidate.size() < static_cast<std::size_t>(candidate_components) * 2) return false;
+        bool varies = false;
+        for (std::size_t vertex = 1; vertex < vertex_count && !varies; ++vertex)
+        {
+            for (int component = 0; component < candidate_components; ++component)
+            {
+                if (candidate[vertex * static_cast<std::size_t>(candidate_components) + component] !=
+                    candidate[component])
+                {
+                    varies = true;
+                    break;
+                }
+            }
+        }
+        if (!varies) return false;
+        if (!accessor.normalized && accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+            scale = 1.0f / 255.0f;
+        else if (!accessor.normalized && accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+            scale = 1.0f / 65535.0f;
+        values = std::move(candidate);
+        components = candidate_components;
+        return true;
+    }
+
     bool ReadIndices(const tinygltf::Model& model, int accessor_index,
         std::vector<std::uint32_t>& values)
     {
@@ -720,7 +761,9 @@ bool skinned_mesh::import_gltf(const std::filesystem::path& filename, float requ
             const auto position_attribute = primitive.attributes.find("POSITION");
             if (position_attribute == primitive.attributes.end()) continue;
             std::vector<float> positions, normals, tangents, texcoords, joints, weights;
-            std::vector<float> morph_positions, morph_normals;
+            std::vector<float> colors, morph_positions, morph_normals;
+            int color_components = 0;
+            float color_scale = 1.0f;
             if (!ReadAccessor(model, position_attribute->second, 3, positions)) continue;
             if (const auto found = primitive.attributes.find("NORMAL"); found != primitive.attributes.end())
                 ReadAccessor(model, found->second, 3, normals);
@@ -739,6 +782,10 @@ bool skinned_mesh::import_gltf(const std::filesystem::path& filename, float requ
             const std::string texcoord_name = "TEXCOORD_" + std::to_string(texcoord_set);
             if (const auto found = primitive.attributes.find(texcoord_name); found != primitive.attributes.end())
                 ReadAccessor(model, found->second, 2, texcoords);
+            if (!ReadUsefulColorAccessor(model, primitive, "COLOR_1", positions.size() / 3,
+                colors, color_components, color_scale))
+                ReadUsefulColorAccessor(model, primitive, "COLOR_0", positions.size() / 3,
+                    colors, color_components, color_scale);
             if (const auto found = primitive.attributes.find("JOINTS_0"); found != primitive.attributes.end())
                 ReadAccessor(model, found->second, 4, joints);
             if (const auto found = primitive.attributes.find("WEIGHTS_0"); found != primitive.attributes.end())
@@ -805,6 +852,23 @@ bool skinned_mesh::import_gltf(const std::filesystem::path& filename, float requ
                 }
                 if (total_weight > 1.0e-7f)
                     for (float& weight : vertex.bone_weights) weight /= total_weight;
+            }
+            if (color_components > 0 && colors.size() ==
+                destination.vertices.size() * static_cast<std::size_t>(color_components))
+            {
+                const auto to_byte = [color_scale](float value)
+                {
+                    return static_cast<std::uint8_t>(
+                        std::clamp(value * color_scale, 0.0f, 1.0f) * 255.0f + 0.5f);
+                };
+                destination.vertex_colors.resize(destination.vertices.size());
+                for (std::size_t vertex_index = 0; vertex_index < destination.vertices.size(); ++vertex_index)
+                {
+                    const std::size_t base = vertex_index * static_cast<std::size_t>(color_components);
+                    destination.vertex_colors[vertex_index] = { to_byte(colors[base]),
+                        to_byte(colors[base + 1]), to_byte(colors[base + 2]),
+                        color_components == 4 ? to_byte(colors[base + 3]) : static_cast<std::uint8_t>(255) };
+                }
             }
             if (!ReadIndices(model, primitive.indices, destination.indices))
             {

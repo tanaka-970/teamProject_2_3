@@ -3,6 +3,7 @@
 #include "framework.h"
 
 #include "imgui/ImGuizmo.h"
+#include "imgui/imgui_internal.h"
 
 #include "../../RePlayEngine/Components/Core/PivotComponent.h"
 #include "../../RePlayEngine/Components/Gameplay/CharacterMotorComponent.h"
@@ -182,10 +183,44 @@ void framework::draw_scene_view_panel()
                 }
             }
             ImGui::SameLine();
+            const bool bone_gizmo_target = !rig_selected_bone.empty() &&
+                (show_rig_debug_draw || show_motion_rig_panel);
+            const bool local_space = effective_gizmo_local_space();
             ImGui::TextDisabled("Perspective | %s | %s | %s",
-                gizmo_local_space ? "Local" : "World",
+                bone_gizmo_target ? (local_space ? u8"Local(骨)" : u8"World(骨)")
+                    : (local_space ? "Local" : "World"),
                 transform_gizmo.SnapEnabled() ? "Snap" : "Free",
                 object_scene_play_mode ? (object_scene_paused ? "Paused" : "Playing") : "Editing");
+            ImGui::SameLine();
+            const float rotate_steps[] = { 1.0f, 5.0f, 10.0f, 15.0f, 30.0f, 45.0f, 90.0f };
+            const char* rotate_labels[] = { u8"1度", u8"5度", u8"10度", u8"15度",
+                u8"30度", u8"45度", u8"90度" };
+            char rotate_preview[32]{};
+            std::snprintf(rotate_preview, sizeof(rotate_preview), u8"%g度",
+                transform_gizmo.RotateSnapStep());
+            const bool snap_enabled = transform_gizmo.SnapEnabled();
+            if (!snap_enabled)
+            {
+                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * 0.5f);
+                ImGui::PushItemFlag(ImGuiItemFlags_Disabled, true);
+            }
+            ImGui::SetNextItemWidth(75.0f);
+            if (ImGui::BeginCombo(u8"回転刻み##RotateSnapStep", rotate_preview))
+            {
+                for (int i = 0; i < IM_ARRAYSIZE(rotate_steps); ++i)
+                {
+                    const bool selected = transform_gizmo.RotateSnapStep() == rotate_steps[i];
+                    if (ImGui::Selectable(rotate_labels[i], selected) && snap_enabled)
+                        transform_gizmo.SetRotateSnapStep(rotate_steps[i]);
+                    if (selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+            if (!snap_enabled)
+            {
+                ImGui::PopItemFlag();
+                ImGui::PopStyleVar();
+            }
             // 何も見えないときに「壊れた」と誤解させないため、対象を明示する。
             if (object_isolate_active)
             {

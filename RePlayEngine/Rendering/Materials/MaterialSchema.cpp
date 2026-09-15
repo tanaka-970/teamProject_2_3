@@ -168,7 +168,11 @@ namespace ReplayEngine::Rendering
             {
                 if (definition.id == id)
                 {
-                    material.shading_model = definition.shading_model;
+                    // GGST は固有 legacy 番号を増やさず、旧経路だけ Toon を安全な互換先にする。
+                    if (definition.id == BuiltInShaders::Ggst)
+                        material.shading_model = 2;
+                    else if (definition.shading_model >= 0)
+                        material.shading_model = definition.shading_model;
                     return;
                 }
             }

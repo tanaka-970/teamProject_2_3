@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include "../../RePlayEngine/Physics/SphereCast.h"
+#include "../../RePlayEngine/Assets/VertexColorAsset.h"
 
 // glTF 2.0�^GLB�̐ÓI���b�V�����Y�B�]���̃��^�f�[�^�����̉�������u��������B
 // �X�L���ƃA�j���[�V�����͔\�͏��Ƃ��ĕێ����A���s���Đ��͕ʃR���|�[�l���g�ň����B
@@ -75,6 +76,7 @@ public:
     {
         std::vector<StaticVertex> vertices;
         std::vector<std::uint32_t> indices;
+        std::vector<ReplayEngine::Assets::VertexColorRgba8> vertex_colors;
     };
     std::size_t StaticPrimitiveCount() const noexcept { return primitives_.size(); }
     bool StaticPrimitiveInfoAt(std::size_t index, StaticPrimitiveInfo& out) const;
@@ -102,6 +104,7 @@ private:
         // LOD生成用に保持する原型データ。生成後に解放する。
         std::vector<Vertex> source_vertices;
         std::vector<uint32_t> source_indices;
+        std::vector<ReplayEngine::Assets::VertexColorRgba8> source_vertex_colors;
     };
 
     struct Material

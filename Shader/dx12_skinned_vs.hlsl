@@ -3,6 +3,8 @@ cbuffer ObjectCB : register(b0)
     row_major float4x4 world;
     row_major float4x4 previousWorld;
     float4 morph;
+    float4 faceRightLocal;
+    float4 faceFrontLocal;
 };
 cbuffer SceneCB : register(b1)
 {
@@ -22,6 +24,7 @@ struct VSIn
     uint4 indices : BLENDINDICES;
     float3 morphPosition : MORPHPOSITION;
     float3 morphNormal : MORPHNORMAL;
+    float4 vertexColor : COLOR0;
 };
 struct VSOut
 {
@@ -32,6 +35,9 @@ struct VSOut
     float4 currentClip : TEXCOORD3;
     float4 previousClip : TEXCOORD4;
     float4 tangent : TEXCOORD5;
+    float3 faceRight : TEXCOORD6;
+    float3 faceFront : TEXCOORD7;
+    float4 vertexColor : COLOR0;
 };
 float4 SkinCurrentPosition(float3 p, float4 w, uint4 i)
 {
@@ -68,6 +74,11 @@ VSOut main(VSIn input)
     o.worldPosition = wp.xyz;
     o.normal = normalize(mul(float4(skinnedNormal, 0.0f), world).xyz);
     o.tangent = float4(normalize(mul(float4(skinnedTangent, 0.0f), world).xyz), input.tangent.w);
+    const float faceRightSign = morph.z >= 0.5f ? -1.0f : 1.0f;
+    const float faceFrontSign = morph.w >= 0.5f ? -1.0f : 1.0f;
+    o.faceRight = normalize(mul(float4(faceRightLocal.xyz * faceRightSign, 0.0f), world).xyz);
+    o.faceFront = normalize(mul(float4(faceFrontLocal.xyz * faceFrontSign, 0.0f), world).xyz);
     o.uv = input.uv;
+    o.vertexColor = input.vertexColor;
     return o;
 }

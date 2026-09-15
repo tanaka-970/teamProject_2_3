@@ -211,7 +211,7 @@
             // selected_editor_object は Inspector が何を映すかの状態で、Gizmo が
             // 使えるかとは別。Project Browser を触ると asset へ移り、Motion で
             // 骨を編集中に切替が丸ごと死んでいた。GameObject の選択だけを見る。
-            if (edit_mode_active && !search_input_active &&
+            if (edit_mode_active && !search_input_active && !gizmo_gesture_active() &&
                 !ImGui::GetIO().WantTextInput &&
                 object_editor_context.Selection().Primary().Valid())
             {
@@ -429,6 +429,7 @@ private:
     void apply_toon_preset(int preset);
     void reset_editor_values();
     void draw_editor();
+    void draw_editor_play_loading_overlay();
     std::string action_shortcut(std::string_view name) const;
     enum class editor_history_target
     {
